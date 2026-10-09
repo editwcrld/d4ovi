@@ -1,0 +1,80 @@
+'use strict';
+const { contextBridge, ipcRenderer } = require('electron');
+const on = (ch) => (cb) => ipcRenderer.on(ch, (_e, p) => cb(p));
+
+contextBridge.exposeInMainWorld('d4api', {
+  // data
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  saveSettings: (patch) => ipcRenderer.invoke('settings:save', patch),
+  getLoot: () => ipcRenderer.invoke('loot:get'),
+  getCraft: () => ipcRenderer.invoke('craft:get'),
+  getActivities: () => ipcRenderer.invoke('activities:get'),
+  getRunewords: () => ipcRenderer.invoke('runewords:get'),
+  searchItems: (q) => ipcRenderer.invoke('items:search', q),
+  refreshData: () => ipcRenderer.invoke('data:refresh'),
+  getFarm: () => ipcRenderer.invoke('farm:get'),
+  farmTooltip: (type, id) => ipcRenderer.invoke('farm:tooltip', type, id),
+  farmCss: () => ipcRenderer.invoke('farm:css'),
+  getBuilds: () => ipcRenderer.invoke('builds:get'),
+  saveBuilds: (d) => ipcRenderer.invoke('builds:save', d),
+  buildCode: (b) => ipcRenderer.invoke('builds:code', b),
+  importBuildText: (t) => ipcRenderer.invoke('builds:import-text', t),
+  exportBuilds: () => ipcRenderer.invoke('builds:export'),
+  importBuildFile: () => ipcRenderer.invoke('builds:import-file'),
+  loadBuildLink: (url) => ipcRenderer.invoke('builds:link', url),
+  buildTree: (cls) => ipcRenderer.invoke('builds:tree', cls),
+  buildParagon: (keys) => ipcRenderer.invoke('builds:paragon', keys),
+  openBuildSource: (url) => ipcRenderer.invoke('builds:open-source', url),
+
+  // actions
+  openTrade: (name) => ipcRenderer.invoke('trade:open', name),
+  pickExe: () => ipcRenderer.invoke('d4:pick'),
+  launchD4: () => ipcRenderer.invoke('d4:launch'),
+  copyText: (t) => ipcRenderer.send('clipboard:write', t),
+  copyUserscript: () => ipcRenderer.invoke('userscript:copy'),
+  openDataDir: () => ipcRenderer.send('data:open-dir'),
+  mapRestore: () => ipcRenderer.invoke('map:restore'),
+  setOpacity: (v) => ipcRenderer.send('overlay:opacity', v),
+  refreshStatus: () => ipcRenderer.send('status:refresh'),
+  setPanelSize: (size) => ipcRenderer.send('overlay:panel-size', size),
+  resizeDrag: (phase, big) => ipcRenderer.send('overlay:resize-drag', phase, !!big),
+  setIdle: (v) => ipcRenderer.send('overlay:idle', !!v),
+
+  // window / views
+  resize: (w, h, open, big) => ipcRenderer.send('overlay:resize', w, h, !!open, !!big),
+  quit: () => ipcRenderer.send('app:quit'),
+  hotkeyCapture: (v) => ipcRenderer.send('hotkey:capture', !!v),
+  viewShow: (kind, url, heading) => ipcRenderer.send('view:show', kind, url, heading),
+  viewBounds: (r) => ipcRenderer.send('view:bounds', r),
+  viewHide: () => ipcRenderer.send('view:hide'),
+
+  // auth
+  authStatus: () => ipcRenderer.invoke('auth:status'),
+  authImport: (text) => ipcRenderer.invoke('auth:import', text),
+  authLogout: () => ipcRenderer.invoke('auth:logout'),
+
+  // events
+  onLoot: on('loot'),
+  onCraft: on('craft'),
+  onActivities: on('activities'),
+  onItemsReady: on('items-ready'),
+  onFarmReady: on('farm-ready'),
+  onWorldBoss: on('world-boss'),
+  onNotice: on('notice'),
+  onStatus: on('status'),
+  onDataInfo: on('data-info'),
+  onAuthInfo: on('auth-info'),
+  onFocusSearch: on('focus-search'),
+  onToggle: on('toggle'),
+  onOpenSection: on('open-section'),
+  onEscape: on('escape'),
+  onBlur: on('overlay-blur'),
+  onCursorInside: on('cursor-inside'),
+  hoverWatch: (on) => ipcRenderer.send('overlay:hover-watch', !!on),
+  onViewLoading: on('view-loading'),
+  onFocus: on('overlay-focus'),
+  onLayout: on('layout'),
+  onChatUnread: on('chat-unread'),
+  onClickSpam: on('click-spam'),
+  onKeyLoop: on('key-loop'),
+});

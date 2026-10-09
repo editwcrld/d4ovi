@@ -1,0 +1,6 @@
+node_modules/
+dist/
+dist-*/
+D4-Overlay-Data/
+*.log
+.claude/

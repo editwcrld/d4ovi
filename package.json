@@ -1,0 +1,39 @@
+{
+  "name": "d4-overlay",
+  "version": "1.0.0",
+  "description": "Diablo IV companion overlay: item search, boss loot, crafting, builds and farm list, map tool, diablo.trade and the world boss timer",
+  "main": "main.js",
+  "author": "V",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable",
+    "test": "node test/run.js",
+    "test:ui": "node test/renderer-smoke.js",
+    "test:search": "node test/search-test.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "jsdom": "^29.1.1"
+  },
+  "build": {
+    "appId": "local.d4overlay",
+    "productName": "D4 Overlay",
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**",
+      "renderer/**",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "D4-Overlay-${version}-portable.exe"
+    }
+  }
+}
