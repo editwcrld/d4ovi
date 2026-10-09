@@ -3,10 +3,11 @@
 A small always-on-top companion for Diablo IV (windowed mode, Windows). It does not read or
 change the game's memory or files — it reads public web pages and shows them next to it.
 
-The two optional input helpers (*Click spam* and *Key loop*, below) are the exception: they
-send mouse clicks and key presses to the game window. Blizzard's terms do not allow automating
-game input, so using them can put your account at risk. Both can be switched off in
-*Settings → Hotkeys*.
+The optional *Macros* (click spam, loop skills, num-lock mode — below) are the exception:
+they send mouse clicks and key presses to the game window. Blizzard's terms do not allow
+automating game input, so using them can put your account at risk. They are all **off** until
+switched on in *Settings → Macros*, each one past a "use at your own risk" warning — and a build
+can leave them out entirely (`lib/features.js`, see *Building*).
 
 ## The bar
 
@@ -20,7 +21,7 @@ A narrow icon rail (48 px) that can be expanded to show labels, and switched bet
 | 🗺 | **Map tool** | The maxroll map tool, embedded — see below |
 | ⚑ | **Activities** | Six maxroll guides: Secret Cow Level, Dark Citadel, Artificer's Tower, Echoing Hatred, Gathering Legions, World Events |
 | 🛍 | **diablo.trade** | Your listings with your own login — the chat is one click away there; unread messages show a red badge |
-| ⚙ | **Settings** | Behaviour · Appearance · Hotkeys (incl. click spam and key loop) · diablo.trade · Data |
+| ⚙ | **Settings** | Behaviour · Appearance · Hotkeys · Macros · diablo.trade · Data |
 
 **Closing and pinning.** A click into the game closes the open panel and the bar goes back to the
 small pill — no Esc needed. **Pin** (top right of every panel, next to ✕) keeps it open: pinned,
@@ -63,44 +64,62 @@ Each of the two states keeps its own place on the screen: drag the pill where yo
 it is idle, drag the bar while it is open. Both are saved as `posIdle` and `posOpen`, and
 *Settings → Appearance → Places* resets them.
 
-## Click spam
+## Macros
 
-Hold a button down and the overlay keeps clicking — **only while Diablo IV is the window in
-front**. Nothing is sent to any other window, and with the game minimised or alt-tabbed it stops
-immediately.
+*Settings → Macros* holds three input helpers. All of them are **off** by default; switching one
+on first shows a *Use at your own risk* warning (Cancel keeps it off). They only send input while
+**Diablo IV is the window in front** — alt-tab or minimise and they pause, and anything held is
+let go.
+
+### Click spam
+
+Hold a button down and the overlay keeps clicking.
 
 | Default | Does |
 |---|---|
 | Mouse 4 (thumb, back) | repeats **right** clicks |
 | Mouse 5 (thumb, forward) | repeats **left** clicks |
 
-Both can be rebound in *Settings → Hotkeys → Click spam*: click the field and press the button
-or key you want (the two thumb buttons, the wheel button, or a single key — the plain left and
-right mouse buttons stay free so the field remains clickable). *Del* clears a binding, the speed
-runs from 1 to 40 clicks per second (default 15), and the whole thing has an off switch.
+Both can be rebound: click the field and press the button or key you want (the two thumb
+buttons, the wheel button, or a single key — the plain left and right mouse buttons stay free so
+the field remains clickable). *Del* clears a binding, the speed runs from 1 to 40 clicks per
+second (default 15). Each click holds the button for 20–40 ms — a game reads the mouse once per
+frame, and a click that goes down and up inside one frame is dropped.
 
-The button is held down for 20–40 ms per click instead of being tapped instantly — a game reads
-the mouse once per frame, and a click that goes down and up inside one frame is dropped.
+### Loop skills
 
-Windows has no way to read a held mouse button or send clicks from Node, and a native module
+Press the toggle key (default **F8**) in the game and the overlay presses the listed keys over
+and over, each one again after its own number of seconds, until you press the toggle key once
+more. The keys sit as tiles — `[1] [2] [Q] [+]`; at first there is only `[+]`. Click it and
+press a key (digits, letters, Space, Shift) or a mouse button (left, right, wheel, the two thumb
+buttons) and it becomes a tile; × on a tile takes it out, a key is in the list only once. Each
+key gets its own row with a slider, 0.2–30 s. Switched on, all keys go out at once; after that
+each keeps its own pace (say 1 every 0.5 s, 4 every 12 s for a long cooldown). While it runs, a
+green **Loop** tag sits next to the world boss timer.
+
+### Num-lock mode
+
+Press its toggle key (default **F9**) and the overlay holds the listed keys and mouse buttons
+down — as if you kept them pressed — until you press it again. The same tiles as above, without
+times. A green **Hold** tag shows while it holds. A held key behaves like one held on a real
+keyboard: it goes down, and after 0.3 s it repeats about 30 times a second — games that act on
+those repeats (a skill cast again and again) see a held key, not a single press. Mouse buttons
+just stay down; one you press and let go yourself goes down again within a quarter second.
+
+### Per character
+
+The tiles of loop skills and num-lock mode belong to a **character**: pick one in the
+*Character* row and its keys load right away; **+ New** starts a copy of the current one, the
+name can be changed, *Delete* removes the one picked (one always stays). The toggle keys, the
+click spam and the on switches are shared.
+
+### How it works
+
+Windows has no way to read a held mouse button or send input from Node, and a native module
 would break the portable build, so a small PowerShell helper does it (`lib/clicker.js`), the
-same way the game window is detected. It watches the overlay's process id and stops by itself
-if the overlay is gone.
-
-## Key loop
-
-Press a toggle key (default **F8**) in the game and the overlay presses your skill keys
-**1 2 3 4** one after the other, again and again, until you press the toggle key once more.
-Like the click spam it only sends keys while Diablo IV is the window in front — alt-tab and it
-pauses, back in the game it carries on.
-
-In *Settings → Hotkeys → Key loop*: an off switch, the toggle key (a single key or a mouse
-button), which of the four keys take part, and how many seconds pass between two rounds
-(0.2–20 s, default 1). While it runs, a green **Loop** tag sits next to the world boss timer,
-in the open bar and in the small pill.
-
-The keys go out as scan codes and each is held for 30 ms, so the game sees them as real key
-presses. The same helper as the click spam does it, nothing extra runs.
+same way the game window is detected. Keys go out as scan codes, so the game sees them as real
+key presses. The helper lets go of everything it holds when it is stopped, and it watches the
+overlay's process id and ends by itself if the overlay is gone.
 
 ## Search
 
@@ -111,7 +130,9 @@ The results are a list on the left — tile, name in its rarity colour, what it 
 comes from (the boss, the loot pool) — and the picked one in full on the right, the first one
 until you pick another; ↑ ↓ walk the list. A narrow panel shows the list, then the picked one
 with *← Results*. The tabs above (All · Items · Bosses · Crafting · Activities) filter, a new
-search always starts on All. A guide or page opened from a result loads behind a spinner, has
+search always starts on All. The list is grouped (Items, Bosses, Runewords …), each group with a
+small head — icon, name, how many; on a card *How to get it*, *Drops from* and a boss's drops sit
+under small heads of their own. A guide or page opened from a result loads behind a spinner, has
 *← Back*, and typing in the search field goes back to the results.
 Favourites (★) and recent searches are kept — a search counts as recent once you stop typing for a moment, and *Clear* next to the heading empties the list.
 
@@ -142,8 +163,9 @@ ones list the Horadric Cube recipe and the gambling options.
 itself — **Pin** is always your own click; pinned builds stay fully visible while you play
 (*Settings → Behaviour → No fade out on builds*).
 
-On top: the build (a click opens the build menu — switch builds, name, class, *+ New farm list*,
-*Copy build code*, *Export all to file …*, duplicate, delete), the link to its source (opens the
+On top: the build (a click opens the build menu in three parts — *Builds* with how many there are,
+*This build* to name it and pick the class, *More* for *+ New farm list*, *Copy build code*,
+*Export all to file …*, duplicate, delete), the link to its source (opens the
 original page in your browser), how much of it is farmed, and *Import*. Below: **Gear · Skills ·
 Paragon**.
 
@@ -154,9 +176,11 @@ Paragon**.
   then *Seal & charms*, *Runes*, *Gems* and *Soul splinters*, each with how much of it you have;
   a finished stop turns green. On the right what you get at the picked stop: the item in its
   rarity colour, its slot, the rolls of the build (greater affixes ✦, tempered lines ⚒) and its
-  sockets, and a tick. Things from the same boss sit together.
-- **List** — everything at once, one calm column, grouped the same way: name and slot, where it
-  drops above, the rolls right under it. What you have sinks to *Farmed* at the end.
+  sockets, and a tick. The picked stop is a card like those in Settings, its head showing how much
+  of it is farmed ("2 / 5", green when done). Things from the same boss sit together.
+- **List** — everything at once, one calm column, grouped the same way: one card per place with
+  its icon and how much is left there ("3 to farm"); in it name and slot, the rolls right under
+  it. What you have sinks to a dimmed *Farmed* card at the end.
 - **Slots** — the build as the game shows it: armour on the left, jewellery and weapons on the
   right, each with its picture and what it is ("Mythic Unique Helm", "Unique Bow"). In the
   middle what is socketed where (the slot under each group of gems and runes) and the skill bar —
@@ -177,7 +201,7 @@ blades (*Weapon*, *Off-Hand*, *Weapon 2*), a barbarian up to four (*Weapon 3*). 
 for several weapon kinds — a runeword like Infinity, a unique like Spirit — shows the picture and
 tooltip of the kind the build uses (Infinity on a bow, not the scythe).
 
-**Import.** One field: paste a link from maxroll, d4builds or d2core (Chinese, translated) or a
+**Import.** One field: paste a link from maxroll, d4builds, infinitybuilds or d2core (Chinese, translated) or a
 build code — the site is recognised, the variants load by themselves and are ticked, *Import*
 adds them. A builds file can be dropped on the dialog or picked with *Import file …*.
 
@@ -186,21 +210,21 @@ with every node the build took lit — hover a node for its text at that rank. T
 tree's order, top to bottom. A click on a skill — in the bar, in the tree (a modifier counts for
 its skill) or in the slots view — zooms the tree in on it and lights it and its modifiers up
 (again: back out). maxroll saves the tree by the game's node ids and d2core by skill ids, so both
-land on the same drawing. d4builds.gg serves its skill tree data encrypted; for its builds the bar
+land on the same drawing — infinitybuilds.gg too, it keeps the game's node ids as well. d4builds.gg serves its skill tree data encrypted; for its builds the bar
 is shown and a button opens d4builds' own tree inside the overlay.
 
 **Paragon.** The boards on their grid, turned as in the build, the nodes taken lit up by rarity,
 the glyph in its socket — as plain squares (*Minimal*) or with the game's node icons (*Icons*);
 switching keeps where you zoomed to. The names sit in the gap above each board, gates that touch
 are joined by a line. A click on a board — in the list on the right or in the drawing — lights it
-up and moves the view to it, the whole board in view (again: all back). All three sites land on
-d2core's board drawings: d2core and maxroll by board key, d4builds by board name. Both views zoom
+up and moves the view to it, the whole board in view (again: all back). All sites land on
+d2core's board drawings: d2core, maxroll and infinitybuilds by board key, d4builds by board name. Both views zoom
 with the wheel and move by dragging; ⤢ fits everything again.
 
 - The class (build menu) filters what each slot offers; every option already says where it drops.
 - Hovering an item or aspect in the dropdown shows its **in-game tooltip** (frame, rolls, flavour
   text), taken from d4guides.gg.
-- **From a build site** — *Import* takes a link from one of three sites and lists the build's
+- **From a build site** — *Import* takes a link from one of four sites and lists the build's
   variants (Starter, Midgame, Endgame …) with the one the link points at marked; the ticked ones
   become builds:
 
@@ -208,13 +232,14 @@ with the wheel and move by dragging; ⤢ fits everything again.
   |---|---|
   | maxroll.gg | build guide (`maxroll.gg/d4/build-guides/…`) or planner (`maxroll.gg/d4/planner/…#4`) |
   | d4builds.gg | `d4builds.gg/builds/<id>/?var=1` — `var` picks the variant |
+  | infinitybuilds.gg | `infinitybuilds.gg/en/builds/<name>-<id>?variant=v-…` — any language; `variant` picks the variant |
   | d2core.com | `d2core.com/d4/planner?bd=23TM` (Chinese site) |
 
   Uniques and runewords come in by name (season-tagged game ids like `S05_BSK_Helm_…` included),
   legendaries by their aspects (two on the amulet — the sanctified / transfigured one is the
   second), with their rolls and sockets, the seal and charms, skills and paragon; the class is
   taken over, and an item the overlay does not recognise is reported instead of guessed. Every
-  weapon keeps its kind (maxroll and d2core name it exactly, d4builds only "Ranged Weapon" /
+  weapon keeps its kind (maxroll, d2core and infinitybuilds name it exactly, d4builds only "Ranged Weapon" /
   "Dual-Wield Weapon").
 
   d2core is in Chinese, but its gear uses the game's own ids, so every item and aspect comes in
@@ -222,12 +247,20 @@ with the wheel and move by dragging; ⤢ fits everything again.
   translated: game names (skills, items, aspects, sets, glyphs) from maxroll's game data in both
   languages, build jargon (天塔 = Pit, 速刷 = speed farm …) from a short glossary. Unknown words
   stay as they are; the original title is shown on hover.
-- **Compare** — the fourth tab next to Gear · Skills · Paragon puts the open build next to
-  another one, by default another variant of the same guide (Starter → Endgame), otherwise one
-  of the same class. Slot by slot what stays and what changes (changes first, different rolls and
-  sockets of the same item underneath), then the skills, seal & charms, paragon boards and glyphs
-  that come and go, and what is left to farm for the other one — everything it holds that is
-  ticked in neither build. *Open* switches to it.
+
+  infinitybuilds names gear in its author's language too, but by the game's ids — the English
+  names, the roll ranges and the skills d2core lacks (the Warlock's commands) come from the data
+  the site draws its own tooltips from. Seal and charm stats are saved without their rolls; like
+  the site, they show the best roll (a quarter more when greater). Glyph levels are not saved.
+- **Compare** — the fourth tab next to Gear · Skills · Paragon reads as a move *from* the open
+  build *to* another one — by default another variant of the same guide (Starter → Endgame),
+  otherwise one of the same class. Each gear slot that changes is one line, old → new in its
+  rarity colour, with where the new piece drops (or "you have it"); same items with other rolls
+  and the unchanged slots fold out underneath. Skills, seal & charms, paragon boards and glyphs
+  show their swaps the same way, with what stays in one quiet line. Each part is a slim card whose
+  head says how much changes ("3 changes", or "same" in green). At the end, in a highlighted card:
+  what is left to farm for the other build — ticked in neither — grouped by where it comes from. *Open this
+  build* switches to it.
 - **Several builds** — new, duplicate, rename, delete (build menu). They are saved in
   **`builds.json`** in the data folder, so they travel with it like the map progress. *Copy build
   code* gives one build as a short code (`D4B1:…`) for a chat or the other PC, *Export all to
@@ -339,9 +372,24 @@ npm run dist       # build dist\D4-Overlay-<version>-portable.exe
 npm test           # all offline tests
 ```
 
+### Building
+
+`lib/features.js` holds the build switches, read when the overlay starts — set them before
+`npm run dist`:
+
+| Switch | 1 | 0 |
+|---|---|---|
+| `MACROS` | *Settings → Macros* is there | no Macros tab, and the input helper is never started |
+| `NUMLOCK` | num-lock mode is there | its card is gone and it never runs |
+| `CLICK_SPAM` | click spam is there | its card is gone and it never runs |
+| `LOOP_SKILLS` | loop skills are there | its card is gone and it never runs |
+
+All three at 0 is the same as `MACROS: 0`. `disable_macros.txt` in the project folder repeats this
+in German, to find it quickly.
+
 ## Tests
 
-`npm test` runs fifteen files and prints one summary:
+`npm test` runs sixteen files and prints one summary:
 
 | File | Covers |
 |---|---|
@@ -354,12 +402,13 @@ npm test           # all offline tests
 | `d4guides-test.js` | database list parsing (name, icon, link, columns) |
 | `mythics-test.js` | iconic mythics: the list, the acquisition text, bad pages |
 | `place-test.js` | where the bar lands: the pill never drifts, places stay on screen |
-| `clicker-test.js` | click spam and key loop: bindings, speed limits, what the helper is told |
+| `clicker-test.js` | macros: bindings, speed limits, key lists, off by default, what the helper is told |
 | `maxbuild-test.js` | maxroll import: links, guide page, planner variant → build, dual wield |
+| `infinitybuilds-test.js` | infinitybuilds import: links and variants, English names, stat values like the site's tooltips, command skills, paragon, charms |
 | `sitebuilds-test.js` | d4builds + d2core import: links, variants, slots, aspects by game id, Chinese titles |
 | `farm-test.js` | farm list: slots, sources, aspect tooltips, merged variants; builds: save, ticks, code, import |
 | `compare-test.js` | comparing two builds: partner variant, gear, skills, charms, paragon, what is left to farm |
-| `renderer-smoke.js` | the whole UI in jsdom: every section (incl. farm list, builds, compare), settings, hotkeys, Esc, idle fade |
+| `renderer-smoke.js` | the whole UI in jsdom: every section (incl. farm list, builds, compare), settings and macros, the cards in each view, hotkeys, Esc, idle fade |
 
 If something misbehaves at runtime, `overlay-log.txt` in the data folder records cookie changes,
 view navigation, zoom and data loading.

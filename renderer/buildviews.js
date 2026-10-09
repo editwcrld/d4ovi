@@ -141,7 +141,7 @@ function skills(box, b, ctx) {
   const el = ctx.el;
   const sk = b.skills;
   box.classList.add('fskills');
-  if (!sk) { box.appendChild(el('div', 'empty', 'No skills in this build — import one from d2core.com or d4builds.gg.')); return; }
+  if (!sk) { box.appendChild(el('div', 'empty', 'No skills in this build — import one from d2core.com, maxroll.gg, infinitybuilds.gg or d4builds.gg.')); return; }
   const bar = el('div', 'sbar');
   let tree = null;                               // the drawn tree, once it is loaded
   let focused = null;                            // the skill id zoomed to
@@ -298,7 +298,7 @@ function paragon(box, b, ctx) {
   const el = ctx.el;
   const P = b.paragon;
   box.classList.add('fparagon');
-  if (!P) { box.appendChild(el('div', 'empty', 'No paragon boards in this build — import it from d2core.com, maxroll.gg or d4builds.gg.')); return; }
+  if (!P) { box.appendChild(el('div', 'empty', 'No paragon boards in this build — import it from d2core.com, maxroll.gg, infinitybuilds.gg or d4builds.gg.')); return; }
   if (pstate.sel >= P.boards.length) pstate.sel = -1;
   const keys = P.boards.map((x) => x.k);
   const area = el('div', 'canvas');

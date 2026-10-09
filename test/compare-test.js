@@ -50,6 +50,8 @@ assert.deepStrictEqual(d.skills, { both: ['Rain of Arrows'], onlyA: ['Dash'], on
 assert.deepStrictEqual(d.charms.onlyB, ['Charm 2']);
 assert.deepStrictEqual(d.boards.onlyB, ['Paragon_Rogue_03']);
 assert.deepStrictEqual(d.glyphs.onlyB, ['G2']);
+assert.deepStrictEqual(C.pairs(d.skills), [['Dash', 'Shadow Step']], 'a skill swap reads old → new');
+assert.deepStrictEqual(C.pairs(d.boards), [[null, 'Paragon_Rogue_03']], 'an added board has no old side');
 console.log('ok  skills, charms, boards, glyphs');
 
 // Harlequin is ticked in the starter, Infinity in the endgame build – neither is still needed

@@ -34,6 +34,7 @@ let view = 'gear';                 // gear | skills | paragon | compare
 let layout = 'route';              // route (where to go, what you get) | list (all at once) | slots (as in the game)
 try { const l = localStorage.getItem('farm.layout'); if (l === 'list' || l === 'slots') layout = l; } catch (_) { /* private storage */ }
 let routeAt = null;                // the stop picked in the route
+const routeScroll = { stops: {}, detail: {} };   // where the route's two columns were scrolled to
 let onlyMissing = false;           // hide what is farmed already
 let menuOpen = false;              // the build menu
 let gearAt = { key: '', top: 0 };  // where the gear list was scrolled to (kept across redraws)
@@ -174,7 +175,17 @@ function render(main, c) {
   wrap.appendChild(header(el, b));
   if (imp.open) {
     main.appendChild(importDialog(el));
-    setTimeout(() => { const i = document.getElementById('impQ'); if (i && document.activeElement !== i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 0);
+    setTimeout(() => {
+      const i = document.getElementById('impQ');
+      if (!i) return;
+      i.style.height = 'auto';
+      i.style.height = i.scrollHeight + 'px';                 // as many lines as the link needs
+      if (document.activeElement === i) return;
+      // the field is drawn anew on every change – the caret stays where it was, not at the end
+      const [a, z] = imp.caret || [i.value.length, i.value.length];
+      i.focus({ preventScroll: true });
+      i.setSelectionRange(Math.min(a, i.value.length), Math.min(z, i.value.length));
+    }, 0);
   }
   if (!cat.items.length) {
     wrap.appendChild(el('div', 'empty', 'The item list is still loading from d4guides.gg — this takes a few seconds on the first start.'));
@@ -186,7 +197,7 @@ function render(main, c) {
     const box = el('div', 'fview');
     wrap.appendChild(box);
     main.appendChild(wrap);
-    window.BuildCompare.render(box, b, { el, builds: data.builds, rerender: ctx.rerender, choose: (id) => {
+    window.BuildCompare.render(box, b, { el, api, builds: data.builds, rerender: ctx.rerender, look: lookUp, choose: (id) => {
       data.active = id; view = 'gear'; open = 'Helm'; pickOpen = false; routeAt = null; persist(); ctx.rerender();
     } });
     return;
@@ -209,6 +220,21 @@ function render(main, c) {
   if (gearAt.key === at) gear.scrollTop = gearAt.top;
   gearAt = { key: at, top: gear.scrollTop };
   gear.addEventListener('scroll', () => { gearAt.top = gear.scrollTop; });
+  // Route scrolls in its two columns instead: the stops keep their place (a click on one far down
+  // must not jump back to the top), the detail keeps it while the same stop stays open
+  const stopsBox = gear.querySelector('.rstops');
+  const detailBox = gear.querySelector('.rdetail');
+  if (stopsBox) {
+    if (routeScroll.stops.key === b.id) { stopsBox.scrollTop = routeScroll.stops.top; stopsBox.scrollLeft = routeScroll.stops.left; }
+    routeScroll.stops = { key: b.id, top: stopsBox.scrollTop, left: stopsBox.scrollLeft };
+    stopsBox.addEventListener('scroll', () => { routeScroll.stops.top = stopsBox.scrollTop; routeScroll.stops.left = stopsBox.scrollLeft; });
+  }
+  if (detailBox) {
+    const k = b.id + '|' + (detailBox.dataset.stop || '');
+    if (routeScroll.detail.key === k) detailBox.scrollTop = routeScroll.detail.top;
+    routeScroll.detail = { key: k, top: detailBox.scrollTop };
+    detailBox.addEventListener('scroll', () => { routeScroll.detail.top = detailBox.scrollTop; });
+  }
   if (pickOpen) placePicker();
   if (cat.details < cat.aspects.length) {
     ctx.status('Aspect slots: ' + cat.details + '/' + cat.aspects.length + ' checked — the rest go by category for now');
@@ -298,7 +324,7 @@ function header(el, b) {
     h.appendChild(pr);
   }
   h.appendChild(el('span', 'sp'));
-  btn('Import', 'Load a build from maxroll, d4builds or d2core – or a build code', () => { imp.open = true; ctx.rerender(); }, imp.open ? 'on' : '');
+  btn('Import', 'Load a build from maxroll, d4builds, infinitybuilds or d2core – or a build code', () => { imp.open = true; ctx.rerender(); }, imp.open ? 'on' : '');
   return h;
 }
 
@@ -306,7 +332,17 @@ function header(el, b) {
 function buildMenu(el, b) {
   const m = el('div', 'bmenu');
   m.onclick = (e) => e.stopPropagation();
-  m.appendChild(el('div', 'mk', 'Builds'));
+  // three parts, each under a small head like the cards elsewhere: the builds, this one, more
+  const head = (title, icon, n) => {
+    const h = el('div', 'mhd');
+    const ic = el('span', 'sicon');
+    ic.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + window.SCard.ICONS[icon] + '"/></svg>';
+    h.appendChild(ic);
+    h.appendChild(el('b', null, title));
+    if (n != null) h.appendChild(el('span', 'sstate', String(n)));
+    m.appendChild(h);
+  };
+  head('Builds', 'list', data.builds.length);
   data.builds.forEach((x) => {
     const r = el('button', 'mrow' + (x.id === b.id ? ' on' : ''));
     r.appendChild(el('span', 'n', x.name));
@@ -314,7 +350,7 @@ function buildMenu(el, b) {
     r.onclick = () => { data.active = x.id; menuOpen = false; open = 'Helm'; pickOpen = false; routeAt = null; persist(); ctx.rerender(); };
     m.appendChild(r);
   });
-  m.appendChild(el('div', 'mdiv'));
+  head('This build', 'build');
   const row = (label, ctl) => { const r = el('label', 'mfield'); r.appendChild(el('span', null, label)); r.appendChild(ctl); m.appendChild(r); };
   const name = el('input');
   name.type = 'text'; name.value = b.name; name.maxLength = 40;
@@ -324,7 +360,7 @@ function buildMenu(el, b) {
   CLASSES.forEach((x) => { const o = el('option', null, x === 'All' ? 'All classes' : x); o.value = x; if (x === b.cls) o.selected = true; cls.appendChild(o); });
   cls.onchange = () => { b.cls = cls.value; touch(); };
   row('Class', cls);
-  m.appendChild(el('div', 'mdiv'));
+  head('More', 'plus');
   const act = (label, title, fn, cls2) => { const x = el('button', 'mact' + (cls2 ? ' ' + cls2 : ''), label); x.title = title; x.onclick = fn; m.appendChild(x); return x; };
   act('+ New farm list', 'An empty list – pick the items yourself and tick them off', () => {
     const nb = { id: 'b' + Date.now().toString(36), name: 'Farm list ' + (data.builds.length + 1), cls: b ? b.cls : 'All', slots: {}, done: [], updatedAt: Date.now() };
@@ -363,8 +399,8 @@ function toolbar(el, b) {
     });
     t.appendChild(s);
   };
-  seg([['gear', 'Gear'], ['skills', 'Skills', b.skills ? '' : 'Import a build from maxroll, d2core or d4builds to see it', !b.skills],
-    ['paragon', 'Paragon', b.paragon ? '' : 'Import a build from maxroll, d2core or d4builds to see it', !b.paragon],
+  seg([['gear', 'Gear'], ['skills', 'Skills', b.skills ? '' : 'Import a build from maxroll, d2core, infinitybuilds or d4builds to see it', !b.skills],
+    ['paragon', 'Paragon', b.paragon ? '' : 'Import a build from maxroll, d2core, infinitybuilds or d4builds to see it', !b.paragon],
     ['compare', 'Compare', data.builds.length > 1 ? 'Side by side with another build or variant' : 'Needs a second build', data.builds.length < 2]],
   view, (id) => { view = id; pickOpen = false; hideTip(); ctx.rerender(); }, 'ftabs');
   if (view === 'gear') {
@@ -382,9 +418,10 @@ const CHEVRON = '<svg class="chev" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/>
 const EXTERNAL = '<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>';
 const CHECK = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
-// ---- Import: one field – a link from maxroll, d4builds or d2core, or a build code; or a file
+// ---- Import: one field – a link from maxroll, d4builds, infinitybuilds or d2core, or a build code; or a file
 const SITE_RE = [
-  [/maxroll\.gg/i, 'maxroll', 'm'], [/d4builds\.gg/i, 'd4builds', 'd'], [/d2core\.com/i, 'd2core · translated', 'c'],
+  [/maxroll\.gg/i, 'maxroll', 'm'], [/d4builds\.gg/i, 'd4builds', 'd'], [/infinitybuilds\.gg/i, 'infinitybuilds', 'i'],
+  [/d2core\.com/i, 'd2core · translated', 'c'],
 ];
 /** What was pasted: a build link (which site), a build code / builds file, or nothing we know. */
 function detect(v) {
@@ -446,11 +483,16 @@ function importDialog(el) {
   const d = detect(imp.value);
   const field = el('div', 'ifield' + (d && d.kind === 'bad' ? ' bad' : d ? ' ok' : ''));
   field.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>');
-  const inp = el('input');
-  inp.id = 'impQ'; inp.type = 'text'; inp.spellcheck = false; inp.autocomplete = 'off';
+  // wraps instead of scrolling sideways, so a long link stays readable as a whole
+  const inp = el('textarea');
+  inp.id = 'impQ'; inp.rows = 1; inp.spellcheck = false; inp.autocomplete = 'off';
   inp.placeholder = 'https://maxroll.gg/d4/planner/…';
   inp.value = imp.value;
+  const keepCaret = () => { imp.caret = [inp.selectionStart, inp.selectionEnd]; };
+  inp.onselect = keepCaret; inp.onkeyup = keepCaret; inp.onmouseup = keepCaret;
   inp.oninput = () => {
+    if (/[\r\n]/.test(inp.value)) inp.value = inp.value.replace(/\s*[\r\n]+\s*/g, '');   // one link, no line breaks
+    keepCaret();
     imp.value = inp.value; imp.result = null; imp.error = '';
     clearTimeout(importDialog.t);
     const k = detect(inp.value);
@@ -459,16 +501,16 @@ function importDialog(el) {
   };
   inp.onkeydown = (e) => {
     if (e.key === 'Escape') { e.stopPropagation(); closeImport(); }
-    if (e.key === 'Enter') { const k = detect(inp.value); if (k && k.kind === 'link' && !imp.result) loadLink(); else doImport(); }
+    if (e.key === 'Enter') { e.preventDefault(); const k = detect(inp.value); if (k && k.kind === 'link' && !imp.result) loadLink(); else doImport(); }
   };
   field.appendChild(inp);
   if (d && d.label) field.appendChild(el('span', 'ibadge b-' + d.cls, d.label));
   if (imp.busy) field.appendChild(el('i', 'ispin'));
   body.appendChild(field);
   const hint = el('div', 'ihint');
-  hint.appendChild(el('span', null, 'Works with maxroll.gg · d4builds.gg · d2core.com (Chinese, translated) · build codes — or drop a builds file here'));
+  hint.appendChild(el('span', null, 'Works with maxroll.gg · d4builds.gg · infinitybuilds.gg · d2core.com (Chinese, translated) · build codes — or drop a builds file here'));
   body.appendChild(hint);
-  if (d && d.kind === 'bad') body.appendChild(el('div', 'ierr', 'That is no link from maxroll, d4builds or d2core and no build code.'));
+  if (d && d.kind === 'bad') body.appendChild(el('div', 'ierr', 'That is no link from maxroll, d4builds, infinitybuilds or d2core and no build code.'));
   if (imp.error) body.appendChild(el('div', 'ierr', imp.error));
 
   const r = imp.result;
@@ -679,6 +721,21 @@ function thingRow(el, b, t, cls) {
   return row;
 }
 
+/** What kind of place a stop is – its card's icon. */
+const STOP_ICON = { rw: 'rune', d: 'dungeon', x: 'salvage', charms: 'charm', blank: 'plus', 'sock-rune': 'rune', 'sock-gem': 'item', 'sock-splinter': 'charm' };
+/**
+ * A stop as a slim card (renderer/cards.js): where, what is there, and how much of it is farmed.
+ * @param {number} [open_]  only what is still to farm (the list); else farmed / all (the route)
+ */
+function stopCard(el, s, cls, open_) {
+  const got = s.things.filter(thingGot).length;
+  const all = s.things.length;
+  const badge = s.blank ? all + ' empty' : open_ != null ? open_ + ' to farm' : got + ' / ' + all;
+  const finished = !s.blank && got === all;
+  return window.SCard.card(el, { title: s.title, sub: s.place, icon: STOP_ICON[s.key] || (String(s.key).startsWith('s:') ? 'boss' : 'item'),
+    badge, badgeCls: finished ? 'ok' : 'warn', cls: 'slim ' + cls + (finished ? ' done' : '') });
+}
+
 /** Route: where to go on the left, what you get there on the right. */
 function routeView(el, b) {
   const stops = farmStops(b);
@@ -702,11 +759,10 @@ function routeView(el, b) {
   });
   wrap.appendChild(left);
   const right = el('div', 'rdetail');
-  const h = el('div', 'rhead');
-  h.appendChild(el('h3', null, cur.title));
-  if (cur.place) h.appendChild(el('div', 'rplace', cur.place));
-  right.appendChild(h);
-  cur.things.filter((t) => !onlyMissing || !thingGot(t)).forEach((t) => right.appendChild(thingRow(el, b, t, 'rthing')));
+  right.dataset.stop = cur.key;
+  const c = stopCard(el, cur, 'rcard');
+  right.appendChild(c.card);
+  cur.things.filter((t) => !onlyMissing || !thingGot(t)).forEach((t) => c.body.appendChild(thingRow(el, b, t, 'rthing')));
   wrap.appendChild(right);
   return wrap;
 }
@@ -720,19 +776,15 @@ function calmList(el, b) {
     const open_ = s.things.filter((t) => !thingGot(t));
     s.things.filter(thingGot).forEach((t) => done.push(t));
     if (!open_.length) return;
-    const g = el('div', 'cgroup');
-    const h = el('div', 'chead');
-    h.appendChild(el('b', null, s.title));
-    if (s.place) h.appendChild(el('span', null, s.place));
-    g.appendChild(h);
-    open_.forEach((t) => g.appendChild(thingRow(el, b, t, 'crow')));
-    col.appendChild(g);
+    const g = stopCard(el, s, 'cgroup', open_.length);
+    open_.forEach((t) => g.body.appendChild(thingRow(el, b, t, 'crow')));
+    col.appendChild(g.card);
   });
   if (done.length && !onlyMissing) {
-    const g = el('div', 'cdone');
-    g.appendChild(el('div', 'k', 'Farmed · ' + done.length));
-    done.forEach((t) => g.appendChild(thingRow(el, b, t, 'crow small')));
-    col.appendChild(g);
+    const g = window.SCard.card(el, { title: 'Farmed', sub: 'Ticked off — untick one to farm it again', icon: 'check',
+      badge: done.length, badgeCls: 'ok', cls: 'slim cdone dim done' });
+    done.forEach((t) => g.body.appendChild(thingRow(el, b, t, 'crow small')));
+    col.appendChild(g.card);
   }
   if (!col.children.length) col.appendChild(el('div', 'empty', 'Everything is farmed.'));
   return col;
@@ -1038,6 +1090,17 @@ function sourceLine(src) {
   if (!src || !src.length) return '—';
   if (src[0].recipe) return src[0].recipe;
   return src.map((x) => x.src).join(' / ');
+}
+
+/** For the compare view: an item's or aspect's rarity and the first place it comes from. */
+function lookUp(name) {
+  const it = itemBy(name), a = !it && aspectBy(name);
+  const src = (it || a || {}).src || [];
+  const first = src[0];
+  return {
+    rarity: it ? rarityOf(it) : a ? 'Legendary' : '',
+    where: !first ? '' : first.recipe ? 'Runeword: ' + first.recipe : first.src,
+  };
 }
 
 // ---- what to farm – uniques with where they drop, then the aspects (for the progress)

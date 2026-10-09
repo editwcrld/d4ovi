@@ -1,0 +1,47 @@
+MACROS AUSBLENDEN – vor dem Bauen der .exe
+==========================================
+
+Datei:  lib/features.js
+        (im Projektordner: d4ovi\lib\features.js)
+
+Dort stehen vier Schalter. 1 = drin, 0 = komplett raus:
+
+  module.exports = {
+    MACROS: 1,        // der ganze Reiter "Macros" – 0 schaltet auch alle drei unten ab
+
+    NUMLOCK: 1,       // Num-lock mode
+    CLICK_SPAM: 1,    // Click spam
+    LOOP_SKILLS: 1,   // Loop skills
+  };
+
+
+Was 0 bewirkt
+-------------
+MACROS: 0       Kein Reiter "Macros" in den Einstellungen, und der Hintergrund-Helfer
+                (der Klicks und Tasten sendet) wird nie gestartet – egal was in den
+                gespeicherten Einstellungen steht.
+
+NUMLOCK: 0      Die Karte "Num-lock mode" fehlt, num-lock wird nie ausgeführt.
+CLICK_SPAM: 0   Die Karte "Click spam" fehlt, click spam wird nie ausgeführt.
+LOOP_SKILLS: 0  Die Karte "Loop skills" fehlt, loop skills wird nie ausgeführt.
+
+Stehen alle drei auf 0, ist es dasselbe wie MACROS: 0 (kein Reiter).
+Fehlen Num-lock UND Loop skills, verschwindet auch die Karte "Character"
+(sie speichert nur deren Tasten).
+
+
+Beispiele
+---------
+Alles raus:                       MACROS: 0
+Nur Click spam behalten:          NUMLOCK: 0, LOOP_SKILLS: 0
+Alles außer Loop skills:          LOOP_SKILLS: 0
+
+
+Danach bauen
+------------
+  npm run dist
+
+Die neue .exe liegt in dist\D4-Overlay-<version>-portable.exe.
+Die Schalter werden in die .exe eingebaut – ändern danach geht nur durch neu bauen.
+Gespeicherte Einstellungen (dist\D4-Overlay-Data) bleiben erhalten; schaltest du
+etwas später wieder auf 1, sind die alten Tasten wieder da.

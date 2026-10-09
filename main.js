@@ -21,6 +21,14 @@ const zhdict = require('./lib/zhdict');
 const d2db = require('./lib/d2coredb');
 const place = require('./lib/place');
 const clicker = require('./lib/clicker');
+const features = require('./lib/features');
+// what this build has: MACROS leaves out the whole tab, the others each macro on its own
+const MACROS = {
+  clickSpam: !!(features.MACROS && features.CLICK_SPAM),
+  loop: !!(features.MACROS && features.LOOP_SKILLS),
+  numlock: !!(features.MACROS && features.NUMLOCK),
+};
+MACROS.any = MACROS.clickSpam || MACROS.loop || MACROS.numlock;
 const S = require('./renderer/search');          // same search logic the overlay uses
 const userscript = require('./lib/userscript');
 
@@ -65,14 +73,20 @@ const DEFAULTS = {
   buildsNoFade: true,                    // … and do not fade while you play
   coachSeen: false,                      // the one-time hint about closing and pinning
   actDone: {},                           // activity guide steps ticked off, by guide
-  clickSpam: true,                       // rapid clicking while a thumb button is held
+  // macros – each one off until switched on (with a warning); left out of a build by lib/features.js
+  clickSpam: false,                      // rapid clicking while a thumb button is held
   clickLeftBind: 'Mouse5',               // left click spam
   clickRightBind: 'Mouse4',              // right click spam
   clickCps: 15,                          // clicks per second
-  keyLoop: true,                         // the key loop: a toggle key presses the skill keys again and again
-  keyLoopKeys: '1234',                   // which of the skill keys 1–4
-  keyLoopSec: 1,                         // seconds between two rounds
+  keyLoop: false,                        // loop skills: a toggle key presses the listed keys again and again
+  skillLoop: [],                         // … each key with its seconds between two presses: { key, sec }
   keyLoopBind: 'F8',                     // switches it on and off
+  holdOn: false,                         // num-lock mode: a toggle key holds the listed keys / buttons down
+  holdKeys: [],                          // keys and Mouse1–Mouse5
+  holdBind: 'F9',                        // switches it on and off
+  macroChars: [],                        // per character: { name, skillLoop, holdKeys }
+  macroChar: 0,                          // the character in use
+  // (macroRev is no default: a settings file without it is one from before the macros moved)
   hotkeySearch: 'Control+F',
   hotkeyToggle: '',
   hotkeyMap: '',
@@ -150,6 +164,35 @@ function loadSettings() {
     settings.hotkeyRev = 2;
     saveSettingsFile();
   }
+  // macro rev 1: the macros moved to their own tab and start switched off – each one is switched
+  // on again by hand, past the warning
+  if ((settings.macroRev || 0) < 1) {
+    settings.clickSpam = false;
+    settings.keyLoop = false;
+    settings.holdOn = false;
+    settings.macroRev = 1;
+    saveSettingsFile();
+  }
+  // macro rev 2: the key loop's fixed keys 1–4 became a list with seconds per key – the keys and
+  // seconds set before carry over
+  if (settings.macroRev < 2) {
+    const toList = (o) => {
+      const keys = String(o.keyLoopKeys == null ? '' : o.keyLoopKeys).toUpperCase().split('').filter((k) => /^[1-4Q]$/.test(k));
+      const secs = o.keyLoopSecs || {};
+      const own = (k) => (Number(secs[k]) > 0 ? Number(secs[k]) : Number(settings.keyLoopSec) || 1);
+      return [...new Set(keys)].map((k) => ({ key: k, sec: own(k) }));
+    };
+    // only keys someone actually set – the old default (all four, one second) becomes the new one
+    if (settings.keyLoopKeys != null && Object.keys(settings.keyLoopSecs || {}).length && toList(settings).length) settings.skillLoop = toList(settings);
+    if (Array.isArray(settings.macroChars)) {
+      settings.macroChars = settings.macroChars.filter((c) => c && typeof c === 'object').map((c) => ({
+        name: String(c.name || 'Character'), skillLoop: toList(c).length ? toList(c) : DEFAULTS.skillLoop, holdKeys: Array.isArray(c.holdKeys) ? c.holdKeys : [],
+      }));
+    }
+    delete settings.keyLoopKeys; delete settings.keyLoopSecs; delete settings.keyLoopSec;
+    settings.macroRev = 2;
+    saveSettingsFile();
+  }
 }
 function saveSettingsFile() {
   try { fs.writeFileSync(userFile('settings.json'), JSON.stringify(settings, null, 2)); } catch (_) {}
@@ -165,18 +208,22 @@ function gameProcNames() {
 }
 // The helper only clicks while the game window is in front, so it needs to know it.
 function restartClicker() {
-  const p = clicker.start(settings, gameProcNames()[0], dlog, (on, button) => {
-    send('click-spam', { on, button });
-    dlog('click spam', on ? button + ' button, ' + Math.round(1000 / clicker.delayFor(settings.clickCps)) + '/s' : 'stopped');
-  }, (on) => {
-    send('key-loop', on);
-    dlog('key loop', on ? 'on' : 'off');
-  });
+  const p = clicker.start(settings, gameProcNames()[0], dlog, {
+    spam: (on, button) => {
+      send('click-spam', { on, button });
+      dlog('click spam', on ? button + ' button, ' + Math.round(1000 / clicker.delayFor(settings.clickCps)) + '/s' : 'stopped');
+    },
+    loop: (on) => { send('key-loop', on); dlog('loop skills', on ? 'on' : 'off'); },
+    hold: (on) => { send('hold-state', on); dlog('num-lock mode', on ? 'on' : 'off'); },
+  }, MACROS);
   send('key-loop', false);                // a restarted helper starts switched off
-  dlog('Click spam:', p.usable
-    ? clicker.label(settings.clickLeftBind) + ' = left, ' + clicker.label(settings.clickRightBind) + ' = right, '
-      + (Number(settings.clickCps) || 15) + '/s, only while "' + p.title + '" is in front'
-      + (p.vkLoop ? '; key loop ' + p.loopKeys.map((k) => String.fromCharCode(k)).join('') + ' every ' + p.loopMs / 1000 + ' s on ' + settings.keyLoopBind : '')
+  send('hold-state', false);
+  dlog('Macros:', !MACROS.any ? 'not in this build' : p.usable
+    ? (p.on ? clicker.label(settings.clickLeftBind) + ' = left, ' + clicker.label(settings.clickRightBind) + ' = right, '
+      + (Number(settings.clickCps) || 15) + '/s' : 'no click spam')
+      + (p.vkLoop ? '; loop skills ' + settings.skillLoop.map((e) => e.key + ' every ' + e.sec + ' s').join(', ') + ' on ' + settings.keyLoopBind : '')
+      + (p.vkHold ? '; num-lock mode ' + settings.holdKeys.join('+') + ' on ' + settings.holdBind : '')
+      + ', only while "' + p.title + '" is in front'
     : 'off');
   return p;
 }
@@ -416,7 +463,9 @@ async function refreshAll(force) {
 
 // ---------- IPC ----------
 ipcMain.handle('settings:get', () => settings);
-const CLICK_KEYS = ['clickSpam', 'clickLeftBind', 'clickRightBind', 'clickCps', 'keyLoop', 'keyLoopKeys', 'keyLoopSec', 'keyLoopBind', 'd4WindowTitle', 'd4Path'];
+const CLICK_KEYS = ['clickSpam', 'clickLeftBind', 'clickRightBind', 'clickCps', 'keyLoop', 'skillLoop', 'keyLoopBind',
+  'holdOn', 'holdKeys', 'holdBind', 'd4WindowTitle', 'd4Path'];
+ipcMain.handle('app:features', () => ({ macros: MACROS.any, clickSpam: MACROS.clickSpam, loop: MACROS.loop, numlock: MACROS.numlock }));
 ipcMain.handle('settings:save', (_e, patch) => {
   const before = JSON.stringify([settings.d4Path, settings.tradeUrl]);
   const clickBefore = JSON.stringify(CLICK_KEYS.map((k) => settings[k]));
@@ -521,7 +570,7 @@ ipcMain.handle('farm:get', () => farm.catalog(loot, craft));
 ipcMain.handle('farm:tooltip', (_e, type, id) => farm.tooltip(net, String(type || ''), String(id || '')));
 ipcMain.handle('farm:css', () => farm.tooltipCss());
 ipcMain.handle('builds:get', () => builds.load());
-// A build link (maxroll guide / planner, d4builds.gg, d2core.com) -> its variants, ready to be added as builds
+// A build link (maxroll guide / planner, d4builds.gg, infinitybuilds.gg, d2core.com) -> its variants, ready to be added as builds
 ipcMain.handle('builds:link', async (_e, url) => {
   try { return await buildimport.load(net, String(url || ''), farm.catalog(loot, craft), dlog); }
   catch (e) { dlog('build import failed:', e.message); return { error: e.message }; }
@@ -535,10 +584,10 @@ ipcMain.handle('builds:paragon', async (_e, keys) => {
   try { return d2db.paragonFor(await d2db.load(net, dlog), Array.isArray(keys) ? keys.map(String).slice(0, 14) : []); }
   catch (e) { return { error: e.message }; }
 });
-// The build's page on its site, in the default browser – only the three build sites
+// The build's page on its site, in the default browser – only the build sites
 ipcMain.handle('builds:open-source', (_e, url) => {
   const u = String(url || '');
-  if (!/^https:\/\/(www\.)?(maxroll\.gg|d4builds\.gg|d2core\.com)\//i.test(u)) return false;
+  if (!/^https:\/\/(www\.)?(maxroll\.gg|d4builds\.gg|infinitybuilds\.gg|d2core\.com)\//i.test(u)) return false;
   shell.openExternal(u);
   return true;
 });

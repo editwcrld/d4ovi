@@ -313,6 +313,6 @@ const fakeNet = (routes) => ({ fetch: async (url, opts) => {
   assert.strictEqual(bi.siteOf('https://d4builds.gg/builds/9b97893d-ff28-403d-9b80-e30a22cf3163/?var=1'), 'd4builds.gg');
   assert.strictEqual(bi.siteOf('https://www.d2core.com/d4/planner?bd=23TM'), 'd2core.com');
   assert.strictEqual(bi.siteOf('https://example.com'), '');
-  await assert.rejects(bi.load(cloud, 'https://example.com', catalog), /maxroll\.gg, d4builds\.gg or d2core\.com/);
+  await assert.rejects(bi.load(cloud, 'https://example.com', catalog), /maxroll\.gg, d4builds\.gg, infinitybuilds\.gg or d2core\.com/);
   console.log('ok  links go to the right site');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

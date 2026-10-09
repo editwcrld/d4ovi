@@ -9,6 +9,8 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const EMBEDDED = { chat: 'chat', listings: 'listings', maptool: 'maptool', page: 'page' };
 
 let settings = null;
+// what this build has (lib/features.js) – without an answer: no macros
+let features = { macros: false, clickSpam: false, loop: false, numlock: false };
 let loot = { sections: [], fetchedAt: 0 };
 let craft = { tables: [], fetchedAt: 0 };
 let activities = [];
@@ -354,8 +356,16 @@ function renderSearch(main, side) {
   shownKey = cur ? cur.key : null;          // the default stays a default – late item hits come first
 
   let group = null;
+  const GROUP_ICON = { Items: 'item', Bosses: 'boss', 'Loot pools': 'target', Runewords: 'rune', Crafting: 'craft', Activities: 'activity' };
   R.forEach((r) => {
-    if (r.group !== group) { group = r.group; side.appendChild(el('h5', null, group)); }
+    if (r.group !== group) {
+      group = r.group;
+      const h = el('h5', 'grp');
+      h.appendChild(iconTile(GROUP_ICON[group]));
+      h.appendChild(el('span', null, group));
+      h.appendChild(el('span', 'sstate', String(R.filter((x) => x.group === group).length)));
+      side.appendChild(h);
+    }
     side.appendChild(resultRow(r, r === cur));
   });
   if (!area) {
@@ -428,6 +438,21 @@ function sideRow(icon, label, right, onClick, on) {
 }
 
 // ---- cards --------------------------------------------------------------
+/** The small icon tile of the cards (renderer/cards.js). */
+function iconTile(icon) {
+  const ic = el('span', 'sicon');
+  ic.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + (window.SCard.ICONS[icon] || window.SCard.ICONS.info) + '"/></svg>';
+  return ic;
+}
+/** A part of a card under its own small head – the same look as the cards' heads, smaller. */
+function subHead(title, icon, n) {
+  const h = el('div', 'csub');
+  h.appendChild(iconTile(icon));
+  h.appendChild(el('b', null, title));
+  if (n != null) h.appendChild(el('span', 'sstate', String(n)));
+  return h;
+}
+
 function itemCard(it) {
   const c = el('div', 'card');
   const head = el('div', 'ch');
@@ -472,7 +497,7 @@ function itemCard(it) {
   if (it.power) c.appendChild(el('div', 'pw', it.power));
   if (it.obtain) {
     const g = el('div', 'get');
-    g.appendChild(el('b', null, 'How to get it'));
+    g.appendChild(subHead('How to get it', 'target'));
     g.appendChild(el('span', null, it.obtain));
     if (it.obtainNote) g.appendChild(el('span', 'sub', it.obtainNote));
     c.appendChild(g);
@@ -575,7 +600,7 @@ function dropsFrom(name, into) {
   const src = dropSources(name).slice().sort((a, b) => (b.sec.isBoss ? 1 : 0) - (a.sec.isBoss ? 1 : 0));
   if (!src.length) return;
   const box = el('div', 'from');
-  box.appendChild(el('div', 'k', 'Drops from'));
+  box.appendChild(subHead('Drops from', 'boss', src.length));
   src.forEach(({ sec, drop }) => {
     const r = el('div', 'src');
     const h = el('div', 'sh');
@@ -622,7 +647,7 @@ function bossCard(r) {
       dl.appendChild(bar);
       if (want !== 'All') items = r.items.filter((it) => !it.cls || it.cls === want || /^all/i.test(it.cls));
     }
-    dl.appendChild(el('div', 'k', all ? 'Drops (' + items.length + ')' : 'Drops what you searched'));
+    dl.appendChild(subHead(all ? 'Drops' : 'Drops what you searched', 'item', items.length));
     items.forEach((it) => {
       const hit = itemHits.find((x) => x.name === it.name);
       const rar = hit && hit.rarity ? hit.rarity.split(' ')[0].toLowerCase() : /mythic/i.test(it.note || '') ? 'mythic' : 'unique';
@@ -810,12 +835,15 @@ const SET_TABS = [
   ['behaviour', 'Behaviour', 'M4 6h10M4 12h16M4 18h7M17 4v4M20 10v4M11 16v4'],
   ['appearance', 'Appearance', 'M12 4a8 8 0 1 0 0 16c1.5 0 2-1 2-2s-1-1.5-1-2.5 1-1.5 2-1.5h2a3 3 0 0 0 3-3c0-4-3.6-7-8-7z'],
   ['hotkeys', 'Hotkeys', 'M3 7h18v10H3zM7 11h.01M11 11h.01M15 11h.01M8 14.5h8'],
+  // only when the build has them (lib/features.js)
+  ['macros', 'Macros', 'M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.8 2.8M14.9 14.9l2.8 2.8M6.3 17.7l2.8-2.8M14.9 9.1l2.8-2.8', () => features.macros],
   ['trade', 'diablo.trade', 'M4 8.5h16l-1.5 11h-13zM8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5'],
   ['data', 'Data', 'M4 6c0-1.5 3.6-2.5 8-2.5s8 1 8 2.5v12c0 1.5-3.6 2.5-8 2.5s-8-1-8-2.5zM4 6c0 1.5 3.6 2.5 8 2.5s8-1 8-2.5M4 12c0 1.5 3.6 2.5 8 2.5s8-1 8-2.5'],
 ];
 let setScroll = { tab: null, top: 0 };          // filled by render() before the page is cleared
+const setTabs = () => SET_TABS.filter((t) => !t[3] || t[3]());
 function renderSettings(main) {
-  if (!SET_TABS.some((t) => t[0] === setTab)) setTab = 'behaviour';
+  if (!setTabs().some((t) => t[0] === setTab)) setTab = 'behaviour';
   // switching an option redraws the page – it stays where it was scrolled to (same tab only)
   const top = setScroll.tab === setTab ? setScroll.top : 0;
   setScroll.tab = setTab;
@@ -825,7 +853,7 @@ function renderSettings(main) {
   main.appendChild(head);
   const wrap = el('div', 'setwrap');
   const nav = el('div', 'setnav');
-  SET_TABS.forEach(([id, label, icon]) => {
+  setTabs().forEach(([id, label, icon]) => {
     const a = el('a', setTab === id ? 'on' : null);
     a.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + icon + '"/></svg>';
     a.appendChild(el('span', null, label));
@@ -836,14 +864,14 @@ function renderSettings(main) {
   wrap.appendChild(nav);
   const body = el('div', 'setmain');
   const inner = el('div', 'setbody');
-  ({ behaviour: setBehaviour, appearance: setAppearance, hotkeys: setHotkeys, trade: setTrade, data: setData })[setTab](inner);
+  ({ behaviour: setBehaviour, appearance: setAppearance, hotkeys: setHotkeys, macros: setMacros, trade: setTrade, data: setData })[setTab](inner);
   inner.appendChild(el('div', 'msg', window.__setMsg || ''));
   body.appendChild(inner);
   wrap.appendChild(body);
   main.appendChild(wrap);
+  if (riskAsk) main.appendChild(riskDialog());
   body.scrollTop = top;
 }
-const grp = (parent, title) => parent.appendChild(el('div', 'grp', title));
 function opt(parent, title, hint, ctl) {
   const o = el('div', 'opt');
   const t = el('div', 'txt');
@@ -889,13 +917,14 @@ function slider(min, max, value, unit, onSet, onLive) {
 }
 const btn = (label, fn, cls) => { const b = el('button', 'ab' + (cls ? ' ' + cls : ''), label); b.onclick = fn; return b; };
 
-function setBehaviour(b) {
-  grp(b, 'Panel');
+function setBehaviour(root) {
+  let b;
+  b = sect(root, 'Panel').body;
   opt(b, 'A click into the game', 'What happens to the open panel — Pin keeps it open either way',
     seg([['close', 'Closes it'], ['keep', 'Keeps it open']], settings.clickGame || 'close', (v) => save({ clickGame: v })));
   opt(b, 'No fade out on builds', 'Pinned builds stay fully visible while you play',
     sw(settings.buildsNoFade !== false, (v) => save({ buildsNoFade: v })));
-  grp(b, 'Bar');
+  b = sect(root, 'Bar').body;
   opt(b, 'Orientation', 'Vertical at the edge, or horizontal on top',
     seg([['horizontal', 'Horizontal'], ['vertical', 'Vertical']], settings.orientation || 'vertical', (v) => save({ orientation: v }).then(applyLayout)));
   opt(b, 'Show the overlay when', 'Otherwise it stays hidden',
@@ -905,20 +934,21 @@ function setBehaviour(b) {
   opt(b, 'Pill opacity', 'How far the closed bar fades — the mouse over it brings it back',
     slider(10, 100, Math.round((settings.fadeOpacity == null ? 0.35 : settings.fadeOpacity) * 100), ' %',
       (v) => save({ fadeOpacity: v / 100 }), (v) => document.documentElement.style.setProperty('--fade', v / 100)));
-  grp(b, 'World boss');
+  b = sect(root, 'World boss').body;
   opt(b, 'Warn before the spawn', 'The timer turns red and grows from here on',
     slider(1, 30, settings.wbWarnMin == null ? 5 : settings.wbWarnMin, ' min', (v) => save({ wbWarnMin: v })));
   opt(b, 'Blink while it warns', 'A click on the timer stops it',
     sw(settings.wbBlink !== false, (v) => save({ wbBlink: v })));
   opt(b, 'Timer always bright', 'It ignores the pill fade',
     sw(settings.wbBright !== false, (v) => save({ wbBright: v }).then(applyLayout)));
-  grp(b, 'Messages');
+  b = sect(root, 'Messages').body;
   opt(b, 'Blink on a new message', 'Only the diablo.trade icon blinks, nothing else',
     sw(settings.msgBlink !== false, (v) => save({ msgBlink: v })));
 }
 
-function setAppearance(b) {
-  grp(b, 'Size');
+function setAppearance(root) {
+  let b;
+  b = sect(root, 'Size').body;
   opt(b, 'Text size', 'On top of the automatic scaling by screen size',
     seg([[0.9, 'S'], [1, 'M'], [1.15, 'L'], [1.3, 'XL']], Number(settings.textScale) || 1, (v) => save({ textScale: Number(v) })));
   opt(b, 'Panel size', 'Share of the screen the open panel may use',
@@ -929,7 +959,7 @@ function setAppearance(b) {
   opt(b, 'Your own size', settings.panelSize
     ? settings.panelSize.w + ' × ' + settings.panelSize.h + ' px — drag the bottom right corner to change it'
     : 'Drag the bottom right corner of the panel; narrow, everything goes to one column', reset);
-  grp(b, 'Look');
+  b = sect(root, 'Look').body;
   opt(b, 'Opacity', 'How much of the game shows through',
     slider(60, 100, Math.round((settings.opacity || 1) * 100), ' %', (v) => save({ opacity: v / 100 }), (v) => api.setOpacity(v / 100)));
   opt(b, 'Labels in the bar', 'Names next to the icons (vertical bar)',
@@ -938,52 +968,297 @@ function setAppearance(b) {
     btn('Reset', () => save({ posIdle: null, posOpen: null }).then(() => setMsg('Places reset — drag the bar where you want it.'))));
 }
 
-function setHotkeys(b) {
-  grp(b, 'Hotkeys');
+function setHotkeys(root) {
+  let b;
+  b = sect(root, 'Hotkeys').body;
   b.appendChild(el('div', 'ghint', 'Click a field and press the combination. Esc cancels, Del clears.'));
   opt(b, 'Open / close search', 'The cursor lands in the search field', hkField('hotkeySearch'));
   opt(b, 'Open builds', 'Gear, skills and paragon', hkField('hotkeyFarm'));
   opt(b, 'Open the map', 'Map tool', hkField('hotkeyMap'));
   opt(b, 'Show / hide the overlay', 'Without quitting', hkField('hotkeyToggle'));
-  grp(b, 'Click spam');
-  b.appendChild(el('div', 'ghint', 'Hold the button and the overlay keeps clicking — only while Diablo IV is in front.'));
-  opt(b, 'On', 'Off means nothing is watched at all',
-    sw(settings.clickSpam !== false, (v) => save({ clickSpam: v })));
-  opt(b, 'Right click spam', 'Hold this button to repeat right clicks', bindField('clickRightBind'));
-  opt(b, 'Left click spam', 'Hold this button to repeat left clicks', bindField('clickLeftBind'));
-  opt(b, 'Speed', 'Clicks per second',
-    slider(1, 40, settings.clickCps == null ? 15 : settings.clickCps, ' /s', (v) => save({ clickCps: v })));
-  grp(b, 'Key loop');
-  b.appendChild(el('div', 'ghint', 'Press the toggle key in the game and the overlay presses your skill keys over and over — again to stop. Only while Diablo IV is in front.'));
-  opt(b, 'On', 'Off means the toggle key does nothing',
-    sw(settings.keyLoop !== false, (v) => save({ keyLoop: v })));
-  opt(b, 'Toggle key', 'Switches the loop on and off', bindField('keyLoopBind'));
-  opt(b, 'Keys', 'Pressed one after the other, each round', keyPicks());
-  const sec = Number(settings.keyLoopSec) || 1;
-  const r = el('input'); r.type = 'range'; r.className = 'range'; r.min = 0.2; r.max = 20; r.step = 0.1; r.value = sec;
-  const rv = el('span', 'val', sec.toFixed(1) + ' s');
-  r.oninput = () => { rv.textContent = Number(r.value).toFixed(1) + ' s'; };
-  r.onchange = () => save({ keyLoopSec: Number(r.value) });
-  opt(b, 'Every', 'Seconds between two rounds', [r, rv]);
+}
+
+// ---- Macros: click spam, loop skills, num-lock mode – all off until switched on past a warning.
+// The lists of loop skills and num-lock mode are kept per character, to switch quickly.
+// What can be pressed or held – the same list as lib/clicker.js (KEY_CHOICES).
+const KEY_CHOICES = [...'1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''), 'Space', 'Shift',
+  'Mouse1', 'Mouse2', 'Mouse3', 'Mouse4', 'Mouse5'];
+const keyLabel = (k) => (/^Mouse\d$/.test(k) ? 'Mouse ' + k.slice(5) + ({ 1: ' (left)', 2: ' (right)', 3: ' (wheel)', 4: ' (thumb)', 5: ' (thumb)' }[k.slice(5)]) : k);
+const holdLabel = (k) => (/^Mouse\d$/.test(k) ? 'M' + k.slice(5) : k);
+let riskAsk = null;                // the switch waiting for "use at your own risk": { key, label }
+
+function setMacros(b) {
+  const warn = el('div', 'mwarn');
+  warn.appendChild(el('b', null, 'Use at your own risk'));
+  warn.appendChild(el('span', null, 'These send mouse clicks and key presses to the game for you. Automated input can break the game\'s terms of use — your account is your responsibility.'));
+  b.appendChild(warn);
+  b.appendChild(el('div', 'ghint', 'All of them work only while Diablo IV is in front, and let go of everything when you leave it.'));
+
+  const ch = sect(b, 'Character', (features.loop && features.numlock ? 'Num-lock mode and loop skills are' : features.loop ? 'Loop skills are' : 'Num-lock mode is') + ' kept per character — pick one and its keys load right away.', 'character');
+  ch.card.hidden = !features.loop && !features.numlock;          // nothing kept per character
+  const chars = charList();
+  const cur = charAt();
+  const pick = sel(chars.map((c, i) => [String(i), c.name]), String(cur), (v) => switchChar(Number(v)));
+  pick.id = 'macroChar';
+  const name = el('input');
+  name.type = 'text'; name.id = 'macroCharName'; name.value = chars[cur].name; name.maxLength = 30; name.spellcheck = false;
+  name.title = 'Rename this character';
+  name.onchange = () => { const n = name.value.trim(); if (n) saveChar({}, n); else name.value = chars[cur].name; };
+  ch.tag.textContent = chars[cur].name;
+  opt(ch.body, 'Character', 'The one in use', pick);
+  opt(ch.body, 'Name', 'Rename the one picked', name);
+  const del = btn('Delete', () => deleteChar());
+  del.disabled = chars.length < 2;
+  opt(ch.body, 'Characters', chars.length + ' saved', [btn('+ New', () => newChar()), del]);
+
+  if (features.numlock) {
+    const nl = macroCard(b, 'holdOn', 'Num-lock mode', 'Press the toggle key in the game and the overlay holds these keys and mouse buttons down — as if you kept them pressed — until you press it again.', 'holdBind');
+    riskSwitch(nl.body, 'holdOn', 'Num-lock mode', 'Off means the toggle key does nothing');
+    opt(nl.body, 'Toggle key', 'Holds and lets go', bindField('holdBind'));
+    const held = holdList();
+    opt(nl.body, 'Keys', 'Click + and press a key or mouse button — × takes one out',
+      keyChips('hold', held, (k) => saveChar({ holdKeys: held.concat([k]) }), (k) => saveChar({ holdKeys: held.filter((x) => x !== k) })));
+    if (features.loop && settings.holdOn === true && settings.keyLoop === true && settings.holdBind && settings.holdBind === settings.keyLoopBind) {
+      nl.body.appendChild(el('div', 'ierr', 'Loop skills and num-lock mode use the same toggle key — both switch at once.'));
+    }
+  }
+
+  if (features.clickSpam) {
+    const cs = macroCard(b, 'clickSpam', 'Click spam', 'Hold the button and the overlay keeps clicking.');
+    riskSwitch(cs.body, 'clickSpam', 'Click spam', 'Off means nothing is watched at all');
+    opt(cs.body, 'Right click spam', 'Hold this button to repeat right clicks', bindField('clickRightBind'));
+    opt(cs.body, 'Left click spam', 'Hold this button to repeat left clicks', bindField('clickLeftBind'));
+    opt(cs.body, 'Speed', 'Clicks per second',
+      slider(1, 40, settings.clickCps == null ? 15 : settings.clickCps, ' /s', (v) => save({ clickCps: v })));
+  }
+
+  if (features.loop) {
+    const lp = macroCard(b, 'keyLoop', 'Loop skills', 'Press the toggle key in the game and the overlay presses these keys over and over, each after its own time — again to stop.', 'keyLoopBind');
+    riskSwitch(lp.body, 'keyLoop', 'Loop skills', 'Off means the toggle key does nothing');
+    opt(lp.body, 'Toggle key', 'Switches it on and off', bindField('keyLoopBind'));
+    const skills = skillList();
+    opt(lp.body, 'Keys', 'Click + and press a key or mouse button — × takes one out',
+      keyChips('loop', skills.map((e) => e.key),
+        (k) => saveChar({ skillLoop: skills.concat([{ key: k, sec: 1 }]) }),
+        (k) => saveChar({ skillLoop: skills.filter((e) => e.key !== k) })));
+    skills.forEach((e, i) => {
+      const r = el('input'); r.type = 'range'; r.className = 'range'; r.min = 0.2; r.max = 30; r.step = 0.1; r.value = e.sec;
+      const rv = el('span', 'val', Number(e.sec).toFixed(1) + ' s');
+      r.oninput = () => { rv.textContent = Number(r.value).toFixed(1) + ' s'; };
+      r.onchange = () => saveChar({ skillLoop: skills.map((x, j) => (j === i ? { key: x.key, sec: Number(r.value) } : x)) });
+      const row = opt(lp.body, 'Key ' + keyName(e.key), 'Pressed again every …', [r, rv]);
+      row.dataset.skill = e.key;
+    });
+  }
+
   const st = el('div', 'msg');
   st.id = 'clickState';
   st.textContent = clickState;
   b.appendChild(st);
 }
 
-// The skill keys 1–4 of the key loop, each one switched on or off.
-function keyPicks() {
-  const g = el('div', 'seg multi');
-  const on = String(settings.keyLoopKeys == null ? '1234' : settings.keyLoopKeys);
-  ['1', '2', '3', '4'].forEach((k) => {
-    const x = el('button', on.includes(k) ? 'on' : null, k);
-    x.onclick = () => {
-      x.classList.toggle('on');
-      save({ keyLoopKeys: [...g.children].filter((c) => c.classList.contains('on')).map((c) => c.textContent).join('') });
-    };
-    g.appendChild(x);
+// Every settings section sits on a card of its own: icon, title, a line on what it is about –
+// the macros add whether they are on and their toggle key.
+const SECTIONS = {
+  Panel: ['What the open panel does while you play', 'M4 5h16v14H4zM4 9h16'],
+  Bar: ['The icon rail, where it sits and how it fades', 'M5 4h4v16H5zM13 8h6M13 12h6M13 16h4'],
+  'World boss': ['The timer and how it warns you', 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.5 2.5M9 2h6'],
+  Messages: ['diablo.trade chat', 'M4 5h16v11H9l-5 4z'],
+  Size: ['How big the text and the panel are', 'M4 20L20 4M14 4h6v6M10 20H4v-6'],
+  Look: ['Opacity, labels and where the bar sits', 'M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'],
+  Hotkeys: ['Shortcuts that work while the game is in front', 'M3 7h18v10H3zM7 11h.01M11 11h.01M15 11h.01M8 14.5h8'],
+  Account: ['Your diablo.trade login', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20c.8-3.6 3.8-6 7.5-6s6.7 2.4 7.5 6'],
+  'Item search': ['How a search opens on diablo.trade', 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4'],
+  'If signing in does not work': ['Other ways to get your login in', 'M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'],
+  'Game data': ['Loot, crafting, items — and your own saved data', 'M4 6c0-1.5 3.6-2.5 8-2.5s8 1 8 2.5v12c0 1.5-3.6 2.5-8 2.5s-8-1-8-2.5zM4 6c0 1.5 3.6 2.5 8 2.5s8-1 8-2.5'],
+  Advanced: ['Where the game is and how it is found', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'],
+  Character: [null, 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20c.8-3.6 3.8-6 7.5-6s6.7 2.4 7.5 6'],
+  'Click spam': [null, 'M9 3v3M3.5 8.5l2.1 2.1M3 14h3M12.5 9.5l7.5 3-3.2 1.3 3 3-1.8 1.8-3-3L13.7 18z'],
+  'Loop skills': [null, 'M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4'],
+  'Num-lock mode': [null, 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5zM12 15v2'],
+};
+function sect(parent, title, hint, id) {
+  const [line, icon] = SECTIONS[title] || [null, 'M5 12h14'];
+  const card = el('section', 'scard');
+  card.dataset.card = id || title;
+  const head = el('div', 'shead');
+  const ic = el('span', 'sicon');
+  ic.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + icon + '"/></svg>';
+  head.appendChild(ic);
+  const t = el('div', 'stitle');
+  t.appendChild(el('h3', null, title));
+  if (hint || line) t.appendChild(el('span', null, hint || line));
+  head.appendChild(t);
+  const side = el('div', 'sside');
+  const tag = el('span', 'sstate');
+  side.appendChild(tag);
+  head.appendChild(side);
+  card.appendChild(head);
+  const body = el('div', 'sbody');
+  card.appendChild(body);
+  parent.appendChild(card);
+  return { card, body, tag, side };
+}
+/** A macro's card: its state (ON / OFF) and its toggle key in the head. */
+function macroCard(parent, key, title, hint, bindKey) {
+  const c = sect(parent, title, hint, key);
+  const on = settings[key] === true;
+  c.card.classList.add('macro');
+  c.card.classList.toggle('on', on);
+  c.tag.textContent = on ? 'ON' : 'OFF';
+  c.tag.classList.add(on ? 'on' : 'off');
+  if (bindKey && settings[bindKey]) c.side.insertBefore(el('kbd', null, prettyBind(settings[bindKey])), c.tag);
+  return c;
+}
+
+/**
+ * The keys of a list as tiles – [1][Q][+]. A click on + waits for a key or a mouse button (any of
+ * the five, the left one included), × on a tile takes it out again. A key is in a list only once.
+ */
+function keyChips(kind, keys, onAdd, onRemove) {
+  const g = el('div', 'seg multi chips');
+  g.dataset.picks = kind;
+  keys.forEach((k) => {
+    const t = el('button', 'on', keyName(k));
+    t.dataset.key = k;
+    t.title = keyLabel(k);
+    const x = el('span', 'x', '×');
+    x.title = 'Take ' + keyName(k) + ' out';
+    x.onclick = (e) => { e.stopPropagation(); onRemove(k); };
+    t.appendChild(x);
+    g.appendChild(t);
   });
+  const add = el('button', 'add', '+');
+  add.title = 'Add a key';
+  let rec = false, took = false;
+  const stopRec = () => { rec = false; add.classList.remove('rec'); add.textContent = '+'; };
+  const take = (k) => {
+    if (!k) return;
+    stopRec();
+    if (keys.includes(k)) { add.textContent = keyName(k) + ' is in'; setTimeout(() => { if (!rec) add.textContent = '+'; }, 1200); return; }
+    onAdd(k);
+  };
+  add.onclick = (e) => {
+    e.preventDefault();
+    if (took) { took = false; return; }              // the click that follows a mouse button taken
+    if (rec) return;                                 // the click that starts listening is no key
+    rec = true; add.classList.add('rec'); add.textContent = 'press a key …';
+    add.focus();
+  };
+  // while listening, a mouse button on the tile is taken as that button
+  add.onmousedown = (e) => {
+    if (!rec) return;
+    e.preventDefault(); e.stopPropagation();
+    took = e.button === 0;                           // only the left button clicks afterwards
+    take({ 0: 'Mouse1', 2: 'Mouse2', 1: 'Mouse3', 3: 'Mouse4', 4: 'Mouse5' }[e.button]);
+  };
+  add.oncontextmenu = (e) => { if (rec) e.preventDefault(); };
+  add.onkeydown = (e) => {
+    if (!rec) return;
+    e.preventDefault(); e.stopPropagation();
+    if (e.key === 'Escape') { stopRec(); return; }
+    const c = e.code;
+    const k = /^Digit\d$/.test(c) ? c.slice(5) : /^Key[A-Z]$/.test(c) ? c.slice(3)
+      : c === 'Space' ? 'Space' : /^Shift/.test(c) ? 'Shift' : null;
+    if (k && KEY_CHOICES.includes(k)) take(k);
+    else add.textContent = 'not that one …';
+  };
+  add.onblur = stopRec;
+  g.appendChild(add);
   return g;
+}
+const keyName = (k) => (/^Mouse\d$/.test(k) ? 'M' + k.slice(5) : k);
+
+/** A macro's on switch – switching it on first asks "use at your own risk". */
+function riskSwitch(b, key, label, hint) {
+  const on = settings[key] === true;
+  const row = opt(b, 'On', hint, sw(on, (v) => {
+    if (!v) { save({ [key]: false }); return; }
+    riskAsk = { key, label };
+    render();
+  }));
+  row.dataset.macro = key;
+  return row;
+}
+function riskDialog() {
+  const shade = el('div', 'ishade risk');
+  const cancel = () => { riskAsk = null; render(); };
+  shade.onclick = (e) => { if (e.target === shade) cancel(); };
+  const m = el('div', 'imodal');
+  const head = el('div', 'ihead');
+  head.appendChild(el('h3', null, 'Use at your own risk'));
+  m.appendChild(head);
+  const body = el('div', 'ibody');
+  body.appendChild(el('p', null, riskAsk.label + ' sends input to Diablo IV for you. Blizzard does not allow automated input — using it can get your account flagged or banned.'));
+  body.appendChild(el('p', null, 'Only switch it on if you accept that risk.'));
+  m.appendChild(body);
+  const foot = el('div', 'ifoot');
+  foot.appendChild(el('span', 'sp'));
+  const no = btn('Cancel', cancel);
+  const yes = btn('I understand, switch on', () => { const k = riskAsk.key; riskAsk = null; save({ [k]: true }); }, 'pri');
+  yes.id = 'riskYes';
+  foot.appendChild(no); foot.appendChild(yes);
+  m.appendChild(foot);
+  shade.appendChild(m);
+  shade.tabIndex = -1;
+  shade.onkeydown = (e) => { if (e.key === 'Escape') cancel(); };
+  setTimeout(() => no.focus(), 0);
+  return shade;
+}
+
+// The lists in use – only known keys, each key once; empty until keys are added.
+function skillList() {
+  const seen = new Set();
+  return (Array.isArray(settings.skillLoop) ? settings.skillLoop : []).filter((e) => {
+    if (!e || !KEY_CHOICES.includes(e.key) || seen.has(e.key)) return false;
+    seen.add(e.key);
+    return true;
+  }).map((e) => ({ key: e.key, sec: Number(e.sec) > 0 ? Number(e.sec) : 1 }));
+}
+const holdList = () => [...new Set((Array.isArray(settings.holdKeys) ? settings.holdKeys : []).filter((k) => KEY_CHOICES.includes(k)))];
+const loopKeysOn = () => skillList().map((e) => holdLabel(e.key)).join('');
+const holdKeysOn = () => holdList();
+
+// Characters: [{ name, skillLoop, holdKeys }]; the one in use is also what the settings hold, so
+// the helper needs to know nothing about characters.
+const curKeys = () => ({ skillLoop: skillList(), holdKeys: holdList() });
+function charList() {
+  const list = Array.isArray(settings.macroChars) ? settings.macroChars.filter((c) => c && typeof c === 'object') : [];
+  return list.length ? list.map((c) => Object.assign({}, c)) : [Object.assign({ name: 'Character 1' }, curKeys())];
+}
+const charAt = () => Math.max(0, Math.min(charList().length - 1, Number(settings.macroChar) || 0));
+/** A change to the lists (or the name) – into the settings and into the character in use. */
+function saveChar(patch, rename) {
+  const chars = charList();
+  const i = charAt();
+  chars[i] = Object.assign({}, chars[i], curKeys(), patch, rename ? { name: rename } : {});
+  return save(Object.assign({}, patch, { macroChars: chars, macroChar: i }));
+}
+/** The character's lists into the settings – what the helper runs on. */
+const loadChar = (c) => ({
+  skillLoop: Array.isArray(c.skillLoop) ? c.skillLoop.map((e) => Object.assign({}, e)) : [],
+  holdKeys: Array.isArray(c.holdKeys) ? c.holdKeys.slice() : [],
+});
+function switchChar(i) {
+  const chars = charList();
+  const at = charAt();
+  chars[at] = Object.assign({}, chars[at], curKeys());          // what was set stays with the old one
+  const c = chars[i] || chars[0];
+  return save(Object.assign({ macroChars: chars, macroChar: chars.indexOf(c) }, loadChar(c)));
+}
+function newChar() {
+  const chars = charList();
+  chars[charAt()] = Object.assign({}, chars[charAt()], curKeys());
+  let n = chars.length + 1;
+  while (chars.some((c) => c.name === 'Character ' + n)) n++;
+  chars.push(Object.assign({ name: 'Character ' + n }, curKeys()));          // starts as a copy
+  return save({ macroChars: chars, macroChar: chars.length - 1 });
+}
+function deleteChar() {
+  const chars = charList();
+  if (chars.length < 2) return null;
+  chars.splice(charAt(), 1);
+  return save(Object.assign({ macroChars: chars, macroChar: 0 }, loadChar(chars[0])));
 }
 
 // Takes a mouse button (the two thumb buttons, the wheel button) or a single key.
@@ -1050,8 +1325,9 @@ const accel = (e) => {
   return [...mods, key].join('+');
 };
 
-function setTrade(b) {
-  grp(b, 'Account');
+function setTrade(root) {
+  let b;
+  b = sect(root, 'Account').body;
   const line = opt(b, 'diablo.trade', 'Checking …', [
     btn('Sign in', () => openSection('page', 'https://diablo.trade/signin')),
     btn('Sign out', async () => { await api.authLogout(); setMsg('Signed out.'); }),
@@ -1062,12 +1338,12 @@ function setTrade(b) {
     st.textContent = s.loggedIn ? 'Signed in — the session is kept' : s.cookies ? 'Cookies found, but no session' : 'Not signed in — chat and listings need it';
     st.classList.toggle('good', !!s.loggedIn);
   });
-  grp(b, 'Item search');
+  b = sect(root, 'Item search').body;
   opt(b, 'Open the search in', 'In the overlay it fills the field; in the browser the name is on the clipboard',
     seg([['internal', 'Overlay'], ['browser', 'Browser']], settings.tradeOpenMode || 'internal', (v) => save({ tradeOpenMode: v })));
   opt(b, 'Press Enter after filling in', 'Overlay only — searches right away',
     sw(!!settings.pressEnter, (v) => save({ pressEnter: v })));
-  grp(b, 'If signing in does not work');
+  b = sect(root, 'If signing in does not work').body;
   const ta = el('textarea'); ta.rows = 3; ta.placeholder = 'name=value; name2=value2  (or rows from the browser dev tools)';
   ta.hidden = !window.__cookieBox;
   const apply = btn('Apply', async () => { const r = await api.authImport(ta.value); ta.value = ''; window.__cookieBox = false; setMsg(r.imported ? r.imported + ' cookie(s) applied.' : 'No valid cookies found.'); }, 'pri');
@@ -1079,8 +1355,9 @@ function setTrade(b) {
     btn('Copy', async () => { await api.copyUserscript(); setMsg('Userscript copied — paste it into Tampermonkey.'); }));
 }
 
-function setData(b) {
-  grp(b, 'Game data');
+function setData(root) {
+  let b;
+  b = sect(root, 'Game data').body;
   opt(b, 'Boss loot, crafting, item database, activities',
     dataInfo || ((loot.sections || []).length + ' loot sections · ' + (craft.tables || []).length + ' crafting tables · ' + activities.length + ' activities'),
     btn('Reload now', () => { api.refreshData(); setMsg('Reloading …'); }, 'pri'));
@@ -1088,7 +1365,7 @@ function setData(b) {
     btn('Open', () => api.openDataDir()));
   opt(b, 'Map progress', 'Your marks in the map tool, saved to map-progress.json',
     btn('Restore', async () => { const n = await api.mapRestore(); setMsg(n ? n + ' entries restored into the map.' : 'Nothing to restore.'); }));
-  grp(b, 'Advanced');
+  b = sect(root, 'Advanced').body;
   const path = el('input'); path.type = 'text'; path.value = settings.d4Path || ''; path.className = 'wide';
   path.onchange = () => save({ d4Path: path.value });
   opt(b, 'Diablo IV path', 'For the launch button and to find the game', [path,
@@ -1177,6 +1454,7 @@ function wireResize() {
 // ---------------------------------------------------------------- start
 async function init() {
   settings = await api.getSettings();
+  try { features = Object.assign({}, features, await api.getFeatures()); } catch (_) { /* an older main: no macros */ }
   loot = (await api.getLoot()) || loot;
   craft = (await api.getCraft()) || craft;
   activities = (await api.getActivities()) || [];
@@ -1259,7 +1537,12 @@ async function init() {
   api.onKeyLoop((on) => {
     const t = $('loopTag');
     t.hidden = !on;
-    t.lastChild.textContent = String(settings.keyLoopKeys == null ? '1234' : settings.keyLoopKeys) || '–';
+    t.lastChild.textContent = loopKeysOn() || '–';
+  });
+  api.onHold((on) => {
+    const t = $('holdTag');
+    t.hidden = !on;
+    t.lastChild.textContent = holdKeysOn().map(holdLabel).join('') || '–';
   });
   api.onChatUnread((n) => {
     const b = $('chatBadge');

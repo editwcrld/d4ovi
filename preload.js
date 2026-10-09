@@ -5,6 +5,7 @@ const on = (ch) => (cb) => ipcRenderer.on(ch, (_e, p) => cb(p));
 contextBridge.exposeInMainWorld('d4api', {
   // data
   getSettings: () => ipcRenderer.invoke('settings:get'),
+  getFeatures: () => ipcRenderer.invoke('app:features'),
   saveSettings: (patch) => ipcRenderer.invoke('settings:save', patch),
   getLoot: () => ipcRenderer.invoke('loot:get'),
   getCraft: () => ipcRenderer.invoke('craft:get'),
@@ -77,4 +78,5 @@ contextBridge.exposeInMainWorld('d4api', {
   onChatUnread: on('chat-unread'),
   onClickSpam: on('click-spam'),
   onKeyLoop: on('key-loop'),
+  onHold: on('hold-state'),
 });
