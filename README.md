@@ -79,9 +79,10 @@ timers: how many items, aspects, charms and gems of the active build are not tic
 (green **done** once everything is). A click opens the build. Off by default.
 
 Everything about the timers is in *Settings → Behaviour → Timers*: each one can be switched off
-on its own (*World boss timer*, *Helltide timer*, *Own timer*), and *Show only timers* leaves just
-the handle and the timers (and the Lock tag while it runs) in the pill — a click on the world
-boss or Helltide opens the panel.
+on its own (*World boss timer*, *Helltide timer*, *Own timer*). *Settings → Appearance → Pill →
+Show only timers* (the very first switch there) leaves just the handle, the timers and the
+settings button (and the Lock tag while it runs) in the pill — a click on the world boss or
+Helltide opens the panel.
 
 Alerts punch through the fade and blink **on their own element only**: the timer when the world
 boss is closer than your warning threshold, the diablo.trade icon when a message arrives.
@@ -111,7 +112,7 @@ The icon in the Windows tray shows or hides the overlay (a click, or the menu), 
 Builds, Notes or Settings and quits. Hidden from the tray, the overlay stays hidden until it is
 shown there again.
 
-Once a day the overlay asks GitHub for the latest release of this repository. A newer version
+When switched on (*Settings → Data → Updates*, off by default), the overlay asks GitHub once a day for the latest release of this repository. A newer version
 puts a green dot on Settings; *Settings → Data → Updates* links to it. Nothing is downloaded or
 installed by itself, and the check can be switched off there. (It needs published releases in a
 public repository — otherwise it says "no release published yet".)
@@ -161,13 +162,14 @@ switch it on again. Otherwise it is one or the other:
 few frames, so a slow frame cannot swallow it. Several timed keys due at once go out top to bottom; drag a row by its
 grip to change the order. The row says *timed · 1.*, *timed · 2.* …
 
-**Left click pauses it:** while you hold the left mouse button yourself, or left click spam runs,
-lock lets go of everything and waits; a quarter second after you let go it carries on. The
-overlay tells your own clicks from the ones it sends (a low level mouse hook sees the flag
-Windows puts on sent input), so a locked Mouse 1 does not pause itself.
+**Left click and Space pause it:** the moment you press the left mouse button or Space yourself
+(evade, teleport), or left click spam runs, lock lets go of everything and waits — a timed key
+in progress is broken off too; a quarter second after you let go it carries on. The overlay
+tells your own input from the input it sends (low level mouse and keyboard hooks see the flag
+Windows puts on sent input), so a locked Mouse 1 or Space does not pause itself.
 
 While it runs, a green **Lock** tag sits next to the world boss timer; it turns amber and reads
-**Wait** while a left click pauses it.
+**Wait** while a left click or Space pauses it.
 
 ### Per character
 

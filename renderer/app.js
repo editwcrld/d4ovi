@@ -275,6 +275,18 @@ function showNote(text, kind, ms) {
   render();
 }
 
+/** A line in the footer for a while – seen when the panel is open, never opening it. */
+let footTimer = null;
+function footNote(text, kind) {
+  const e = $('stNote');
+  e.textContent = text;
+  e.className = kind || 'info';
+  e.title = text;
+  e.hidden = false;
+  clearTimeout(footTimer);
+  footTimer = setTimeout(() => { e.hidden = true; }, kind === 'error' ? 15000 : 8000);
+}
+
 // ---------------------------------------------------------------- search data
 async function updateItems(q) {
   if (q === itemQuery) return;
@@ -1147,9 +1159,6 @@ function setBehaviour(root) {
   [cn, cm].forEach((o) => o.classList.toggle('off', settings.ctTimer === false));
   opt(b, 'Timers always bright', 'They ignore the pill fade',
     sw(settings.wbBright !== false, (v) => save({ wbBright: v }).then(applyLayout)));
-  const only = opt(b, 'Show only timers', 'The small pill shows the timers and nothing else — a click on the world boss or Helltide opens the panel',
-    sw(settings.pillTimersOnly === true, (v) => save({ pillTimersOnly: v }).then(applyLayout)));
-  only.classList.toggle('off', settings.idleShrink === false);
   b = sect(root, 'Messages').body;
   opt(b, 'Blink on a new message', 'Only the diablo.trade icon blinks, nothing else',
     sw(settings.msgBlink !== false, (v) => save({ msgBlink: v })));
@@ -1157,6 +1166,12 @@ function setBehaviour(root) {
 
 function setAppearance(root) {
   let b;
+  b = sect(root, 'Pill').body;
+  const only = opt(b, 'Show only timers', settings.idleShrink === false
+    ? 'Needs “Shrink to the small pill” (Behaviour › Bar)'
+    : 'The small pill shows the timers and the settings button, nothing else — a click on the world boss or Helltide opens the panel',
+    sw(settings.pillTimersOnly === true, (v) => save({ pillTimersOnly: v }).then(applyLayout)));
+  only.classList.toggle('off', settings.idleShrink === false);
   b = sect(root, 'Size').body;
   opt(b, 'Text size', 'On top of the automatic scaling by screen size',
     seg([[0.9, 'S'], [1, 'M'], [1.15, 'L'], [1.3, 'XL']], Number(settings.textScale) || 1, (v) => save({ textScale: Number(v) })));
@@ -1225,7 +1240,7 @@ function setMacros(b) {
   opt(ch.body, 'Characters', chars.length + ' saved', [btn('+ New', () => newChar()), del]);
 
   if (features.lock) {
-    const lk = macroCard(b, 'lockOn', 'Lock', 'Press the toggle key in the game: every key is held down (lock) or pressed again after its time — until you press it again. A left click by hand or left click spam pauses it until you let go.', 'lockBind');
+    const lk = macroCard(b, 'lockOn', 'Lock', 'Press the toggle key in the game: every key is held down (lock) or pressed again after its time — until you press it again. A left click or Space by hand (evade, teleport) or left click spam pauses it at once, until you let go.', 'lockBind');
     riskSwitch(lk.body, 'lockOn', 'Lock', 'Off means the toggle key does nothing');
     opt(lk.body, 'Toggle key', 'Switches it on and off', bindField('lockBind'));
     const keys = lockList();
@@ -1258,6 +1273,7 @@ const SECTIONS = {
   Bar: ['The icon rail, where it sits and how it fades', 'M5 4h4v16H5zM13 8h6M13 12h6M13 16h4'],
   Timers: ['World boss, Helltide and your own timer', 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.5 2.5M9 2h6'],
   Messages: ['diablo.trade chat', 'M4 5h16v11H9l-5 4z'],
+  Pill: ['The small bar while nothing is open', 'M3 9.5a2.5 2.5 0 0 1 2.5-2.5h13a2.5 2.5 0 0 1 0 5h-13A2.5 2.5 0 0 1 3 9.5zM7 16h10'],
   Size: ['How big the text and the panel are', 'M4 20L20 4M14 4h6v6M10 20H4v-6'],
   Look: ['Opacity, labels and where the bar sits', 'M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'],
   Hotkeys: ['Shortcuts that work while the game is in front', 'M3 7h18v10H3zM7 11h.01M11 11h.01M15 11h.01M8 14.5h8'],
@@ -1805,7 +1821,9 @@ async function init() {
   if (window.FarmView) window.FarmView.onChange = updateMissing;
   api.onItemsReady(async () => { itemQuery = null; runewords = (await api.getRunewords()) || runewords; updateItems($('q').value.trim()); });
   api.onWorldBoss((d) => { wb = d; renderTimers(); });
-  api.onNotice((n) => showNote(n.text, n.kind));
+  // what the app reports by itself (data loaded, login saved, backup …) goes to the footer only –
+  // it never opens the panel while you play
+  api.onNotice((n) => footNote(n.text, n.kind));
   api.onStatus((s) => {
     const e = $('stD4');
     e.textContent = '';
@@ -1851,7 +1869,7 @@ async function init() {
     const t = $('lockTag');
     t.hidden = !on;
     t.classList.toggle('paused', !!paused);
-    t.title = paused ? 'Lock waits — goes on when you let go of the left button' : 'Lock running — the toggle key stops it';
+    t.title = paused ? 'Lock waits — goes on when you let go of the left button or Space' : 'Lock running — the toggle key stops it';
     t.firstChild.textContent = paused ? 'Wait' : 'Lock';
     t.lastChild.textContent = lockKeysOn() || '–';
   });

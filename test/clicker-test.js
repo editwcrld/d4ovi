@@ -89,7 +89,9 @@ assert.ok(ls.includes('inGame = Active(title, proc)'), 'only while the game is i
 assert.ok(/repeatAt = now \+ 300/.test(ls) && /repeatAt = now \+ 33/.test(ls), 'a held key repeats like a real one');
 // a left click by hand or left click spam pauses it
 assert.ok(ls.includes('SetWindowsHookEx(14') && /\(s\.flags & 1\) == 0/.test(ls), 'a mouse hook tells a hand click from a sent one');
-assert.ok(/bool hand = handLeft \|\| \(spam && l\)/.test(ls), 'left click by hand or left click spam');
+assert.ok(/bool hand = handLeft \|\| handSpace \|\| \(spam && l\)/.test(ls), 'left click or Space by hand, or left click spam');
+assert.ok(ls.includes('SetWindowsHookEx(13') && ls.includes('k.vkCode == 0x20 && (k.flags & 0x10) == 0'), 'a keyboard hook tells Space by hand from a sent one');
+assert.ok(/if \(handLeft \|\| handSpace\) break;/.test(ls), 'pressed during the timed keys: stops at once');
 assert.ok(/< 250\)/.test(ls) && /locking && inGame && !paused/.test(ls), 'waits until let go, and a moment more');
 assert.ok(ls.includes('"{\\"pause\\":true}"'), 'tells the overlay it waits');
 assert.strictEqual(c.plan({ ...lock, lockOn: false }, '').vkLock, 0, 'off switch');
@@ -101,7 +103,7 @@ const big = c.plan({ ...lock, clickSpam: true, d4WindowTitle: 'Diablo IV', lockK
 assert.ok(c.encoded(big).length < 30000, 'encoded helper fits the command line: ' + c.encoded(big).length);
 const plain = Buffer.from(c.encoded(big), 'base64').toString('utf16le');
 assert.ok(!/^\s*\/\//m.test(plain) && plain.includes('[Clicker]::Run(') && /^"@$/m.test(plain), 'comments gone, the here-string end still on its own line');
-console.log('ok  lock: held or timed per key, timed first in order, left click pauses, toggle, off switch');
+console.log('ok  lock: held or timed per key, timed first in order, left click and Space pause, toggle, off switch');
 
 // --- off unless switched on, and nothing at all when the build leaves the macros out
 const bare = { clickLeftBind: 'Mouse5', clickRightBind: 'Mouse4', lockKeys: [{ key: '1' }], lockBind: 'F9' };

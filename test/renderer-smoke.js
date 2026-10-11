@@ -665,7 +665,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.deepStrictEqual(cardTitles(), ['Panel', 'Bar', 'Timers', 'Messages'], 'behaviour on cards');
   assert.ok([...w.document.querySelectorAll('.setbody .opt')].every((o) => o.closest('.scard')), 'every row sits on a card');
   w.document.querySelectorAll('.setnav a')[1].click(); await sleep(30);
-  assert.deepStrictEqual(cardTitles(), ['Size', 'Look'], 'appearance on cards');
+  assert.deepStrictEqual(cardTitles(), ['Pill', 'Size', 'Look'], 'appearance on cards');
   w.document.querySelectorAll('.setnav a')[4].click(); await sleep(30);
   assert.deepStrictEqual(cardTitles(), ['Account', 'Item search', 'If signing in does not work'], 'diablo.trade on cards');
   w.document.querySelectorAll('.setnav a')[5].click(); await sleep(30);
@@ -940,13 +940,16 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   const onlySw = () => [...w.document.querySelectorAll('.opt')].find((o) => o.textContent.includes('Show only timers')).querySelector('.sw');
   const setOnly = async () => {
     rail('settings').click(); await sleep(30);
-    w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
-    assert.ok(txt().includes('Helltide timer'), 'the Helltide switch in the settings');
+    w.document.querySelectorAll('.setnav a')[1].click(); await sleep(30);
+    assert.strictEqual(w.document.querySelector('.scard').dataset.card, 'Pill', 'Appearance opens with the pill');
+    assert.ok(w.document.querySelector('.scard .opt').textContent.includes('Show only timers'), 'its first row: show only timers');
     onlySw().click(); await sleep(30);
     w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
   };
   await setOnly();
   assert.ok(settings.pillTimersOnly === true && $('app').classList.contains('timersonly') && $('app').classList.contains('idle'), 'pill: timers only');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'style.css'), 'utf8');
+  assert.ok(css.includes('#app.idle.shrink.timersonly #rail>.ri:not([data-section="settings"]){display:none}'), 'timers only: the settings button stays');
   await setOnly();
   assert.ok(settings.pillTimersOnly === false && !$('app').classList.contains('timersonly'), 'icons back');
   // hovering only takes the fade off – the pill keeps its shape and place so it can be dragged
@@ -1066,6 +1069,14 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   [...w.document.querySelectorAll('.sethead .ab')].find((x) => x.textContent === 'Save as file …').click(); await sleep(30);
   assert.ok(notesFile.includes('# Season\n') && notesFile.includes('# Season 2'), 'every season in the file');
   console.log('ok  notes export');
+
+  // what the app reports by itself: the footer only, the panel stays shut
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  handlers.onNotice({ text: 'Boss loot updated (18 sections)', kind: 'ok' }); await sleep(30);
+  assert.ok($('panel').hidden, 'a notice does not open the panel');
+  assert.ok(!$('stNote').hidden && $('stNote').textContent === 'Boss loot updated (18 sections)' && $('stNote').classList.contains('ok'), 'it is in the footer');
+  assert.ok(!txt().includes('Boss loot updated'), 'not as a note over the content');
+  console.log('ok  notices in the footer only');
 
   // --- backup: choose a folder, back up now, once a day
   rail('settings').click(); await sleep(30);

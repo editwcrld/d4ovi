@@ -27,6 +27,14 @@ assert.ok(r.changed && r.settings.ctTimer === false && r.settings.ctMin === 7, '
 assert.ok(!('fohTimers' in r.settings) && !('fohMin' in r.settings), 'old keys gone');
 console.log('ok  Fields of Hatred -> own timer');
 
+// the update check: off by default, and switched off once in a file from before
+assert.strictEqual(load(undefined).settings.updateCheck, false, 'off on a first start');
+r = load({ macroRev: 3, updateCheck: true });
+assert.ok(r.changed && r.settings.updateCheck === false && r.settings.updateRev === 1, 'an older file: switched off once');
+r = load(r.settings); r.settings.updateCheck = true;
+assert.strictEqual(load(r.settings).settings.updateCheck, true, 'switched on again by hand: it stays on');
+console.log('ok  update check off by default');
+
 // one place -> pill and open bar; an unused setting goes
 r = load({ macroRev: 3, position: { x: 5, y: 6 }, fadeAfterSec: 8 });
 assert.deepStrictEqual(r.settings.posOpen, { x: 5, y: 6 });
