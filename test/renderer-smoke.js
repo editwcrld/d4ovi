@@ -76,10 +76,11 @@ let settings = {
   wbWarnMin: 5, wbBlink: true, favorites: [], recent: [],
   fadeOpacity: 0.35, fadeAfterSec: 1, idleShrink: true, wbBright: true, msgBlink: true,
   clickSpam: false, clickLeftBind: 'Mouse5', clickRightBind: 'Mouse4', clickCps: 15,
-  keyLoop: false, skillLoop: [], keyLoopBind: 'F8', holdOn: false, holdKeys: [], holdBind: 'F9', macroChars: [], macroChar: 0,
+  lockOn: false, lockKeys: [], lockBind: 'F9', macroChars: [], macroChar: 0,
 };
 
 const calls = [];
+let backupMade = 0, notesFile = null, copied = null;
 const handlers = {};
 const on = (n) => (cb) => { handlers[n] = cb; };
 w.d4api = new Proxy({}, { get: (_, k) => {
@@ -87,13 +88,18 @@ w.d4api = new Proxy({}, { get: (_, k) => {
   return (...a) => {
     calls.push(k);
     if (k === 'getSettings') return Promise.resolve(settings);
-    if (k === 'getFeatures') return Promise.resolve({ macros: true, clickSpam: true, loop: true, numlock: true });
+    if (k === 'getFeatures') return Promise.resolve({ macros: true, clickSpam: true, lock: true });
     if (k === 'getLoot') return Promise.resolve(loot);
     if (k === 'getCraft') return Promise.resolve(craft);
     if (k === 'getActivities') return Promise.resolve(activities);
     if (k === 'getRunewords') return Promise.resolve(runewords);
     if (k === 'searchItems') return Promise.resolve(/anni/i.test(a[0] || '') ? itemHits : []);
     if (k === 'saveSettings') { settings = { ...settings, ...a[0] }; return Promise.resolve({ settings, errors: [] }); }
+    if (k === 'pickBackupDir') return Promise.resolve('D:\\OneDrive\\D4');
+    if (k === 'runBackup') { backupMade = Date.now(); return Promise.resolve({ ok: true, dir: 'x', at: backupMade }); }
+    if (k === 'lastBackup') return Promise.resolve(backupMade);
+    if (k === 'saveNotesFile') { notesFile = a[0]; return Promise.resolve('C:\\docs\\d4-notes.md'); }
+    if (k === 'copyText') { copied = a[0]; return undefined; }
     if (k === 'authStatus') return Promise.resolve({ cookies: 2, loggedIn: true });
     if (k === 'openTrade') return Promise.resolve('internal');
     if (k === 'mapRestore') return Promise.resolve(7);
@@ -651,19 +657,19 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(txt().includes('Opacity'), 'appearance tab renders');
   w.document.querySelectorAll('.setnav a')[2].click(); await sleep(30);
   assert.ok(txt().includes('Open / close search'), 'hotkeys tab renders');
-  assert.ok(!txt().includes('Click spam') && !txt().includes('Loop skills') && !txt().includes('Num-lock'), 'the macros are no hotkeys any more');
+  assert.ok(!txt().includes('Click spam') && !txt().includes('Lock'), 'the macros are no hotkeys any more');
   console.log('ok  settings: ' + tabs.join(' / '));
   // every tab: one card per section
   const cardTitles = () => [...w.document.querySelectorAll('.setbody .scard h3')].map((h) => h.textContent);
   w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
-  assert.deepStrictEqual(cardTitles(), ['Panel', 'Bar', 'World boss', 'Messages'], 'behaviour on cards');
+  assert.deepStrictEqual(cardTitles(), ['Panel', 'Bar', 'Timers', 'Messages'], 'behaviour on cards');
   assert.ok([...w.document.querySelectorAll('.setbody .opt')].every((o) => o.closest('.scard')), 'every row sits on a card');
   w.document.querySelectorAll('.setnav a')[1].click(); await sleep(30);
   assert.deepStrictEqual(cardTitles(), ['Size', 'Look'], 'appearance on cards');
   w.document.querySelectorAll('.setnav a')[4].click(); await sleep(30);
   assert.deepStrictEqual(cardTitles(), ['Account', 'Item search', 'If signing in does not work'], 'diablo.trade on cards');
   w.document.querySelectorAll('.setnav a')[5].click(); await sleep(30);
-  assert.deepStrictEqual(cardTitles(), ['Game data', 'Advanced'], 'data on cards');
+  assert.deepStrictEqual(cardTitles(), ['Game data', 'Backup', 'Updates', 'Advanced'], 'data on cards');
   w.document.querySelectorAll('.setnav a')[2].click(); await sleep(30);
   assert.deepStrictEqual(cardTitles(), ['Hotkeys'], 'hotkeys on a card');
   assert.ok(w.document.querySelector('.scard .sicon svg') && w.document.querySelector('.scard .stitle span'), 'icon and a line on what it is about');
@@ -672,13 +678,13 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   // --- macros: their own tab, everything off, switching one on asks first
   w.document.querySelectorAll('.setnav a')[3].click(); await sleep(30);
   assert.ok(txt().includes('Use at your own risk'), 'the warning stands on top');
-  assert.ok(txt().includes('Click spam') && txt().includes('Loop skills') && txt().includes('Num-lock mode'), 'all three macros');
+  assert.ok(txt().includes('Click spam') && txt().includes('Lock') && !txt().includes('Loop skills') && !txt().includes('Num-lock'), 'both macros – lock is loop and num-lock in one');
   const macroSw = (k) => w.document.querySelector('.opt[data-macro="' + k + '"] .sw');
-  assert.ok(['clickSpam', 'keyLoop', 'holdOn'].every((k) => !macroSw(k).classList.contains('on')), 'all off by default');
+  assert.ok(['clickSpam', 'lockOn'].every((k) => !macroSw(k).classList.contains('on')), 'all off by default');
   const card = (k) => w.document.querySelector('.scard[data-card="' + k + '"]');
-  assert.deepStrictEqual([...w.document.querySelectorAll('.scard h3')].map((h) => h.textContent), ['Character', 'Num-lock mode', 'Click spam', 'Loop skills'], 'each section on its own card: num-lock, click spam, loop skills last');
-  assert.ok(['clickSpam', 'keyLoop', 'holdOn'].every((k) => card(k).querySelector('.sstate').textContent === 'OFF' && !card(k).classList.contains('on')), 'the card says OFF');
-  assert.strictEqual(card('keyLoop').querySelector('kbd').textContent, 'F8', 'the toggle key in the card head');
+  assert.deepStrictEqual([...w.document.querySelectorAll('.scard h3')].map((h) => h.textContent), ['Character', 'Lock', 'Click spam'], 'each section on its own card');
+  assert.ok(['clickSpam', 'lockOn'].every((k) => card(k).querySelector('.sstate').textContent === 'OFF' && !card(k).classList.contains('on')), 'the card says OFF');
+  assert.strictEqual(card('lockOn').querySelector('kbd').textContent, 'F9', 'the toggle key in the card head');
   macroSw('clickSpam').click(); await sleep(30);
   assert.ok(w.document.querySelector('.ishade.risk'), 'switching on asks first');
   assert.strictEqual(settings.clickSpam, false, 'not on before it is confirmed');
@@ -716,13 +722,14 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.strictEqual(settings.clickLeftBind, '', 'Delete clears it');
   console.log('ok  click spam: thumb buttons, wheel, key, clearing');
 
-  // --- loop skills: [+] to start with; + then a key adds a tile, each with its own time
+  // --- lock: [+] to start with; + then a key adds a tile and a row – held by default, or timed
   const sameJson = (a, b, m) => assert.strictEqual(JSON.stringify(a), JSON.stringify(b), m);   // arrays from the page's own realm
-  assert.ok(txt().includes('Loop skills') && txt().includes('Toggle key'), 'loop skills section');
+  assert.ok(txt().includes('Lock') && txt().includes('Toggle key'), 'lock section');
   const tiles = (kind) => [...w.document.querySelectorAll('.seg.chips[data-picks="' + kind + '"] button')];
   const plus = (kind) => w.document.querySelector('.seg.chips[data-picks="' + kind + '"] button.add');
   const tileText = (kind) => tiles(kind).map((t) => (t.classList.contains('add') ? '+' : t.dataset.key));
-  sameJson(tileText('loop'), ['+'], 'nothing yet: only [+]');
+  sameJson(tileText('lock'), ['+'], 'nothing yet: only [+]');
+  assert.ok(!w.document.querySelector('.lockrow'), 'no rows yet');
   const addKey = async (kind, code) => {
     plus(kind).click(); await sleep(20);
     assert.ok(plus(kind).classList.contains('rec'), '+ waits for a key');
@@ -732,87 +739,95 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
     plus(kind).click(); await sleep(20);
     plus(kind).dispatchEvent(new w.MouseEvent('mousedown', { button, bubbles: true })); await sleep(40);
   };
-  await addKey('loop', 'Digit1');
-  sameJson(tileText('loop'), ['1', '+'], '[1][+]');
-  await addKey('loop', 'Digit2');
-  await addKey('loop', 'KeyQ');
-  sameJson(tileText('loop'), ['1', '2', 'Q', '+'], 'more keys, in the order added');
-  await addKey('loop', 'Digit2');
-  assert.strictEqual(settings.skillLoop.length, 3, 'a key is in the list only once');
-  assert.ok(plus('loop').textContent.includes('is in'), 'and it says so');
-  await addMouse('loop', 2);
-  sameJson(tileText('loop'), ['1', '2', 'Q', 'Mouse2', '+'], 'a mouse button (right) too');
-  assert.ok(tiles('loop')[3].textContent.startsWith('M2'), 'shown as M2');
-  plus('loop').click(); await sleep(20);
-  plus('loop').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true })); await sleep(30);
-  assert.ok(!plus('loop').classList.contains('rec') && settings.skillLoop.length === 4, 'Esc cancels');
-  const skillRow = (k) => w.document.querySelector('.opt[data-skill="' + k + '"]');
-  assert.ok(skillRow('1') && skillRow('Q') && skillRow('Mouse2'), 'every key has its row');
-  const secs = skillRow('Q').querySelector('input[type=range]');
+  await addKey('lock', 'Digit1');
+  sameJson(tileText('lock'), ['1', '+'], '[1][+]');
+  await addKey('lock', 'Digit2');
+  await addKey('lock', 'KeyQ');
+  sameJson(tileText('lock'), ['1', '2', 'Q', '+'], 'more keys, in the order added');
+  await addKey('lock', 'Digit2');
+  assert.strictEqual(settings.lockKeys.length, 3, 'a key is in the list only once');
+  assert.ok(plus('lock').textContent.includes('is in'), 'and it says so');
+  await addMouse('lock', 0);
+  sameJson(tileText('lock'), ['1', '2', 'Q', 'Mouse1', '+'], 'a mouse button (left) too');
+  assert.ok(!plus('lock').classList.contains('rec'), 'the left click that was taken does not start listening again');
+  assert.ok(tiles('lock')[3].textContent.startsWith('M1'), 'shown as M1');
+  plus('lock').click(); await sleep(20);
+  plus('lock').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true })); await sleep(30);
+  assert.ok(!plus('lock').classList.contains('rec') && settings.lockKeys.length === 4, 'Esc cancels');
+
+  const lockRow = (k) => w.document.querySelector('.lockrow[data-key="' + k + '"]');
+  const rowOrder = () => [...w.document.querySelectorAll('.lockrow')].map((x) => x.dataset.key);
+  sameJson(rowOrder(), ['1', '2', 'Q', 'Mouse1'], 'every key has its row');
+  assert.ok(settings.lockKeys.every((e) => e.lock === true), 'lock is on by default');
+  assert.ok(lockRow('Q').querySelector('.sw').classList.contains('on') && lockRow('Q').querySelector('input[type=range]').disabled, 'lock on: the seconds are grey');
+  lockRow('Q').querySelector('.sw').click(); await sleep(40);
+  assert.strictEqual(settings.lockKeys[2].lock, false, 'lock off: timed');
+  assert.ok(!lockRow('Q').querySelector('input[type=range]').disabled, 'and the seconds can be set');
+  const secs = lockRow('Q').querySelector('input[type=range]');
   secs.value = '12.5'; secs.dispatchEvent(new w.Event('change')); await sleep(40);
-  tiles('loop')[0].querySelector('.x').click(); await sleep(40);
-  sameJson(settings.skillLoop, [{ key: '2', sec: 1 }, { key: 'Q', sec: 12.5 }, { key: 'Mouse2', sec: 1 }], '× takes one out; own time per key');
-  assert.ok(!skillRow('1'), 'its row is gone');
-  assert.ok($('loopTag').hidden, 'no tag while it is off');
-  handlers.onKeyLoop(true);
-  assert.ok(!$('loopTag').hidden && $('loopTag').textContent.includes('2QM2'), 'tag in the bar while it runs');
-  handlers.onKeyLoop(false);
-  assert.ok($('loopTag').hidden, 'gone again');
-  console.log('ok  loop skills: [+], keys and mouse buttons as tiles, once each, ×, own time per key, tag in the bar');
+  lockRow('2').querySelector('.sw').click(); await sleep(40);
+  assert.ok(lockRow('2').textContent.includes('timed · 1.') && lockRow('Q').textContent.includes('timed · 2.'), 'the timed keys carry their priority');
+  assert.ok(txt().includes('Timed keys always go out on time'), 'held and timed: says who goes first');
+  // drag Q above 2 by its grip
+  const drag = async (fromKey, toKey) => {
+    lockRow(fromKey).querySelector('.grip').dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true }));
+    assert.ok(lockRow(fromKey).draggable, 'the grip makes the row draggable');
+    lockRow(fromKey).dispatchEvent(new w.Event('dragstart', { bubbles: true }));
+    const over = new w.Event('dragover', { bubbles: true, cancelable: true });
+    lockRow(toKey).dispatchEvent(over);
+    assert.ok(over.defaultPrevented, 'a row takes the drop');
+    lockRow(toKey).dispatchEvent(new w.Event('drop', { bubbles: true, cancelable: true })); await sleep(40);
+  };
+  await drag('Q', '2');
+  sameJson(settings.lockKeys.map((e) => e.key), ['1', 'Q', '2', 'Mouse1'], 'dragged up: Q before 2');
+  assert.ok(lockRow('Q').textContent.includes('timed · 1.'), 'and Q goes first now');
+  assert.ok(!lockRow('1').draggable, 'a row is only draggable by its grip');
+  // switched off for now: stays in the list, greyed, left out of the priority and the tag
+  lockRow('Q').querySelector('.kon').click(); await sleep(40);
+  assert.strictEqual(settings.lockKeys[1].off, true, 'Q switched off');
+  assert.ok(lockRow('Q').classList.contains('off') && lockRow('Q').textContent.includes('off'), 'greyed, says off');
+  assert.ok(lockRow('2').textContent.includes('timed · 1.'), '2 goes first while Q is off');
+  handlers.onLock({ on: true, paused: false });
+  assert.ok(!$('lockTag').textContent.includes('Q'), 'not in the tag');
+  handlers.onLock({ on: false, paused: false });
+  lockRow('Q').querySelector('.kon').click(); await sleep(40);
+  assert.ok(!('off' in settings.lockKeys[1]) && !lockRow('Q').classList.contains('off'), 'switched on again, its settings kept');
+  assert.strictEqual(settings.lockKeys[1].sec, 12.5);
+  tiles('lock')[0].querySelector('.x').click(); await sleep(40);
+  sameJson(settings.lockKeys, [{ key: 'Q', lock: false, sec: 12.5 }, { key: '2', lock: false, sec: 1 }, { key: 'Mouse1', lock: true, sec: 1 }], '× takes one out; lock and time per key');
+  assert.ok(!lockRow('1'), 'its row is gone');
+  assert.ok($('lockTag').hidden, 'no tag while it is off');
+  handlers.onLock({ on: true, paused: false });
+  assert.ok(!$('lockTag').hidden && $('lockTag').textContent.includes('Q2M1') && !$('lockTag').classList.contains('paused'), 'tag in the bar while it runs');
+  handlers.onLock({ on: true, paused: true });
+  assert.ok($('lockTag').classList.contains('paused') && $('lockTag').textContent.includes('Wait'), 'it says when a left click pauses it');
+  handlers.onLock({ on: true, paused: false });
+  assert.ok($('lockTag').textContent.includes('Lock'), 'and when it goes on');
+  handlers.onLock({ on: false, paused: false });
+  assert.ok($('lockTag').hidden, 'gone again');
+  console.log('ok  lock: [+], tiles, lock on by default (seconds grey), timed per key, drag to order, tag in the bar');
 
-  // --- num-lock mode: the same tiles, without times
-  assert.ok(txt().includes('Num-lock mode') && txt().includes('F9'), 'num-lock mode with its own toggle key');
-  sameJson(tileText('hold'), ['+'], 'nothing yet: only [+]');
-  await addKey('hold', 'Digit1');
-  await addMouse('hold', 0);
-  sameJson(settings.holdKeys, ['1', 'Mouse1'], 'a key and the left mouse button');
-  assert.ok(!plus('hold').classList.contains('rec'), 'the left click that was taken does not start listening again');
-  handlers.onHold(true);
-  assert.ok(!$('holdTag').hidden && $('holdTag').textContent.includes('1M1'), 'tag in the bar while it holds');
-  handlers.onHold(false);
-  assert.ok($('holdTag').hidden, 'gone again');
-  console.log('ok  num-lock mode: tiles for keys and mouse buttons, tag in the bar');
-
-  // --- per character: both lists go with the character
+  // --- per character: the list goes with the character
   assert.strictEqual($('macroChar').options.length, 1, 'one character to start with');
   [...w.document.querySelectorAll('.ab')].find((x) => x.textContent === '+ New').click(); await sleep(40);
   assert.strictEqual(settings.macroChars.length, 2, 'a new character');
   assert.strictEqual(settings.macroChar, 1, 'and it is in use');
-  sameJson(settings.macroChars[1].holdKeys, ['1', 'Mouse1'], 'starts as a copy');
+  sameJson(settings.macroChars[1].lockKeys.map((e) => e.key), ['Q', '2', 'Mouse1'], 'starts as a copy');
   $('macroCharName').value = 'Sorc'; $('macroCharName').dispatchEvent(new w.Event('change')); await sleep(40);
   assert.strictEqual(settings.macroChars[1].name, 'Sorc', 'renamed');
-  await addKey('hold', 'Digit2');                             // Sorc holds one more
-  tiles('loop')[1].querySelector('.x').click(); await sleep(40);   // … and loops without Q
-  sameJson(settings.macroChars[1].holdKeys, ['1', 'Mouse1', '2'], 'saved with the character');
+  await addKey('lock', 'Digit3');                             // Sorc holds one more
+  tiles('lock')[0].querySelector('.x').click(); await sleep(40);   // … and has no Q
+  sameJson(settings.macroChars[1].lockKeys.map((e) => e.key), ['2', 'Mouse1', '3'], 'saved with the character');
   $('macroChar').value = '0'; $('macroChar').dispatchEvent(new w.Event('change')); await sleep(40);
-  sameJson(settings.holdKeys, ['1', 'Mouse1'], 'the first character\'s keys are back');
-  sameJson(settings.skillLoop, [{ key: '2', sec: 1 }, { key: 'Q', sec: 12.5 }, { key: 'Mouse2', sec: 1 }], 'its loop too');
-  sameJson(tileText('loop'), ['2', 'Q', 'Mouse2', '+'], 'the tiles show it');
+  sameJson(settings.lockKeys, [{ key: 'Q', lock: false, sec: 12.5 }, { key: '2', lock: false, sec: 1 }, { key: 'Mouse1', lock: true, sec: 1 }], 'the first character\'s keys are back');
+  sameJson(tileText('lock'), ['Q', '2', 'Mouse1', '+'], 'the tiles show it');
   $('macroChar').value = '1'; $('macroChar').dispatchEvent(new w.Event('change')); await sleep(40);
-  sameJson(settings.holdKeys, ['1', 'Mouse1', '2'], 'and Sorc\'s when switched back');
-  sameJson(settings.skillLoop.map((e) => e.key), ['2', 'Mouse2']);
+  sameJson(settings.lockKeys.map((e) => e.key), ['2', 'Mouse1', '3'], 'and Sorc\'s when switched back');
   [...w.document.querySelectorAll('.ab')].find((x) => x.textContent === 'Delete').click(); await sleep(40);
   assert.strictEqual(settings.macroChars.length, 1, 'deleted');
-  sameJson(settings.holdKeys, ['1', 'Mouse1'], 'back on the one left');
+  sameJson(settings.lockKeys.map((e) => e.key), ['Q', '2', 'Mouse1'], 'back on the one left');
   assert.ok([...w.document.querySelectorAll('.ab')].find((x) => x.textContent === 'Delete').disabled, 'the last one stays');
   console.log('ok  macros per character: new, rename, switch, delete');
-
-  // the same toggle key for both: said only when both are on
-  const clash = () => [...w.document.querySelectorAll('.ierr')].some((e) => e.textContent.includes('same toggle key'));
-  const holdField = () => w.document.querySelector('.scard[data-card="holdOn"] .hk');
-  holdField().dispatchEvent(new w.KeyboardEvent('keydown', { key: 'F8', code: 'F8', bubbles: true })); await sleep(40);
-  assert.strictEqual(settings.holdBind, 'F8', 'num-lock on F8 like the loop');
-  assert.ok(!clash(), 'both off: nothing to say');
-  const swOn = async (k) => { w.document.querySelector('.opt[data-macro="' + k + '"] .sw').click(); await sleep(30); $('riskYes').click(); await sleep(40); };
-  await swOn('holdOn');
-  assert.ok(settings.holdOn === true && settings.keyLoop !== true && !clash(), 'only num-lock on: nothing to say');
-  await swOn('keyLoop');
-  assert.ok(clash(), 'both on with the same key: said');
-  w.document.querySelector('.opt[data-macro="keyLoop"] .sw').click(); await sleep(40);
-  assert.ok(!clash(), 'loop off again: gone');
-  w.document.querySelector('.opt[data-macro="holdOn"] .sw').click(); await sleep(40);
-  holdField().dispatchEvent(new w.KeyboardEvent('keydown', { key: 'F9', code: 'F9', bubbles: true })); await sleep(40);
-  console.log('ok  same toggle key: told only when both are on');
 
 
   // orientation switch
@@ -875,6 +890,65 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok($('app').classList.contains('shrink') && $('app').classList.contains('wbbright'),
     'shrink and bright timer are on');
   assert.strictEqual($('wbTime').textContent.includes('min'), true, 'the pill shows the long timer');
+  // Helltide: on the full hour for 55 minutes, then 5 minutes until the next
+  assert.ok(!$('ht').hidden && /^\d\dmin \d\dsec$/.test($('htTime').textContent), 'the Helltide timer sits in the pill');
+  const htMin = (Math.floor(Date.now() / 1000) % 3600) / 60;
+  assert.strictEqual($('ht').classList.contains('on'), htMin < 55, 'on during the first 55 minutes of the hour');
+  assert.ok($('ht').querySelector('b').textContent === (htMin < 55 ? 'Helltide' : 'Helltide in'), 'says whether it runs or comes');
+  assert.ok(!$('ht').classList.contains('blink'), 'it never blinks');
+  assert.strictEqual($('ht').classList.contains('ending'), htMin < 55 && htMin >= 52, 'red only for its last 3 minutes');
+  // your own timer: a click starts the countdown, a right click clears it, the panel stays shut
+  const ct = $('ct');
+  assert.ok(!ct.hidden && ct.querySelector('b').textContent === 'Timer', 'one generic timer in the pill');
+  assert.ok(ct.classList.contains('idle') && ct.textContent.includes('05:00'), 'waiting for a click, shows what it counts');
+  ct.click(); await sleep(20);
+  assert.ok(ct.classList.contains('run') && /0[45]:\d\d/.test($('ctTime').textContent), 'counts down from 5 minutes');
+  assert.ok(!ct.classList.contains('soon'), 'not red yet');
+  assert.ok($('panel').hidden && $('app').classList.contains('idle'), 'the panel stays shut');
+  ct.dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true })); await sleep(20);
+  assert.ok(ct.classList.contains('idle'), 'right click clears it');
+  const realNow = Date.now;
+  ct.click(); await sleep(10);
+  w.Date.now = Date.now = () => realNow() + 275000;
+  $('wb').dispatchEvent(new w.Event('noop')); await sleep(1100);   // the 1 s tick
+  assert.ok(ct.classList.contains('soon') && ct.classList.contains('blink'), 'red and blinking for the last 30 seconds');
+  ct.click(); await sleep(20);
+  assert.ok(ct.classList.contains('run') && !ct.classList.contains('soon'), 'a click starts it over');
+  w.Date.now = Date.now = () => realNow() + 301000 + 275000;
+  await sleep(1100);
+  assert.ok(ct.classList.contains('ready') && ct.textContent.includes('ready') && !ct.classList.contains('blink'), 'at 0: ready');
+  w.Date.now = Date.now = realNow;
+  ct.dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true })); await sleep(20);
+  // every timer can be switched off in the settings
+  rail('settings').click(); await sleep(30);
+  w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
+  const swOf = (label) => [...w.document.querySelectorAll('.opt')].find((o) => o.querySelector('.txt b').textContent === label).querySelector('.sw');
+  for (const l of ['World boss timer', 'Helltide timer', 'Own timer']) { swOf(l).click(); await sleep(30); }
+  assert.ok(settings.wbTimer === false && settings.helltide === false && settings.ctTimer === false, 'all three switched off');
+  assert.ok($('wb').hidden && $('ht').hidden && $('ct').hidden, 'and gone from the bar');
+  for (const l of ['World boss timer', 'Helltide timer', 'Own timer']) { swOf(l).click(); await sleep(30); }
+  assert.ok(!$('wb').hidden && !$('ht').hidden && !$('ct').hidden, 'back again');
+  // name and length of your own timer
+  const nm = w.document.getElementById('ctName');
+  nm.value = 'Alzuuda'; nm.dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.ok(settings.ctName === 'Alzuuda' && ct.querySelector('b').textContent.startsWith('Alzu'), 'the timer takes its name');
+  nm.value = ''; nm.dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.ok(ct.querySelector('b').textContent.startsWith('Time'), 'no name: "Timer"');
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  // the pill with the timers only
+  assert.ok(!$('app').classList.contains('timersonly'), 'icons in the pill by default');
+  const onlySw = () => [...w.document.querySelectorAll('.opt')].find((o) => o.textContent.includes('Show only timers')).querySelector('.sw');
+  const setOnly = async () => {
+    rail('settings').click(); await sleep(30);
+    w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
+    assert.ok(txt().includes('Helltide timer'), 'the Helltide switch in the settings');
+    onlySw().click(); await sleep(30);
+    w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  };
+  await setOnly();
+  assert.ok(settings.pillTimersOnly === true && $('app').classList.contains('timersonly') && $('app').classList.contains('idle'), 'pill: timers only');
+  await setOnly();
+  assert.ok(settings.pillTimersOnly === false && !$('app').classList.contains('timersonly'), 'icons back');
   // hovering only takes the fade off – the pill keeps its shape and place so it can be dragged
   $('rail').dispatchEvent(new w.PointerEvent('pointerenter', { bubbles: true })); await sleep(20);
   assert.ok($('app').classList.contains('idle'), 'hovering does not wake it');
@@ -908,6 +982,116 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   handlers.onWorldBoss({ text: '', secs: 120, at: Date.now() }); await sleep(10);
   assert.ok($('wb').classList.contains('blink'), 'the timer blinks on its own warning');
   console.log('ok  alerts blink on their element only');
+
+  // --- the own timer's hotkey: starts it over, the panel stays shut
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  handlers.onTimerRestart(); await sleep(20);
+  assert.ok($('ct').classList.contains('run') && $('panel').hidden, 'the hotkey starts the own timer, nothing opens');
+  $('ct').dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true })); await sleep(20);
+  rail('settings').click(); await sleep(30);
+  w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
+  const ownSw = () => [...w.document.querySelectorAll('.opt')].find((o) => o.querySelector('.txt b').textContent === 'Own timer').querySelector('.sw');
+  ownSw().click(); await sleep(30);
+  handlers.onTimerRestart(); await sleep(20);
+  assert.ok(!$('ct').classList.contains('run'), 'switched off: the hotkey does nothing');
+  ownSw().click(); await sleep(30);
+  w.document.querySelectorAll('.setnav a')[2].click(); await sleep(30);
+  assert.ok(w.document.querySelector('.hk[data-key=hotkeyTimer]'), 'its field in Settings › Hotkeys');
+  const hk = w.document.querySelector('.hk[data-key=hotkeyTimer]');
+  hk.dispatchEvent(new w.FocusEvent('focus'));
+  hk.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'F10', code: 'F10', bubbles: true })); await sleep(30);
+  assert.strictEqual(settings.hotkeyTimer, 'F10', 'an F-key alone is taken');
+  console.log('ok  own timer: hotkey');
+
+  // --- "to farm": off by default, switched on it shows what the active build still needs
+  assert.ok($('miss').hidden, 'off by default');
+  w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
+  [...w.document.querySelectorAll('.opt')].find((o) => o.textContent.includes('What your build still needs')).querySelector('.sw').click();
+  await sleep(80);
+  assert.ok(settings.pillMissing === true, 'switched on');
+  const sum = await w.FarmView.summary(w.d4api);
+  assert.ok(sum && sum.total > 0, 'the active build has something to farm');
+  assert.ok(!$('miss').hidden && $('missN').textContent.includes(String(sum.missing)), 'the count is in the bar');
+  $('miss').click(); await sleep(60);
+  assert.ok(rail('farm').classList.contains('on'), 'a click opens the build');
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  rail('settings').click(); await sleep(30);
+  w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
+  [...w.document.querySelectorAll('.opt')].find((o) => o.textContent.includes('What your build still needs')).querySelector('.sw').click();
+  await sleep(60);
+  assert.ok($('miss').hidden, 'switched off: gone');
+  console.log('ok  "to farm" in the bar, switchable');
+
+  // --- updates: a newer version puts a dot on Settings and a download button in Data
+  assert.ok($('updDot').hidden, 'no dot without an update');
+  handlers.onUpdateInfo({ current: '1.0.0', latest: '1.1.0', newer: true, url: 'https://github.com/x/y/releases/tag/v1.1.0' }); await sleep(30);
+  assert.ok(!$('updDot').hidden, 'the dot shows');
+  const dataTab = [...w.document.querySelectorAll('.setnav a')].find((a) => a.textContent === 'Data');
+  dataTab.click(); await sleep(30);
+  assert.ok(txt().includes('Version 1.1.0 is out'), 'Data says so');
+  const dl = [...w.document.querySelectorAll('.ab')].find((x) => x.textContent === 'Download 1.1.0');
+  calls.length = 0; dl.click(); await sleep(10);
+  assert.ok(calls.includes('openUpdate'), 'the button opens the release');
+  handlers.onUpdateInfo({ current: '1.1.0', latest: '1.1.0', newer: false }); await sleep(30);
+  assert.ok($('updDot').hidden && txt().includes('Up to date'), 'up to date: no dot');
+  console.log('ok  update check: dot and download');
+
+  // --- notes per season: checklist and free text
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  rail('notes').click(); await sleep(40);
+  assert.ok(!$('panel').hidden && w.document.querySelector('#main.notes'), 'the notes page opens');
+  const add = () => $('noteAdd');
+  add().value = 'Get the Shako';
+  add().dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(40);
+  add().value = 'Pit 100';
+  add().dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(40);
+  assert.strictEqual(JSON.stringify(settings.notes.seasons[0].items.map((i) => i.text)), '["Get the Shako","Pit 100"]', 'points added');
+  const box1 = w.document.querySelector('.nlist .step input');
+  box1.checked = true; box1.dispatchEvent(new w.Event('change')); await sleep(40);
+  assert.ok(settings.notes.seasons[0].items[0].done && txt().includes('1 / 2'), 'ticked, counted');
+  const ta = $('noteText');
+  ta.value = 'Trade the spare runes'; ta.dispatchEvent(new w.Event('input')); await sleep(600);
+  assert.strictEqual(settings.notes.seasons[0].text, 'Trade the spare runes', 'the text is saved while typing');
+  [...w.document.querySelectorAll('.nbar .ab')].find((x) => x.textContent === '+ Season').click(); await sleep(40);
+  assert.ok(settings.notes.seasons.length === 2 && settings.notes.active === 1 && !w.document.querySelector('.nlist .step'), 'a new season starts empty');
+  $('noteSeasonPick').value = '0'; $('noteSeasonPick').dispatchEvent(new w.Event('change')); await sleep(40);
+  assert.ok(txt().includes('Get the Shako') && $('noteText').value === 'Trade the spare runes', 'back to the first season');
+  [...w.document.querySelectorAll('.ab')].find((x) => x.textContent === 'Remove the ticked ones').click(); await sleep(40);
+  assert.strictEqual(JSON.stringify(settings.notes.seasons[0].items.map((i) => i.text)), '["Pit 100"]', 'ticked ones removed');
+  console.log('ok  notes per season');
+
+  // --- notes export: this season to the clipboard, every season into a file
+  [...w.document.querySelectorAll('.sethead .ab')].find((x) => x.textContent === 'Copy').click(); await sleep(20);
+  assert.ok(copied.startsWith('# Season\n') && copied.includes('- [ ] Pit 100') && copied.includes('Trade the spare runes'), 'Markdown with the checklist');
+  [...w.document.querySelectorAll('.sethead .ab')].find((x) => x.textContent === 'Save as file …').click(); await sleep(30);
+  assert.ok(notesFile.includes('# Season\n') && notesFile.includes('# Season 2'), 'every season in the file');
+  console.log('ok  notes export');
+
+  // --- backup: choose a folder, back up now, once a day
+  rail('settings').click(); await sleep(30);
+  [...w.document.querySelectorAll('.setnav a')].find((a) => a.textContent === 'Data').click(); await sleep(30);
+  const nowBtn = () => [...w.document.querySelectorAll('.ab')].find((x) => x.textContent === 'Back up now');
+  assert.ok(nowBtn().disabled && txt().includes('None chosen'), 'nothing before a folder is chosen');
+  [...w.document.querySelectorAll('.ab')].find((x) => x.textContent === 'Choose …').click(); await sleep(60);
+  assert.strictEqual(settings.backupDir, 'D:\\OneDrive\\D4', 'folder saved');
+  assert.ok(!nowBtn().disabled && txt().includes('No backup yet'), 'ready');
+  nowBtn().click(); await sleep(20);
+  handlers.onBackupDone(backupMade); await sleep(40);
+  assert.ok(backupMade && txt().includes('Last backup'), 'made, and it says when');
+  [...w.document.querySelectorAll('.opt')].find((o) => o.textContent.includes('Every day')).querySelector('.sw').click(); await sleep(30);
+  assert.strictEqual(settings.backupAuto, true, 'daily on');
+  console.log('ok  backup');
+
+  // --- hotkeys straight to the build's skills / paragon; again closes it
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  handlers.onOpenBuildView('skills'); await sleep(80);
+  assert.ok(rail('farm').classList.contains('on') && w.FarmView.view() === 'skills', 'the build opens on its skills');
+  handlers.onOpenBuildView('paragon'); await sleep(60);
+  assert.ok(rail('farm').classList.contains('on') && w.FarmView.view() === 'paragon', 'switches to paragon, stays open');
+  handlers.onOpenBuildView('paragon'); await sleep(60);
+  assert.ok($('panel').hidden, 'the same again closes it');
+  w.FarmView.setView('gear');
+  console.log('ok  hotkeys to skills / paragon');
 
   assert.strictEqual(errors.length, 0, 'no runtime errors: ' + errors.join(' | '));
   console.log('ok  no runtime errors · api used: ' + [...new Set(calls)].join(', '));

@@ -4,13 +4,24 @@ const api = window.d4api;          // (not "api" on window: that would clash wit
 const S = window.SearchLib;
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+/** A picture from another site (sent without a referrer); onFail runs when it does not load. */
+function remoteImg(src, onFail) {
+  const im = el('img');
+  im.referrerPolicy = 'no-referrer';
+  im.onerror = () => { im.remove(); if (onFail) onFail(); };
+  im.src = src;
+  return im;
+}
+const isUrl = (u) => /^https?:/.test(u || '');
+/** Sort order: bosses before loot pools. */
+const bossFirst = (x, y) => (y.sec.isBoss ? 1 : 0) - (x.sec.isBoss ? 1 : 0);
 
 // Sections that show an embedded web page instead of our own cards
 const EMBEDDED = { chat: 'chat', listings: 'listings', maptool: 'maptool', page: 'page' };
 
 let settings = null;
 // what this build has (lib/features.js) – without an answer: no macros
-let features = { macros: false, clickSpam: false, loop: false, numlock: false };
+let features = { macros: false, clickSpam: false, lock: false };
 let loot = { sections: [], fetchedAt: 0 };
 let craft = { tables: [], fetchedAt: 0 };
 let activities = [];
@@ -27,6 +38,11 @@ let idle = false, idleTimer = null;       // idle = shrunk to the pill and faded
 let setTab = 'behaviour';
 let pinned = false;                // pinned: a click into the game leaves the panel open (it fades)
 let wbAck = 0;                     // the spawn whose blinking was clicked away
+let setMsgText = '';               // the line under the settings ("Signed out." …)
+let cookieBox = false;
+let missing = null;                // the active build: { name, total, missing } – shown when switched on
+let updateInfo = null, appVersion = '';
+let backupAt = 0;                  // when the last backup was made (0: none)   // the last update check, the running version             // Settings › diablo.trade: the box to paste cookies into is open
 let pageFrom = null;               // where a page (guide, database) was opened from – "Back" returns there
 let dataInfo = '';                 // "8433 items · …" – shown in Settings › Data, not in the footer
 let resultKeys = [], shownKey = null;   // the result list in order – arrow keys walk it
@@ -72,7 +88,7 @@ function setIdle(on) {
   $('app').classList.toggle('idle', on);
   if (!on) $('app').classList.remove('peek');
   api.setIdle(on);
-  renderWb();                                        // the pill has room for the long form
+  renderTimers();                                    // the pill has room for the long form
   setTimeout(reportSize, 40);
   setTimeout(reportSize, 280);                       // again once the shrink has run
 }
@@ -81,14 +97,31 @@ function wake() { setIdle(false); armIdle(); }
 // dragged. Opening it is a deliberate click on an icon (or the search hotkey).
 function peek(on) { $('app').classList.toggle('peek', !!on && idle); }
 
-// ---------------------------------------------------------------- world boss timer
+// ---------------------------------------------------------------- timers
+// Three timers sit in the bar and the pill: the world boss (read from diablo.trade), the
+// Helltide (from the clock) and one of your own (started by a click).
 const pad2 = (v) => String(Math.floor(v)).padStart(2, '0');
 const fmtLong = (s) => pad2(s / 3600) + 'h ' + pad2((s % 3600) / 60) + 'min ' + pad2(s % 60) + 'sec';
 const fmtShort = (s) => pad2(s / 3600) + ':' + pad2((s % 3600) / 60);
-function renderWb() {
+const fmtMin = (s) => pad2(s / 60) + 'min ' + pad2(s % 60) + 'sec';
+const fmtMs = (s) => pad2(s / 60) + ':' + pad2(s % 60);
+/** Room for the long form: the pill, the bar with labels, or the horizontal bar. */
+const timersWide = () => idle || $('rail').classList.contains('wide') || $('shell').classList.contains('horizontal');
+
+function renderTimers() {
+  const wide = timersWide();
+  renderWb(wide);
+  renderHt(wide);
+  renderCt(wide);
+  renderMissing(wide);
+}
+
+// ---- world boss: turns red and grows in the warning time, blinks until clicked
+/** The spawn the timer counts down to (identifies it for the click that stops the blinking). */
+const spawnOf = () => (wb.secs == null ? 0 : Math.round((wb.at + wb.secs * 1000) / 60000));
+function renderWb(wide) {
   const box = $('wb'), e = $('wbTime');
-  // idle the pill is wide enough for the long form ("02h 15min 40sec")
-  const wide = idle || $('rail').classList.contains('wide') || $('shell').classList.contains('horizontal');
+  box.hidden = settings && settings.wbTimer === false;
   box.querySelector('b').textContent = wide ? 'World Boss' : 'WB';
   if (wb.secs == null) { e.textContent = wide ? '--h --min --sec' : '--:--'; box.classList.remove('soon', 'blink'); return; }
   const left = Math.max(0, wb.secs - (Date.now() - wb.at) / 1000);
@@ -103,8 +136,68 @@ function renderWb() {
   const k = soon && window_ > 0 ? 1 + (1 - left / window_) * most : 1;
   box.style.setProperty('--wbk', k.toFixed(2));
 }
-/** The spawn the timer counts down to (identifies it for the click that stops the blinking). */
-const spawnOf = () => (wb.secs == null ? 0 : Math.round((wb.at + wb.secs * 1000) / 60000));
+
+// ---- Helltide: no data source needed – it starts on the full hour, runs 55 minutes, then
+// 5 minutes pass until the next one. Taken in UTC, so a time zone with half hours is no problem.
+// Orange while it runs, red for its last minutes.
+const HT_ON = 55 * 60, HT_ENDING = 3 * 60;
+function helltide(now = Date.now()) {
+  const s = Math.floor(now / 1000) % 3600;           // seconds into the hour
+  return s < HT_ON ? { on: true, left: HT_ON - s } : { on: false, left: 3600 - s };
+}
+function renderHt(wide) {
+  const box = $('ht');
+  box.hidden = settings && settings.helltide === false;
+  if (box.hidden) return;
+  const h = helltide();
+  box.classList.toggle('on', h.on);
+  box.classList.toggle('ending', h.on && h.left <= HT_ENDING);
+  box.querySelector('b').textContent = wide ? (h.on ? 'Helltide' : 'Helltide in') : (h.on ? 'HT' : 'HT in');
+  $('htTime').textContent = wide ? fmtMin(h.left) : fmtMs(h.left);
+  box.title = h.on ? 'Helltide is on — ends in ' + fmtMin(h.left) : 'No Helltide — the next one starts in ' + fmtMin(h.left);
+}
+
+// ---- your own timer: a click starts it (again), a right click clears it; red and blinking
+// for the last 30 seconds, "ready" at 0
+const CT_WARN = 30;
+let ctEnd = 0;                                       // when it runs out (0 = not counting)
+const ctSecs = () => Math.round(60 * Math.max(1, Math.min(60, Number(settings && settings.ctMin) || 5)));
+const ctName = () => String((settings && settings.ctName) || '').trim() || 'Timer';
+function renderCt(wide) {
+  const box = $('ct');
+  box.hidden = settings && settings.ctTimer === false;
+  if (box.hidden) return;
+  const left = ctEnd ? Math.ceil((ctEnd - Date.now()) / 1000) : null;
+  const state = left == null ? 'idle' : left > 0 ? 'run' : 'ready';
+  box.classList.toggle('idle', state === 'idle');
+  box.classList.toggle('run', state === 'run');
+  box.classList.toggle('ready', state === 'ready');
+  box.classList.toggle('soon', state === 'run' && left <= CT_WARN);
+  box.classList.toggle('blink', state === 'run' && left <= CT_WARN);
+  box.querySelector('b').textContent = wide ? ctName() : ctName().slice(0, 5);
+  $('ctTime').textContent = state === 'run' ? fmtMs(left) : state === 'ready' ? 'ready' : fmtMs(ctSecs());
+  box.title = ctName() + ' — ' + (state === 'run' ? 'runs out in ' + fmtMs(left) : state === 'ready' ? 'run out' : 'not running')
+    + '\nClick: start ' + fmtMs(ctSecs()) + ' (again) · right click: clear';
+}
+// ---- what the active build still needs: switched on in the settings; a click opens the build
+async function updateMissing() {
+  if (!settings || settings.pillMissing !== true || !window.FarmView) missing = null;
+  else { try { missing = await window.FarmView.summary(api); } catch (_) { missing = null; } }
+  renderMissing(timersWide());
+}
+function renderMissing(wide) {
+  const box = $('miss');
+  box.hidden = !(settings && settings.pillMissing === true) || !missing || !missing.total;
+  if (box.hidden) return;
+  const done = missing.missing === 0;
+  box.classList.toggle('done', done);
+  box.querySelector('b').textContent = wide ? 'To farm' : 'Farm';
+  $('missN').textContent = done ? 'done' : wide ? missing.missing + ' of ' + missing.total : String(missing.missing);
+  box.title = missing.name + ' — ' + (done ? 'everything farmed' : missing.missing + ' of ' + missing.total + ' still to farm')
+    + '\nClick: open the build';
+}
+
+function startCt(on) { ctEnd = on ? Date.now() + ctSecs() * 1000 : 0; renderCt(timersWide()); }
 
 // ---------------------------------------------------------------- sections
 function openSection(name, url, heading) {
@@ -217,7 +310,7 @@ function render() {
   tools.classList.remove('docked');
   $('panel').appendChild(tools);                     // out of the way before the content is cleared
   renderSection();
-  const host = !$('top').hidden ? $('top') : section === 'farm' ? $('main').querySelector('.fbar') : section === 'settings' ? $('main').querySelector('.sethead') : null;
+  const host = !$('top').hidden ? $('top') : section === 'farm' ? $('main').querySelector('.fbar') : section === 'settings' || section === 'notes' ? $('main').querySelector('.sethead') : null;
   if (host) { host.appendChild(tools); tools.classList.add('docked'); }
 }
 function renderSection() {
@@ -225,18 +318,20 @@ function renderSection() {
   const sm = document.querySelector('.setmain');
   setScroll.top = sm ? sm.scrollTop : 0;
   main.textContent = ''; side.textContent = '';
-  main.classList.remove('farm', 'settings');
+  main.classList.remove('farm', 'settings', 'notes');
   $('cols').classList.remove('narrow', 'detail');
   side.classList.toggle('results', section === 'search');
   $('qClear').hidden = !$('q').value;
-  $('top').hidden = !section || section === 'settings' || section === 'farm';
-  side.hidden = !section || !!EMBEDDED[section] || section === 'settings' || section === 'farm';
+  const ownPage = section === 'settings' || section === 'farm' || section === 'notes';
+  $('top').hidden = !section || ownPage;
+  side.hidden = !section || !!EMBEDDED[section] || ownPage;
   $('chips').textContent = '';
 
   if (!section) { reportSize(); return; }
   if (note) main.appendChild(el('div', 'note ' + note.kind, note.text));
 
   if (section === 'settings') { renderSettings(main); reportSize(); return; }
+  if (section === 'notes') { renderNotes(main); reportSize(); return; }
   if (EMBEDDED[section]) { renderEmbeddedSidebar(); reportSize(); return; }
 
   if (section === 'farm') { window.FarmView.render(main, farmCtx); reportSize(); return; }
@@ -279,7 +374,7 @@ function renderSearch(main, side) {
   const bosses = (S.showBoss(kinds) ? S.search(loot.sections, term, area) : [])
     .filter((b) => area || named(b) || !b.items.length || b.items.some((x) => !shownItems.has(S.norm(x.name))));
   const bossArea = area && S.showBoss(kinds);
-  if (bossArea) bosses.sort((a, b) => (b.sec.isBoss ? 1 : 0) - (a.sec.isBoss ? 1 : 0));   // bosses before loot pools
+  if (bossArea) bosses.sort(bossFirst);
   const recipes = S.showCraft(kinds) ? S.searchCraft(craft.tables, term, area) : [];
   const acts = S.showActs(kinds)
     ? (term ? activities.filter((x) => x.n.includes(S.norm(term))) : (area ? activities : []))
@@ -325,7 +420,6 @@ function renderSearch(main, side) {
   // picked one in full on the right (the first one until you pick another)
   const inChip = (k) => chip === 'all' || chip === k;
   const R = [];
-  const bossFirst = (x, y) => (y.sec.isBoss ? 1 : 0) - (x.sec.isBoss ? 1 : 0);
   if (inChip('items')) {
     itemHits.forEach((it) => {
       const from = dropSources(it.name).slice().sort(bossFirst)[0];
@@ -376,15 +470,7 @@ function renderSearch(main, side) {
     side.appendChild(tl);
   }
 
-  // narrow panel: list or the picked one, never both squeezed
-  const narrow = $('cols').clientWidth > 0 && $('cols').clientWidth < 720;
-  $('cols').classList.toggle('narrow', narrow);
-  $('cols').classList.toggle('detail', narrow && detailOpen);
-  if (narrow && detailOpen) {
-    const back = el('button', 'ab back', '← Results');
-    back.onclick = () => { detailOpen = false; render(); };
-    main.appendChild(back);
-  }
+  narrowDetail(main, '← Results');
 
   if (!R.length) {
     main.appendChild(el('div', 'empty', loot.sections.length ? 'No matches.' : 'Data is still loading …'));
@@ -411,11 +497,23 @@ function renderSearch(main, side) {
   // the whole crafting area: all runewords as one card when nothing is picked yet
   main.appendChild(cur.card());
 }
+const isNarrow = () => $('cols').clientWidth > 0 && $('cols').clientWidth < 720;
+/** A narrow panel shows the list or the picked one, never both squeezed – the picked one with a way back. */
+function narrowDetail(main, backLabel) {
+  const narrow = isNarrow();
+  $('cols').classList.toggle('narrow', narrow);
+  $('cols').classList.toggle('detail', narrow && detailOpen);
+  if (narrow && detailOpen) {
+    const back = el('button', 'ab back', backLabel);
+    back.onclick = () => { detailOpen = false; render(); };
+    main.appendChild(back);
+  }
+}
 /** One result in the list: tile, name in its colour, what it is, where it comes from. */
 function resultRow(r, on) {
   const a = el('a', 'res' + (on ? ' on' : ''));
   const t = el('span', 'rt');
-  if (r.icon && /^https?:/.test(r.icon)) { const im = el('img'); im.src = r.icon; im.referrerPolicy = 'no-referrer'; im.onerror = () => { im.remove(); t.textContent = r.glyph; }; t.appendChild(im); }
+  if (isUrl(r.icon)) t.appendChild(remoteImg(r.icon, () => { t.textContent = r.glyph; }));
   else t.textContent = r.glyph;
   a.appendChild(t);
   const tx = el('span', 'rx');
@@ -429,7 +527,7 @@ function resultRow(r, on) {
 }
 function sideRow(icon, label, right, onClick, on) {
   const a = el('a', on ? 'on' : null);
-  if (icon && /^https?:/.test(icon)) { const im = el('img'); im.src = icon; im.referrerPolicy = 'no-referrer'; im.onerror = () => im.remove(); a.appendChild(im); }
+  if (isUrl(icon)) a.appendChild(remoteImg(icon));
   else a.appendChild(el('i', null, icon || '◆'));
   a.appendChild(el('em', null, label));
   if (right) a.appendChild(el('b', null, right));
@@ -457,7 +555,7 @@ function itemCard(it) {
   const c = el('div', 'card');
   const head = el('div', 'ch');
   const ic = el('div', 'ic');
-  if (it.icon) { const im = el('img'); im.src = it.icon; im.referrerPolicy = 'no-referrer'; im.onerror = () => { ic.textContent = '◆'; }; ic.appendChild(im); }
+  if (it.icon) ic.appendChild(remoteImg(it.icon, () => { ic.textContent = '◆'; }));
   else ic.textContent = '◆';
   head.appendChild(ic);
 
@@ -568,8 +666,7 @@ function lairMap(sec, into) {
   box.hidden = true;
   tg.onclick = () => {
     if (!box.firstChild) {
-      const img = el('img'); img.referrerPolicy = 'no-referrer'; img.src = sec.images[0];
-      img.onerror = () => { box.remove(); tg.remove(); };
+      const img = remoteImg(sec.images[0], () => { box.remove(); tg.remove(); });
       img.onload = () => reportSize();
       box.appendChild(img);
     }
@@ -597,7 +694,7 @@ function dropSources(name) {
 }
 /** On the item's card: who drops it and where that boss is – bosses first, then loot pools. */
 function dropsFrom(name, into) {
-  const src = dropSources(name).slice().sort((a, b) => (b.sec.isBoss ? 1 : 0) - (a.sec.isBoss ? 1 : 0));
+  const src = dropSources(name).slice().sort(bossFirst);
   if (!src.length) return;
   const box = el('div', 'from');
   box.appendChild(subHead('Drops from', 'boss', src.length));
@@ -653,7 +750,7 @@ function bossCard(r) {
       const rar = hit && hit.rarity ? hit.rarity.split(' ')[0].toLowerCase() : /mythic/i.test(it.note || '') ? 'mythic' : 'unique';
       const row = el('div', 'drop');
       const ic = el('span', 'di');
-      if (hit && /^https?:/.test(hit.icon || '')) { const im = el('img'); im.src = hit.icon; im.referrerPolicy = 'no-referrer'; im.onerror = () => im.remove(); ic.appendChild(im); }
+      if (hit && isUrl(hit.icon)) ic.appendChild(remoteImg(hit.icon));
       row.appendChild(ic);
       // a click looks the item up
       const nm = el('span', 'nm r-' + rar, it.name);
@@ -734,7 +831,7 @@ function activityCard(a) {
   t.appendChild(el('h4', null, a.name));
   const steps = actSteps(a);
   const done = actDone(a);
-  t.appendChild(el('div', 'meta', steps.length ? done.filter((i) => steps.some(([, j]) => j === i)).length + ' of ' + steps.length + ' parts done · maxroll.gg guide' : 'maxroll.gg guide'));
+  t.appendChild(el('div', 'meta', steps.length ? actProgress(a) + ' of ' + steps.length + ' parts done · maxroll.gg guide' : 'maxroll.gg guide'));
   head.appendChild(t);
   const right = el('div', 'right');
   const open = el('button', 'ab pri', 'Open guide');
@@ -778,6 +875,8 @@ function activityCard(a) {
 }
 const actKey = (a) => a.slug || a.name;
 const actDone = (a) => ((settings && settings.actDone) || {})[actKey(a)] || [];
+/** How many of the guide's parts are ticked off. */
+const actProgress = (a) => { const steps = actSteps(a); return actDone(a).filter((i) => steps.some(([, j]) => j === i)).length; };
 function setActDone(a, i, on) {
   const all = Object.assign({}, (settings && settings.actDone) || {});
   const cur = new Set(all[actKey(a)] || []);
@@ -813,19 +912,111 @@ function renderActivities(main, side) {
   side.appendChild(el('h5', null, 'Activities'));
   activities.forEach((a) => {
     const steps = actSteps(a);
-    side.appendChild(sideRow('', a.name, steps.length ? actDone(a).filter((i) => steps.some(([, j]) => j === i)).length + '/' + steps.length : '', () => { pick = a.name; detailOpen = true; render(); }, pick === a.name));
+    side.appendChild(sideRow('', a.name, steps.length ? actProgress(a) + '/' + steps.length : '', () => { pick = a.name; detailOpen = true; render(); }, pick === a.name));
   });
-  // narrow panel: the list, then the picked guide with a way back – like the search
-  const narrow = $('cols').clientWidth > 0 && $('cols').clientWidth < 720;
-  $('cols').classList.toggle('narrow', narrow);
-  $('cols').classList.toggle('detail', narrow && detailOpen);
-  if (narrow && detailOpen) {
-    const back = el('button', 'ab back', '← Activities');
-    back.onclick = () => { detailOpen = false; render(); };
-    main.appendChild(back);
-  }
+  narrowDetail(main, '← Activities');
   const chosen = activities.find((a) => a.name === pick) || activities[0];
   main.appendChild(activityCard(chosen));
+}
+
+// ---------------------------------------------------------------- notes
+// Notes per season: a checklist and free text, kept in the settings (notes.seasons).
+function notesOf() {
+  const n = (settings && settings.notes) || {};
+  const list = Array.isArray(n.seasons) ? n.seasons.filter((x) => x && typeof x === 'object') : [];
+  const seasons = (list.length ? list : [{ name: 'Season' }]).map((x) => ({
+    name: String(x.name || 'Season'), text: String(x.text || ''),
+    items: (Array.isArray(x.items) ? x.items : []).filter((i) => i && i.text).map((i) => ({ text: String(i.text), done: !!i.done })),
+  }));
+  return { active: Math.max(0, Math.min(seasons.length - 1, Number(n.active) || 0)), seasons };
+}
+/** quiet: while typing – saved a moment later, nothing redrawn (the cursor stays in the field). */
+function saveNotes(n, quiet) {
+  if (!quiet) return save({ notes: n });
+  settings.notes = n;
+  clearTimeout(saveNotes.t);
+  saveNotes.t = setTimeout(() => api.saveSettings({ notes: settings.notes }).then((r) => { if (r && r.settings) settings = r.settings; }), 500);
+  return Promise.resolve();
+}
+/** A season as Markdown: its name, the checklist as [ ] / [x], then the text. */
+function notesText(x) {
+  return ['# ' + x.name, '']
+    .concat(x.items.map((i) => '- [' + (i.done ? 'x' : ' ') + '] ' + i.text), x.items.length ? [''] : [])
+    .concat(x.text.trim() ? [x.text.trim(), ''] : [])
+    .join('\n');
+}
+function renderNotes(main) {
+  main.classList.add('notes');
+  const n = notesOf(), cur = n.seasons[n.active];
+  const head = el('div', 'sethead');
+  head.appendChild(el('h2', null, 'Notes'));
+  const copy = btn('Copy', () => { api.copyText(notesText(cur)); showNote('“' + cur.name + '” copied.', 'ok', 2500); });
+  copy.title = 'This season as text, for Discord or anywhere else';
+  const file = btn('Save as file …', async () => {
+    const f = await api.saveNotesFile(n.seasons.map(notesText).join('\n'), 'd4-notes');
+    if (f) showNote('Saved: ' + f, 'ok', 4000);
+  });
+  file.title = 'Every season into one Markdown file';
+  head.appendChild(copy);
+  head.appendChild(file);
+  main.appendChild(head);
+  const body = el('div', 'notesbody');
+
+  const bar = el('div', 'nbar');
+  const pickS = sel(n.seasons.map((x, i) => [String(i), x.name]), String(n.active), (v) => saveNotes(Object.assign(n, { active: Number(v) })));
+  pickS.id = 'noteSeasonPick';
+  bar.appendChild(pickS);
+  const name = el('input');
+  name.type = 'text'; name.id = 'noteSeason'; name.value = cur.name; name.maxLength = 40; name.spellcheck = false;
+  name.title = 'Rename this season';
+  name.onchange = () => { cur.name = name.value.trim() || 'Season'; saveNotes(n); };
+  bar.appendChild(name);
+  bar.appendChild(btn('+ Season', () => { n.seasons.push({ name: 'Season ' + (n.seasons.length + 1), text: '', items: [] }); n.active = n.seasons.length - 1; saveNotes(n); }));
+  const del = btn('Delete', () => { n.seasons.splice(n.active, 1); n.active = 0; saveNotes(n); });
+  del.disabled = n.seasons.length < 2;
+  del.title = 'Delete this season with its notes';
+  bar.appendChild(del);
+  body.appendChild(bar);
+
+  const done = cur.items.filter((i) => i.done).length;
+  body.appendChild(subHead('Checklist', 'check', cur.items.length ? done + ' / ' + cur.items.length : null));
+  const list = el('div', 'steps nlist');
+  cur.items.forEach((it, i) => {
+    const row = el('label', 'step' + (it.done ? ' done' : ''));
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = it.done;
+    cb.onchange = () => { it.done = cb.checked; saveNotes(n); };
+    row.appendChild(cb);
+    row.appendChild(el('span', null, it.text));
+    const x = el('button', 'ico');
+    x.title = 'Remove';
+    x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    x.onclick = (e) => { e.preventDefault(); cur.items.splice(i, 1); saveNotes(n); };
+    row.appendChild(x);
+    list.appendChild(row);
+  });
+  const add = el('input');
+  add.type = 'text'; add.id = 'noteAdd'; add.maxLength = 200; add.spellcheck = false;
+  add.placeholder = 'Add a point — Enter';
+  add.onkeydown = (e) => {
+    if (e.key !== 'Enter' || !add.value.trim()) return;
+    cur.items.push({ text: add.value.trim(), done: false });
+    saveNotes(n).then(() => { const f = $('noteAdd'); if (f) f.focus(); });
+  };
+  list.appendChild(add);
+  body.appendChild(list);
+  if (done) {
+    const clr = btn('Remove the ticked ones', () => { cur.items = cur.items.filter((i) => !i.done); saveNotes(n); });
+    clr.classList.add('nclr');
+    body.appendChild(clr);
+  }
+
+  body.appendChild(subHead('Notes', 'list'));
+  const ta = el('textarea', 'ntext');
+  ta.id = 'noteText'; ta.rows = 8; ta.value = cur.text; ta.spellcheck = false;
+  ta.placeholder = 'Anything — builds to try, trades, what to do next …';
+  ta.oninput = () => { cur.text = ta.value; saveNotes(n, true); };
+  body.appendChild(ta);
+  main.appendChild(body);
 }
 
 // ---------------------------------------------------------------- settings
@@ -857,7 +1048,7 @@ function renderSettings(main) {
     const a = el('a', setTab === id ? 'on' : null);
     a.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + icon + '"/></svg>';
     a.appendChild(el('span', null, label));
-    a.onclick = () => { setTab = id; window.__setMsg = ''; render(); };
+    a.onclick = () => { setTab = id; setMsgText = ''; render(); };
     nav.appendChild(a);
   });
   nav.appendChild(el('div', 'snote', 'Changes apply right away.'));
@@ -865,7 +1056,7 @@ function renderSettings(main) {
   const body = el('div', 'setmain');
   const inner = el('div', 'setbody');
   ({ behaviour: setBehaviour, appearance: setAppearance, hotkeys: setHotkeys, macros: setMacros, trade: setTrade, data: setData })[setTab](inner);
-  inner.appendChild(el('div', 'msg', window.__setMsg || ''));
+  inner.appendChild(el('div', 'msg', setMsgText));
   body.appendChild(inner);
   wrap.appendChild(body);
   main.appendChild(wrap);
@@ -931,16 +1122,34 @@ function setBehaviour(root) {
     seg([['focused', 'D4 in front'], ['running', 'D4 running'], ['always', 'Always']], settings.visibility || 'focused', (v) => save({ visibility: v })));
   opt(b, 'Shrink to the small pill', 'Closed, only handle, timer, search, builds, diablo.trade, settings and quit stay',
     sw(settings.idleShrink !== false, (v) => save({ idleShrink: v }).then(applyLayout)));
+  opt(b, 'What your build still needs', 'A small "to farm" count next to the timers — a click opens the build',
+    sw(settings.pillMissing === true, (v) => save({ pillMissing: v }).then(() => { applyLayout(); updateMissing(); })));
   opt(b, 'Pill opacity', 'How far the closed bar fades — the mouse over it brings it back',
     slider(10, 100, Math.round((settings.fadeOpacity == null ? 0.35 : settings.fadeOpacity) * 100), ' %',
       (v) => save({ fadeOpacity: v / 100 }), (v) => document.documentElement.style.setProperty('--fade', v / 100)));
-  b = sect(root, 'World boss').body;
-  opt(b, 'Warn before the spawn', 'The timer turns red and grows from here on',
+  b = sect(root, 'Timers').body;
+  opt(b, 'World boss timer', 'In the bar and the pill',
+    sw(settings.wbTimer !== false, (v) => save({ wbTimer: v }).then(applyLayout)));
+  opt(b, 'Warn before the spawn', 'The world boss timer turns red and grows from here on',
     slider(1, 30, settings.wbWarnMin == null ? 5 : settings.wbWarnMin, ' min', (v) => save({ wbWarnMin: v })));
   opt(b, 'Blink while it warns', 'A click on the timer stops it',
     sw(settings.wbBlink !== false, (v) => save({ wbBlink: v })));
-  opt(b, 'Timer always bright', 'It ignores the pill fade',
+  opt(b, 'Helltide timer', 'How long the Helltide still runs (red for its last 3 minutes), or when the next one starts',
+    sw(settings.helltide !== false, (v) => save({ helltide: v }).then(applyLayout)));
+  opt(b, 'Own timer', 'A click starts it, another click starts it over, a right click clears it — red and blinking for the last 30 seconds',
+    sw(settings.ctTimer !== false, (v) => save({ ctTimer: v }).then(applyLayout)));
+  const name = el('input');
+  name.type = 'text'; name.id = 'ctName'; name.value = ctName(); name.maxLength = 16; name.spellcheck = false;
+  name.onchange = () => save({ ctName: name.value.trim() }).then(renderTimers);
+  const cn = opt(b, 'Its name', 'Shown above the time', name);
+  const cm = opt(b, 'It counts down', 'What a click on it starts',
+    slider(1, 60, ctSecs() / 60, ' min', (v) => save({ ctMin: v }).then(renderTimers)));
+  [cn, cm].forEach((o) => o.classList.toggle('off', settings.ctTimer === false));
+  opt(b, 'Timers always bright', 'They ignore the pill fade',
     sw(settings.wbBright !== false, (v) => save({ wbBright: v }).then(applyLayout)));
+  const only = opt(b, 'Show only timers', 'The small pill shows the timers and nothing else — a click on the world boss or Helltide opens the panel',
+    sw(settings.pillTimersOnly === true, (v) => save({ pillTimersOnly: v }).then(applyLayout)));
+  only.classList.toggle('off', settings.idleShrink === false);
   b = sect(root, 'Messages').body;
   opt(b, 'Blink on a new message', 'Only the diablo.trade icon blinks, nothing else',
     sw(settings.msgBlink !== false, (v) => save({ msgBlink: v })));
@@ -976,15 +1185,19 @@ function setHotkeys(root) {
   opt(b, 'Open builds', 'Gear, skills and paragon', hkField('hotkeyFarm'));
   opt(b, 'Open the map', 'Map tool', hkField('hotkeyMap'));
   opt(b, 'Show / hide the overlay', 'Without quitting', hkField('hotkeyToggle'));
+  opt(b, 'Build: skills', 'Opens the active build on its skills — again closes it', hkField('hotkeySkills'));
+  opt(b, 'Build: paragon', 'Opens the active build on its paragon boards', hkField('hotkeyParagon'));
+  opt(b, 'Start the own timer', 'Starts it over as well — the game keeps the focus. A single F-key works here too', hkField('hotkeyTimer'));
 }
 
-// ---- Macros: click spam, loop skills, num-lock mode – all off until switched on past a warning.
-// The lists of loop skills and num-lock mode are kept per character, to switch quickly.
+// ---- Macros: click spam and lock – both off until switched on past a warning.
+// Lock's keys are kept per character, to switch quickly.
 // What can be pressed or held – the same list as lib/clicker.js (KEY_CHOICES).
 const KEY_CHOICES = [...'1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''), 'Space', 'Shift',
   'Mouse1', 'Mouse2', 'Mouse3', 'Mouse4', 'Mouse5'];
+/** A key's short name on a tile ("M4"), and its long one in a tooltip. */
+const keyName = (k) => (/^Mouse\d$/.test(k) ? 'M' + k.slice(5) : k);
 const keyLabel = (k) => (/^Mouse\d$/.test(k) ? 'Mouse ' + k.slice(5) + ({ 1: ' (left)', 2: ' (right)', 3: ' (wheel)', 4: ' (thumb)', 5: ' (thumb)' }[k.slice(5)]) : k);
-const holdLabel = (k) => (/^Mouse\d$/.test(k) ? 'M' + k.slice(5) : k);
 let riskAsk = null;                // the switch waiting for "use at your own risk": { key, label }
 
 function setMacros(b) {
@@ -994,8 +1207,8 @@ function setMacros(b) {
   b.appendChild(warn);
   b.appendChild(el('div', 'ghint', 'All of them work only while Diablo IV is in front, and let go of everything when you leave it.'));
 
-  const ch = sect(b, 'Character', (features.loop && features.numlock ? 'Num-lock mode and loop skills are' : features.loop ? 'Loop skills are' : 'Num-lock mode is') + ' kept per character — pick one and its keys load right away.', 'character');
-  ch.card.hidden = !features.loop && !features.numlock;          // nothing kept per character
+  const ch = sect(b, 'Character', 'Lock is kept per character — pick one and its keys load right away.', 'character');
+  ch.card.hidden = !features.lock;          // nothing kept per character
   const chars = charList();
   const cur = charAt();
   const pick = sel(chars.map((c, i) => [String(i), c.name]), String(cur), (v) => switchChar(Number(v)));
@@ -1011,16 +1224,16 @@ function setMacros(b) {
   del.disabled = chars.length < 2;
   opt(ch.body, 'Characters', chars.length + ' saved', [btn('+ New', () => newChar()), del]);
 
-  if (features.numlock) {
-    const nl = macroCard(b, 'holdOn', 'Num-lock mode', 'Press the toggle key in the game and the overlay holds these keys and mouse buttons down — as if you kept them pressed — until you press it again.', 'holdBind');
-    riskSwitch(nl.body, 'holdOn', 'Num-lock mode', 'Off means the toggle key does nothing');
-    opt(nl.body, 'Toggle key', 'Holds and lets go', bindField('holdBind'));
-    const held = holdList();
-    opt(nl.body, 'Keys', 'Click + and press a key or mouse button — × takes one out',
-      keyChips('hold', held, (k) => saveChar({ holdKeys: held.concat([k]) }), (k) => saveChar({ holdKeys: held.filter((x) => x !== k) })));
-    if (features.loop && settings.holdOn === true && settings.keyLoop === true && settings.holdBind && settings.holdBind === settings.keyLoopBind) {
-      nl.body.appendChild(el('div', 'ierr', 'Loop skills and num-lock mode use the same toggle key — both switch at once.'));
-    }
+  if (features.lock) {
+    const lk = macroCard(b, 'lockOn', 'Lock', 'Press the toggle key in the game: every key is held down (lock) or pressed again after its time — until you press it again. A left click by hand or left click spam pauses it until you let go.', 'lockBind');
+    riskSwitch(lk.body, 'lockOn', 'Lock', 'Off means the toggle key does nothing');
+    opt(lk.body, 'Toggle key', 'Switches it on and off', bindField('lockBind'));
+    const keys = lockList();
+    opt(lk.body, 'Keys', 'Click + and press a key or mouse button — × takes one out',
+      keyChips('lock', keys.map((e) => e.key),
+        (k) => saveChar({ lockKeys: keys.concat([{ key: k, lock: true, sec: 1 }]) }),
+        (k) => saveChar({ lockKeys: keys.filter((e) => e.key !== k) })));
+    if (keys.length) lk.body.appendChild(lockRows(keys));
   }
 
   if (features.clickSpam) {
@@ -1030,25 +1243,6 @@ function setMacros(b) {
     opt(cs.body, 'Left click spam', 'Hold this button to repeat left clicks', bindField('clickLeftBind'));
     opt(cs.body, 'Speed', 'Clicks per second',
       slider(1, 40, settings.clickCps == null ? 15 : settings.clickCps, ' /s', (v) => save({ clickCps: v })));
-  }
-
-  if (features.loop) {
-    const lp = macroCard(b, 'keyLoop', 'Loop skills', 'Press the toggle key in the game and the overlay presses these keys over and over, each after its own time — again to stop.', 'keyLoopBind');
-    riskSwitch(lp.body, 'keyLoop', 'Loop skills', 'Off means the toggle key does nothing');
-    opt(lp.body, 'Toggle key', 'Switches it on and off', bindField('keyLoopBind'));
-    const skills = skillList();
-    opt(lp.body, 'Keys', 'Click + and press a key or mouse button — × takes one out',
-      keyChips('loop', skills.map((e) => e.key),
-        (k) => saveChar({ skillLoop: skills.concat([{ key: k, sec: 1 }]) }),
-        (k) => saveChar({ skillLoop: skills.filter((e) => e.key !== k) })));
-    skills.forEach((e, i) => {
-      const r = el('input'); r.type = 'range'; r.className = 'range'; r.min = 0.2; r.max = 30; r.step = 0.1; r.value = e.sec;
-      const rv = el('span', 'val', Number(e.sec).toFixed(1) + ' s');
-      r.oninput = () => { rv.textContent = Number(r.value).toFixed(1) + ' s'; };
-      r.onchange = () => saveChar({ skillLoop: skills.map((x, j) => (j === i ? { key: x.key, sec: Number(r.value) } : x)) });
-      const row = opt(lp.body, 'Key ' + keyName(e.key), 'Pressed again every …', [r, rv]);
-      row.dataset.skill = e.key;
-    });
   }
 
   const st = el('div', 'msg');
@@ -1062,7 +1256,7 @@ function setMacros(b) {
 const SECTIONS = {
   Panel: ['What the open panel does while you play', 'M4 5h16v14H4zM4 9h16'],
   Bar: ['The icon rail, where it sits and how it fades', 'M5 4h4v16H5zM13 8h6M13 12h6M13 16h4'],
-  'World boss': ['The timer and how it warns you', 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.5 2.5M9 2h6'],
+  Timers: ['World boss, Helltide and your own timer', 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.5 2.5M9 2h6'],
   Messages: ['diablo.trade chat', 'M4 5h16v11H9l-5 4z'],
   Size: ['How big the text and the panel are', 'M4 20L20 4M14 4h6v6M10 20H4v-6'],
   Look: ['Opacity, labels and where the bar sits', 'M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'],
@@ -1071,11 +1265,12 @@ const SECTIONS = {
   'Item search': ['How a search opens on diablo.trade', 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4'],
   'If signing in does not work': ['Other ways to get your login in', 'M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'],
   'Game data': ['Loot, crafting, items — and your own saved data', 'M4 6c0-1.5 3.6-2.5 8-2.5s8 1 8 2.5v12c0 1.5-3.6 2.5-8 2.5s-8-1-8-2.5zM4 6c0 1.5 3.6 2.5 8 2.5s8-1 8-2.5'],
+  Backup: ['A copy of what you made, in a folder of your choice', 'M4 7h16v13H4zM4 7l2-3h12l2 3M12 11v6M9 14l3 3 3-3'],
+  Updates: ['Whether a newer version is out', 'M12 4v11M7 10l5 5 5-5M5 20h14'],
   Advanced: ['Where the game is and how it is found', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'],
   Character: [null, 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20c.8-3.6 3.8-6 7.5-6s6.7 2.4 7.5 6'],
   'Click spam': [null, 'M9 3v3M3.5 8.5l2.1 2.1M3 14h3M12.5 9.5l7.5 3-3.2 1.3 3 3-1.8 1.8-3-3L13.7 18z'],
-  'Loop skills': [null, 'M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4'],
-  'Num-lock mode': [null, 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5zM12 15v2'],
+  Lock: [null, 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5zM12 15v2'],
 };
 function sect(parent, title, hint, id) {
   const [line, icon] = SECTIONS[title] || [null, 'M5 12h14'];
@@ -1167,7 +1362,78 @@ function keyChips(kind, keys, onAdd, onRemove) {
   g.appendChild(add);
   return g;
 }
-const keyName = (k) => (/^Mouse\d$/.test(k) ? 'M' + k.slice(5) : k);
+
+/**
+ * Lock's keys, one row each: grip · on/off · key · lock switch · seconds. Lock on (the default)
+ * holds the key down and greys the seconds; lock off presses it again after them. A key switched
+ * off stays in the list with its settings but is left out until switched on again. The order is
+ * the priority of the timed keys – they always go before the held ones; drag a row by its grip.
+ */
+function lockRows(keys) {
+  const box = el('div', 'lockrows');
+  const set = (i, patch) => saveChar({ lockKeys: keys.map((x, j) => {
+    if (j !== i) return x;
+    const y = Object.assign({}, x, patch);
+    if (!y.off) delete y.off;                     // only a switched off key carries it
+    return y;
+  }) });
+  let from = -1;
+  let prio = 0;
+  keys.forEach((e, i) => {
+    const row = el('div', 'lockrow' + (e.lock ? ' held' : '') + (e.off ? ' off' : ''));
+    row.dataset.key = e.key;
+    const grip = el('span', 'grip');
+    grip.title = 'Drag to change the order — timed keys go first, top to bottom';
+    grip.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></svg>';
+    // only the grip drags – the slider in the row has to stay draggable on its own
+    grip.onmousedown = () => { row.draggable = true; };
+    grip.onmouseup = () => { row.draggable = false; };
+    row.ondragstart = (ev) => { from = i; row.classList.add('drag'); try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', e.key); } catch (_) {} };
+    row.ondragend = () => { row.draggable = false; row.classList.remove('drag'); box.querySelectorAll('.over').forEach((x) => x.classList.remove('over')); };
+    row.ondragover = (ev) => { if (from < 0) return; ev.preventDefault(); row.classList.add('over'); };
+    row.ondragleave = () => row.classList.remove('over');
+    row.ondrop = (ev) => {
+      ev.preventDefault();
+      const a = from; from = -1;
+      if (a < 0 || a === i) return;
+      const list = keys.slice();
+      list.splice(i, 0, list.splice(a, 1)[0]);
+      saveChar({ lockKeys: list });
+    };
+    row.appendChild(grip);
+    const pw = el('button', 'kon' + (e.off ? '' : ' on'));
+    pw.title = e.off ? 'Switched off — click to use it again' : 'Switch off for now — it stays in the list';
+    pw.setAttribute('aria-pressed', e.off ? 'false' : 'true');
+    pw.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 3v8M6.3 7.2a7 7 0 1 0 11.4 0"/></svg>';
+    pw.appendChild(el('span', null, e.off ? 'OFF' : 'ON'));
+    pw.onclick = () => set(i, { off: !e.off });
+    row.appendChild(pw);
+    const name = el('b', 'kname', keyName(e.key));
+    name.title = keyLabel(e.key);
+    row.appendChild(name);
+    const what = el('span', 'kwhat', e.off ? 'off' : e.lock ? 'held' : 'timed · ' + (++prio) + '.');
+    row.appendChild(what);
+    const lab = el('label', 'klock');
+    lab.appendChild(el('span', null, 'Lock'));
+    const s = sw(e.lock, (v) => set(i, { lock: v }));
+    s.title = e.lock ? 'Held down — off to press it on a timer' : 'On a timer — on to hold it down';
+    lab.appendChild(s);
+    row.appendChild(lab);
+    const r = el('input'); r.type = 'range'; r.className = 'range'; r.min = 0.2; r.max = 30; r.step = 0.1; r.value = e.sec;
+    r.disabled = e.lock;
+    r.title = e.lock ? 'Switch lock off to press it on a timer' : 'Pressed again every …';
+    const rv = el('span', 'val', Number(e.sec).toFixed(1) + ' s');
+    r.oninput = () => { rv.textContent = Number(r.value).toFixed(1) + ' s'; };
+    r.onchange = () => set(i, { sec: Number(r.value) });
+    row.appendChild(r);
+    row.appendChild(rv);
+    box.appendChild(row);
+  });
+  if (keys.some((e) => !e.off && !e.lock) && keys.some((e) => !e.off && e.lock)) {
+    box.appendChild(el('div', 'ghint', 'Timed keys always go out on time, top to bottom — the held ones stay down meanwhile.'));
+  }
+  return box;
+}
 
 /** A macro's on switch – switching it on first asks "use at your own risk". */
 function riskSwitch(b, key, label, hint) {
@@ -1206,22 +1472,20 @@ function riskDialog() {
   return shade;
 }
 
-// The lists in use – only known keys, each key once; empty until keys are added.
-function skillList() {
+// The list in use – only known keys, each key once, lock on unless switched off; empty until keys are added.
+function lockList() {
   const seen = new Set();
-  return (Array.isArray(settings.skillLoop) ? settings.skillLoop : []).filter((e) => {
+  return (Array.isArray(settings.lockKeys) ? settings.lockKeys : []).filter((e) => {
     if (!e || !KEY_CHOICES.includes(e.key) || seen.has(e.key)) return false;
     seen.add(e.key);
     return true;
-  }).map((e) => ({ key: e.key, sec: Number(e.sec) > 0 ? Number(e.sec) : 1 }));
+  }).map((e) => Object.assign({ key: e.key, lock: e.lock !== false, sec: Number(e.sec) > 0 ? Number(e.sec) : 1 }, e.off === true ? { off: true } : {}));
 }
-const holdList = () => [...new Set((Array.isArray(settings.holdKeys) ? settings.holdKeys : []).filter((k) => KEY_CHOICES.includes(k)))];
-const loopKeysOn = () => skillList().map((e) => holdLabel(e.key)).join('');
-const holdKeysOn = () => holdList();
+const lockKeysOn = () => lockList().filter((e) => !e.off).map((e) => keyName(e.key)).join('');
 
-// Characters: [{ name, skillLoop, holdKeys }]; the one in use is also what the settings hold, so
+// Characters: [{ name, lockKeys }]; the one in use is also what the settings hold, so
 // the helper needs to know nothing about characters.
-const curKeys = () => ({ skillLoop: skillList(), holdKeys: holdList() });
+const curKeys = () => ({ lockKeys: lockList() });
 function charList() {
   const list = Array.isArray(settings.macroChars) ? settings.macroChars.filter((c) => c && typeof c === 'object') : [];
   return list.length ? list.map((c) => Object.assign({}, c)) : [Object.assign({ name: 'Character 1' }, curKeys())];
@@ -1236,8 +1500,7 @@ function saveChar(patch, rename) {
 }
 /** The character's lists into the settings – what the helper runs on. */
 const loadChar = (c) => ({
-  skillLoop: Array.isArray(c.skillLoop) ? c.skillLoop.map((e) => Object.assign({}, e)) : [],
-  holdKeys: Array.isArray(c.holdKeys) ? c.holdKeys.slice() : [],
+  lockKeys: Array.isArray(c.lockKeys) ? c.lockKeys.map((e) => Object.assign({}, e)) : [],
 });
 function switchChar(i) {
   const chars = charList();
@@ -1291,13 +1554,15 @@ function bindField(key) {
 }
 // One key, without modifiers – the helper polls a single key, not a combination.
 function bindName(e) {
-  const c = e.code;
+  return codeKey(e.code, { Tab: 'Tab', CapsLock: 'CapsLock', Delete: 'Delete' });
+}
+/** A key code -> the name the helper and Electron use (letters, digits, F-keys, the common rest). */
+function codeKey(c, more) {
   if (/^Key[A-Z]$/.test(c)) return c.slice(3);
   if (/^Digit\d$/.test(c)) return c.slice(5);
   if (/^F\d{1,2}$/.test(c)) return c;
-  return { Space: 'Space', Tab: 'Tab', CapsLock: 'CapsLock', Insert: 'Insert', Delete: 'Delete',
-    Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
-    ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right' }[c] || null;
+  return Object.assign({ Space: 'Space', Insert: 'Insert', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
+    ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right' }, more)[c] || null;
 }
 function hkField(key) {
   const f = el('div', 'hk', settings[key] || 'not set');
@@ -1310,16 +1575,13 @@ function hkField(key) {
     if (e.key === 'Escape') { f.textContent = f.dataset.val || 'not set'; f.blur(); return; }
     if (e.key === 'Backspace' || e.key === 'Delete') { f.textContent = 'not set'; save({ [key]: '' }); f.blur(); return; }
     const a = accel(e);
-    if (a && a.indexOf('+') > 0) { f.textContent = a; save({ [key]: a }); f.blur(); }
+    // a combination – or an F-key alone, which games leave free
+    if (a && (a.indexOf('+') > 0 || /^F\d{1,2}$/.test(a))) { f.textContent = a; save({ [key]: a }); f.blur(); }
   };
   return f;
 }
 const accel = (e) => {
-  const code = e.code; let key = null;
-  if (/^Key[A-Z]$/.test(code)) key = code.slice(3);
-  else if (/^Digit\d$/.test(code)) key = code.slice(5);
-  else if (/^F\d{1,2}$/.test(code)) key = code;
-  else key = { Space: 'Space', Enter: 'Return', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Backquote: '`', Minus: '-', Equal: '=', Comma: ',', Period: '.', Slash: '/', Insert: 'Insert', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown' }[code] || null;
+  const key = codeKey(e.code, { Enter: 'Return', Backquote: '`', Minus: '-', Equal: '=', Comma: ',', Period: '.', Slash: '/' });
   if (!key) return null;
   const mods = [e.ctrlKey && 'Control', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter(Boolean);
   return [...mods, key].join('+');
@@ -1345,12 +1607,12 @@ function setTrade(root) {
     sw(!!settings.pressEnter, (v) => save({ pressEnter: v })));
   b = sect(root, 'If signing in does not work').body;
   const ta = el('textarea'); ta.rows = 3; ta.placeholder = 'name=value; name2=value2  (or rows from the browser dev tools)';
-  ta.hidden = !window.__cookieBox;
-  const apply = btn('Apply', async () => { const r = await api.authImport(ta.value); ta.value = ''; window.__cookieBox = false; setMsg(r.imported ? r.imported + ' cookie(s) applied.' : 'No valid cookies found.'); }, 'pri');
-  apply.hidden = !window.__cookieBox;
-  const paste = btn(window.__cookieBox ? 'Cancel' : 'Paste …', () => { window.__cookieBox = !window.__cookieBox; render(); });
+  ta.hidden = !cookieBox;
+  const apply = btn('Apply', async () => { const r = await api.authImport(ta.value); ta.value = ''; cookieBox = false; setMsg(r.imported ? r.imported + ' cookie(s) applied.' : 'No valid cookies found.'); }, 'pri');
+  apply.hidden = !cookieBox;
+  const paste = btn(cookieBox ? 'Cancel' : 'Paste …', () => { cookieBox = !cookieBox; render(); });
   opt(b, 'Paste cookies', 'From your browser, if the sign-in window does not work', [paste]);
-  if (window.__cookieBox) { const box = el('div', 'cookiebox'); box.appendChild(ta); box.appendChild(apply); b.appendChild(box); }
+  if (cookieBox) { const box = el('div', 'cookiebox'); box.appendChild(ta); box.appendChild(apply); b.appendChild(box); }
   opt(b, 'Browser userscript', 'Fills the search field in your own browser too (Tampermonkey)',
     btn('Copy', async () => { await api.copyUserscript(); setMsg('Userscript copied — paste it into Tampermonkey.'); }));
 }
@@ -1365,6 +1627,26 @@ function setData(root) {
     btn('Open', () => api.openDataDir()));
   opt(b, 'Map progress', 'Your marks in the map tool, saved to map-progress.json',
     btn('Restore', async () => { const n = await api.mapRestore(); setMsg(n ? n + ' entries restored into the map.' : 'Nothing to restore.'); }));
+  b = sect(root, 'Backup').body;
+  const dir = settings.backupDir || '';
+  opt(b, 'Folder', dir || 'None chosen — a OneDrive or Dropbox folder keeps a copy off this PC',
+    [btn(dir ? 'Change …' : 'Choose …', async () => { const d = await api.pickBackupDir(); if (d) { await save({ backupDir: d }); refreshBackupAt(); } })]
+      .concat(dir ? [btn('Open', () => api.openBackupDir())] : []));
+  const now = btn('Back up now', () => api.runBackup(), 'pri');                     // backup-done redraws it
+  now.disabled = !dir;
+  opt(b, 'Settings, notes, builds and map progress',
+    !dir ? 'Choose a folder first' : backupAt ? 'Last backup ' + new Date(backupAt).toLocaleString() + ' · the newest 10 are kept' : 'No backup yet · the newest 10 are kept', now);
+  const auto = opt(b, 'Every day', 'One backup a day, when the overlay starts',
+    sw(settings.backupAuto === true, (v) => save({ backupAuto: v })));
+  auto.classList.toggle('off', !dir);
+  b = sect(root, 'Updates').body;
+  const u = updateInfo;
+  const state = !u ? 'Not checked yet' : u.error ? 'Check failed — ' + u.error : u.newer ? 'Version ' + u.latest + ' is out' : 'Up to date';
+  const ub = [btn('Check now', async () => { setMsg('Checking …'); onUpdate(await api.checkUpdates()); setMsg(''); })];
+  if (u && u.newer) ub.push(btn('Download ' + u.latest, () => api.openUpdate(), 'pri'));
+  opt(b, 'D4 Overlay ' + (appVersion || ''), state, ub);
+  opt(b, 'Look for updates', 'Once a day on GitHub — nothing is downloaded or installed by itself',
+    sw(settings.updateCheck !== false, (v) => save({ updateCheck: v })));
   b = sect(root, 'Advanced').body;
   const path = el('input'); path.type = 'text'; path.value = settings.d4Path || ''; path.className = 'wide';
   path.onchange = () => save({ d4Path: path.value });
@@ -1374,7 +1656,16 @@ function setData(root) {
   title.onchange = () => save({ d4WindowTitle: title.value });
   opt(b, 'Window title', 'How the game window is recognised', title);
 }
-function setMsg(t) { window.__setMsg = t; render(); }
+function setMsg(t) { setMsgText = t; render(); }
+function refreshBackupAt() {
+  api.lastBackup().then((t) => { backupAt = Number(t) || 0; if (section === 'settings') render(); });
+}
+/** A newer version: a dot on the settings icon until it is installed. */
+function onUpdate(r) {
+  updateInfo = r || null;
+  $('updDot').hidden = !(updateInfo && updateInfo.newer);
+  if (section === 'settings') render();
+}
 
 // ---------------------------------------------------------------- misc
 async function save(patch) {
@@ -1395,11 +1686,12 @@ function applyLayout() {
   $('shell').classList.toggle('horizontal', horizontal);
   document.documentElement.style.setProperty('--fade', settings.fadeOpacity == null ? 0.35 : settings.fadeOpacity);
   $('app').classList.toggle('shrink', settings.idleShrink !== false);
+  $('app').classList.toggle('timersonly', settings.idleShrink !== false && settings.pillTimersOnly === true);
   $('app').classList.toggle('wbbright', settings.wbBright !== false);
   $('rail').classList.toggle('wide', !!settings.railWide && !horizontal);
   $('btnRail').querySelector('span').textContent = settings.railWide ? 'Collapse' : 'Expand';
   $('stHotkey').textContent = settings.hotkeySearch || '—';
-  renderWb();
+  renderTimers();
   reportSize();
 }
 let recentTimer = null;
@@ -1464,14 +1756,22 @@ async function init() {
   document.querySelectorAll('#rail .ri[data-section]').forEach((b) => { b.onclick = () => openSection(b.dataset.section); });
   $('btnRail').onclick = () => save({ railWide: !settings.railWide }).then(applyLayout);
   $('btnQuit').onclick = () => api.quit();
-  // the timer: blinking, a click stops the blinking; otherwise it is the biggest target in
-  // the small pill and opens the search
-  $('wb').onclick = () => {
-    if ($('wb').classList.contains('blink')) { wbAck = spawnOf(); renderWb(); return; }
+  // the world boss timer: blinking, a click stops the blinking; otherwise the timers are the
+  // biggest target in the small pill and open what was open last (or the search)
+  const openFromTimer = () => {
     wake();
     if (section) openSection('search');
     else openSection(lastSection || 'search', lastSection === 'page' ? lastUrl : undefined);
   };
+  $('wb').onclick = () => {
+    if ($('wb').classList.contains('blink')) { wbAck = spawnOf(); renderTimers(); return; }
+    openFromTimer();
+  };
+  $('ht').onclick = openFromTimer;
+  $('miss').onclick = () => { wake(); openSection('farm'); };
+  // your own timer: a click starts it (over), a right click clears it – the panel stays shut
+  $('ct').onclick = (e) => { e.stopPropagation(); startCt(true); };
+  $('ct').oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); startCt(false); };
   $('panelClose').onclick = closeAll;
   $('btnPin').onclick = () => { setPinned(!pinned); setGhost(false); };
   $('coachOk').onclick = () => { save({ coachSeen: true }); $('coach').hidden = true; };
@@ -1502,8 +1802,9 @@ async function init() {
   api.onCraft((c) => { craft = c || craft; render(); });
   api.onActivities((a) => { activities = a || activities; render(); });
   api.onFarmReady(() => { if (window.FarmView) window.FarmView.reload(); });
+  if (window.FarmView) window.FarmView.onChange = updateMissing;
   api.onItemsReady(async () => { itemQuery = null; runewords = (await api.getRunewords()) || runewords; updateItems($('q').value.trim()); });
-  api.onWorldBoss((d) => { wb = d; renderWb(); });
+  api.onWorldBoss((d) => { wb = d; renderTimers(); });
   api.onNotice((n) => showNote(n.text, n.kind));
   api.onStatus((s) => {
     const e = $('stD4');
@@ -1534,15 +1835,25 @@ async function init() {
     const e = $('clickState');
     if (e) e.textContent = clickState;
   });
-  api.onKeyLoop((on) => {
-    const t = $('loopTag');
-    t.hidden = !on;
-    t.lastChild.textContent = loopKeysOn() || '–';
+  // straight to the build's skills or paragon; pressed again on the same page, it closes
+  api.onOpenBuildView((v) => {
+    wake();
+    const fv = window.FarmView;
+    if (!fv) return;
+    if (section === 'farm' && fv.view() === v) { closeAll(); return; }
+    fv.setView(v);
+    if (section === 'farm') render(); else openSection('farm');
   });
-  api.onHold((on) => {
-    const t = $('holdTag');
+  api.onTimerRestart(() => { if (settings.ctTimer !== false) startCt(true); });
+  api.onUpdateInfo(onUpdate);
+  api.onBackupDone((t) => { backupAt = Number(t) || Date.now(); if (section === 'settings') render(); });
+  api.onLock(({ on, paused }) => {
+    const t = $('lockTag');
     t.hidden = !on;
-    t.lastChild.textContent = holdKeysOn().map(holdLabel).join('') || '–';
+    t.classList.toggle('paused', !!paused);
+    t.title = paused ? 'Lock waits — goes on when you let go of the left button' : 'Lock running — the toggle key stops it';
+    t.firstChild.textContent = paused ? 'Wait' : 'Lock';
+    t.lastChild.textContent = lockKeysOn() || '–';
   });
   api.onChatUnread((n) => {
     const b = $('chatBadge');
@@ -1554,14 +1865,18 @@ async function init() {
 
   wireResize();
   armIdle();
+  updateMissing();
+  api.getVersion().then((v) => { appVersion = v || ''; });
+  api.lastUpdate().then((r) => { if (r) onUpdate(r); });
+  refreshBackupAt();
   api.refreshStatus();            // ask once – avoids a race with the first broadcast
-  setInterval(renderWb, 1000);
+  setInterval(renderTimers, 1000);
   const ro = new ResizeObserver(reportSize);
   ro.observe($('shell'));
   ro.observe($('rail'));             // the bar grows too (timer, fonts) – the window must follow
   // the search switches between list + detail and list-then-detail as the panel is resized
   new ResizeObserver(() => {
-    const n = $('cols').clientWidth > 0 && $('cols').clientWidth < 720;
+    const n = isNarrow();
     if ((section === 'search' || section === 'activities') && n !== $('cols').classList.contains('narrow')) render();
   }).observe($('cols'));
   window.addEventListener('resize', syncView);

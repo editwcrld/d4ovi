@@ -1,4 +1,4 @@
-// Reine Suchlogik (läuft im Overlay und in Node-Tests)
+// The search logic alone (runs in the overlay and in the Node tests)
 (function (root) {
   const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[’']/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -21,7 +21,7 @@
     return idx;
   }
 
-  // -> [{sec, items:[{name, cls, note}], score}] sortiert nach Treffergüte
+  // -> [{sec, items:[{name, cls, note}], score}] sorted by how well they match
   function search(sections, query, all) {
     const q = norm(query);
     // "boss loot" has no name in it – then every section is a hit
@@ -45,7 +45,7 @@
       const bn = norm(sec.name);
       if (!tokens.every((t) => bn.includes(t))) return;
       const drops = sec.drops || [];
-      // Abschnitte ohne eigene Loot-Liste (z. B. Belial) trotzdem zeigen – wegen Fundort/Hinweisen
+      // sections without a loot list of their own (e.g. Belial) still show – for their place and notes
       if (!drops.length) { if (!groups.has(si)) groups.set(si, { sec, items: new Map(), score: 30 }); return; }
       drops.forEach((d) => add(si, sec, d, 30));
     });
@@ -60,8 +60,8 @@
       .sort((a, b) => b.score - a.score);
   }
 
-  // Crafting-Tabellen durchsuchen (Runenwörter, Umwandlungen, Mythic-Rezepte)
-  // -> [{table, rows}] – Treffer in Zeilen zuerst, sonst die ganze Tabelle, wenn die Überschrift passt
+  // searches the crafting tables (runewords, conversions, mythic recipes)
+  // -> [{table, rows}] – matching rows first, else the whole table when its heading matches
   function searchCraft(tables, query, all) {
     const q = norm(query);
     if (!q) return all ? (tables || []).map((t) => ({ table: t, rows: t.rows || [], score: 10 })) : [];
@@ -76,9 +76,9 @@
     return out.sort((a, b) => b.score - a.score);
   }
 
-  // ---------- Suche eingrenzen ----------
-  // "ber rune" -> nur die Rune Ber, "insight runeword" -> nur das Runenwort.
-  // Schlagwörter werden aus der Suche entfernt und als Filter benutzt (deutsch und englisch).
+  // ---------- narrowing the search ----------
+  // "ber rune" -> only the rune Ber, "insight runeword" -> only the runeword.
+  // Keywords are taken out of the search and used as filters (German and English).
   const KIND_WORDS = {
     rune: ['rune', 'runes', 'runen'],
     runeword: ['runeword', 'runewords', 'runenwort', 'runenworter'],
@@ -109,7 +109,7 @@
   const WORD_TO_KIND = {};
   for (const k of Object.keys(KIND_WORDS)) for (const w of KIND_WORDS[k]) WORD_TO_KIND[w] = k;
 
-  // [muss passen, darf nicht passen] – geprüft wird gegen Typ, Seltenheit, Kategorie und Adresse eines Treffers
+  // [must match, must not match] – checked against a hit's type, rarity, category and address
   const KIND_RE = {
     rune: [/\brunes?\b|rune of|\/runes\//i, /runeword/i],
     runeword: [/runeword/i, null],
@@ -134,7 +134,7 @@
     mercenary: [/mercenar|soldner|söldner/i, null],
     tribute: [/tribute/i, null],
   };
-  // Diese Schlagwörter wählen nur den Ergebnisbereich aus, sie beschreiben kein Item
+  // these keywords only pick the result area, they describe no item
   const SECTION_ONLY = ['boss', 'recipe', 'activity'];
 
   /** "ber rune" -> { term: 'ber', kinds: ['rune'] } */
@@ -145,7 +145,7 @@
       const k = WORD_TO_KIND[tk];
       if (k) kinds.push(k); else rest.push(tk);
     }
-    // Nur Schlagwörter eingetippt ("runes") -> ganz normal danach suchen
+    // only keywords typed ("runes") -> search for them like any word
     if (!rest.length) {
       // "crafting", "boss loot", "activities" name a result area – show all of it.
       // "rune" or "gem" on the other hand is a word to search for, so it stays the term.
@@ -156,7 +156,7 @@
     return { term: rest.join(' '), kinds: Array.from(new Set(kinds)) };
   }
 
-  /** Passt ein Treffer zu allen Schlagwörtern? `hay` = Typ + Seltenheit + Kategorie + Adresse. */
+  /** Does a hit match every keyword? `hay` = type + rarity + category + address. */
   function matchesKinds(hay, kinds) {
     if (!kinds || !kinds.length) return true;
     const h = String(hay || '');
@@ -168,7 +168,7 @@
     });
   }
 
-  // Welche Ergebnisbereiche sollen gezeigt werden?
+  // which result areas to show?
   const showItems = (kinds) => !kinds.some((k) => SECTION_ONLY.indexOf(k) >= 0);
   const showBoss = (kinds) => !kinds.length || kinds.indexOf('boss') >= 0;
   const showActs = (kinds) => !kinds.length || kinds.indexOf('activity') >= 0;

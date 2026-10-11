@@ -41,7 +41,7 @@ console.log('ok  plan: defaults, off switch, half bound');
 
 // --- the generated helper
 const s = c.script(p);
-assert.ok(s.includes("[Clicker]::Run(6, 5, 67, 0, '',"), 'started with the right codes and speed, no key loop');
+assert.ok(s.includes("[Clicker]::Run(6, 5, 67, 0, '',"), 'started with the right codes and speed, no lock');
 assert.ok(s.includes("'Diablo IV'"), 'window title passed through');
 assert.ok(s.includes('GetAsyncKeyState') && s.includes('SendInput'), 'polls the key, sends the clicks');
 assert.ok(s.includes('GetForegroundWindow'), 'checks which window is in front');
@@ -55,7 +55,7 @@ assert.ok(odd.includes("'Diablo'' IV'"), 'quotes are escaped');
 assert.ok(!/\n\[Clicker\]::Run\([^)]*IV'[^)]*\)[^\n]/.test(odd), 'nothing injected after the call');
 console.log('ok  window titles are escaped');
 
-// --- loop skills: a toggle key, a list of keys, seconds per key
+// --- lock: one list, each key held (lock) or pressed on a timer; one toggle key
 assert.strictEqual(c.loopMsFor(1.5), 1500);
 assert.strictEqual(c.loopMsFor(0), 1000, 'falls back to one second');
 assert.strictEqual(c.loopMsFor(0.01), 100, 'not faster than ten rounds a second');
@@ -64,54 +64,58 @@ assert.deepStrictEqual(c.keyOf('Q'), [81, 0]);
 assert.deepStrictEqual(c.keyOf('Mouse2'), [0x02, 2], 'mouse buttons with their number');
 assert.deepStrictEqual(c.keyOf('Space'), [0x20, 0]);
 assert.strictEqual(c.keyOf('F5'), null, 'only the listed choices');
-assert.deepStrictEqual(c.skillItems([{ key: '4', sec: 12 }, { key: 'Q', sec: 0.5 }, { key: '4', sec: 1 }, { key: 'nope', sec: 1 }, null, { key: 'Mouse1', sec: 2 }]),
-  [[52, 0, 12000], [81, 0, 500], [0x01, 1, 2000]], 'the user\'s order, each key once, unknown left out, mouse with its button');
-const loop = { ...def, keyLoop: true, skillLoop: [{ key: '1', sec: 0.5 }, { key: 'Q', sec: 12 }], keyLoopBind: 'F8' };
-const lp = c.plan(loop, 'Diablo IV');
-assert.strictEqual(lp.vkLoop, 0x77, 'F8 toggles');
-assert.ok(c.script(lp).includes("[Clicker]::Run(6, 5, 67, 119, '49:500:0,81:12000:0',"), 'helper gets each key with its pace');
-assert.ok(c.script(c.plan({ ...loop, skillLoop: [{ key: 'Mouse2', sec: 3 }] }, '')).includes("'2:3000:2'"), 'a mouse button in the list');
-assert.ok(c.script(lp).includes('last[i] = Environment.TickCount - every[i]'), 'all keys go out right when it is switched on');
-assert.ok(c.script(lp).includes('MouseEdge(kbtn[i], true)'), 'a mouse button is clicked');
-assert.strictEqual(c.plan({ ...loop, skillLoop: [{ key: '1', sec: 999 }] }, '').loopItems[0][2], 60000, 'clamped per key');
-assert.strictEqual(c.plan({ ...loop, keyLoop: false }, '').vkLoop, 0, 'off switch');
-assert.strictEqual(c.plan({ ...loop, skillLoop: [] }, '').vkLoop, 0, 'an empty list -> nothing');
-assert.ok(c.plan({ ...loop, clickSpam: false }, '').usable, 'loop skills alone keeps the helper running');
-assert.ok(c.script(lp).includes('Key(keys[i], 30)') && c.script(lp).includes('MapVirtualKey'), 'keys go out as scan codes');
-console.log('ok  loop skills: list of keys and mouse buttons, pace per key, toggle, off switch');
-
-// --- num-lock mode: keys and mouse buttons held, its own toggle key
-assert.deepStrictEqual(c.holdItems(['Mouse1', '1', 'Q', 'Mouse5', 'Mouse9', 'x', '1']),
-  [[0x01, 1], [49, 0], [81, 0], [0x06, 5]], 'the user\'s order, mouse buttons with their number, unknown left out, each once');
-assert.deepStrictEqual(c.holdItems(null), []);
-const hold = { ...def, clickSpam: false, holdOn: true, holdKeys: ['2', 'Mouse2'], holdBind: 'F9' };
-const hp = c.plan(hold, 'Diablo IV');
-assert.strictEqual(hp.vkHold, 0x78, 'F9 toggles');
-assert.ok(hp.usable, 'num-lock mode alone keeps the helper running');
-const hs = c.script(hp);
-assert.ok(hs.includes("[Clicker]::Run(0, 0, 67, 0, '', 120, '50:0,2:2',"), 'helper gets the toggle and what to hold');
-assert.ok(hs.includes('Release(hvk, hbtn)') && /finally \{\s*if \(pressed\) Release/.test(hs), 'lets go when switched off and when it ends');
-assert.ok(hs.includes('Console.In.ReadLine()') && hs.includes('quit = true'), 'stdin closing stops it');
-assert.ok(hs.includes('inGame = Active(title, proc)'), 'held only while the game is in front');
-assert.ok(/repeatAt = now \+ 300/.test(hs) && /repeatAt = now \+ 33/.test(hs) && /if \(hbtn\[i\] == 0\) KeyEdge\(hvk\[i\], true\)/.test(hs),
-  'a held key repeats like a real one: a pause, then about 30 times a second (mouse buttons do not)');
-assert.strictEqual(c.plan({ ...hold, holdOn: false }, '').vkHold, 0, 'off switch');
-assert.strictEqual(c.plan({ ...hold, holdKeys: [] }, '').vkHold, 0, 'nothing listed -> nothing held');
-console.log('ok  num-lock mode: keys, mouse buttons, toggle, letting go');
+assert.deepStrictEqual(c.lockItems([{ key: '4', lock: false, sec: 12 }, { key: 'Q', sec: 0.5 }, { key: '4', lock: true }, { key: 'nope' }, null, { key: 'Mouse1', lock: false, sec: 2 }]),
+  [[52, 0, 12000], [81, 0, 0], [0x01, 1, 2000]], 'the user\'s order, each key once, unknown left out; lock unless false (ms 0 = held)');
+assert.deepStrictEqual(c.lockItems(null), []);
+assert.deepStrictEqual(c.lockItems([{ key: '1', off: true }, { key: '2' }, { key: '1' }]), [[50, 0, 0]], 'a key switched off is left out (and still counts as in the list)');
+assert.strictEqual(c.plan({ lockOn: true, lockBind: 'F9', lockKeys: [{ key: '1', off: true }] }, '').usable, false, 'all switched off: nothing to run');
+const lock = { ...def, clickSpam: false, lockOn: true, lockKeys: [{ key: '1', lock: true }, { key: 'Q', lock: false, sec: 12 }, { key: 'Mouse2', lock: false, sec: 3 }], lockBind: 'F9' };
+const lp = c.plan(lock, 'Diablo IV');
+assert.strictEqual(lp.vkLock, 0x78, 'F9 toggles');
+assert.ok(lp.usable, 'lock alone keeps the helper running');
+const ls = c.script(lp);
+assert.ok(ls.includes("[Clicker]::Run(0, 0, 67, 120, '49:0:0,81:12000:0,2:3000:2', 'Diablo IV',"), 'helper gets the toggle and each key: held, or its pace');
+assert.ok(ls.includes('last[i] = Environment.TickCount - every[i]'), 'the timed keys go out right when it is switched on');
+assert.ok(!/if \(pressed\) \{ Release\(vk, btn, every\); pressed = false; \}\s*last\[i\]/.test(ls), 'a timed key due: the held ones stay down');
+assert.ok(ls.includes('Key(vk[i], 60)') && ls.includes('Thread.Sleep(60); MouseEdge(btn[i], false)'), 'a timed tap lasts 60 ms – long enough for a slow frame');
+assert.ok(ls.includes('toggle.Start(vkLock)') && ls.includes('lockPresses++'), 'the toggle key is watched on its own thread – a short tap is not missed');
+assert.ok(ls.includes('timeBeginPeriod(1)') && ls.includes('timeEndPeriod(1)'), 'sleeps are precise to 1 ms');
+assert.ok(ls.indexOf('every[i] == 0 || unchecked') < ls.indexOf('if (!pressed) {'), 'timed keys before the held ones');
+assert.ok(ls.includes('MapVirtualKey'), 'keys go out as scan codes');
+assert.ok(ls.includes('MouseEdge(btn[i], true)'), 'mouse buttons too');
+assert.ok(/finally \{\s*if \(pressed\) Release/.test(ls), 'lets go when it ends');
+assert.ok(ls.includes('Console.In.ReadLine()') && ls.includes('quit = true'), 'stdin closing stops it');
+assert.ok(ls.includes('inGame = Active(title, proc)'), 'only while the game is in front');
+assert.ok(/repeatAt = now \+ 300/.test(ls) && /repeatAt = now \+ 33/.test(ls), 'a held key repeats like a real one');
+// a left click by hand or left click spam pauses it
+assert.ok(ls.includes('SetWindowsHookEx(14') && /\(s\.flags & 1\) == 0/.test(ls), 'a mouse hook tells a hand click from a sent one');
+assert.ok(/bool hand = handLeft \|\| \(spam && l\)/.test(ls), 'left click by hand or left click spam');
+assert.ok(/< 250\)/.test(ls) && /locking && inGame && !paused/.test(ls), 'waits until let go, and a moment more');
+assert.ok(ls.includes('"{\\"pause\\":true}"'), 'tells the overlay it waits');
+assert.strictEqual(c.plan({ ...lock, lockOn: false }, '').vkLock, 0, 'off switch');
+assert.strictEqual(c.plan({ ...lock, lockKeys: [] }, '').vkLock, 0, 'an empty list -> nothing');
+assert.strictEqual(c.plan({ ...lock, lockKeys: [{ key: '1', sec: 999, lock: false }] }, '').lockItems[0][2], 60000, 'clamped per key');
+assert.ok(!c.script(c.plan(def, '')).includes("'49:"), 'click spam alone: no lock keys');
+// what goes on the command line stays under the Windows limit (32767), with room to spare
+const big = c.plan({ ...lock, clickSpam: true, d4WindowTitle: 'Diablo IV', lockKeys: c.KEY_CHOICES.map((k, i) => ({ key: k, lock: i % 2 === 0, sec: 1 })) }, 'Diablo IV');
+assert.ok(c.encoded(big).length < 30000, 'encoded helper fits the command line: ' + c.encoded(big).length);
+const plain = Buffer.from(c.encoded(big), 'base64').toString('utf16le');
+assert.ok(!/^\s*\/\//m.test(plain) && plain.includes('[Clicker]::Run(') && /^"@$/m.test(plain), 'comments gone, the here-string end still on its own line');
+console.log('ok  lock: held or timed per key, timed first in order, left click pauses, toggle, off switch');
 
 // --- off unless switched on, and nothing at all when the build leaves the macros out
-const bare = { clickLeftBind: 'Mouse5', clickRightBind: 'Mouse4', skillLoop: [{ key: '1', sec: 1 }], keyLoopBind: 'F8', holdKeys: ['1'], holdBind: 'F9' };
+const bare = { clickLeftBind: 'Mouse5', clickRightBind: 'Mouse4', lockKeys: [{ key: '1' }], lockBind: 'F9' };
 assert.strictEqual(c.plan(bare, '').usable, false, 'not switched on -> not started');
-const all = { ...bare, clickSpam: true, keyLoop: true, holdOn: true };
+const all = { ...bare, clickSpam: true, lockOn: true };
 assert.ok(c.plan(all, '').usable);
 const none = c.plan(all, '', false);
-assert.ok(!none.usable && !none.vkLeft && !none.vkLoop && !none.vkHold, 'build without macros: never started');
+assert.ok(!none.usable && !none.vkLeft && !none.vkLock, 'build without macros: never started');
 // a build can leave each macro out on its own
-const noLoop = c.plan(all, '', { clickSpam: true, loop: false, numlock: true });
-assert.ok(noLoop.vkLeft && !noLoop.vkLoop && noLoop.vkHold, 'loop skills left out, the others stay');
-const onlyHold = c.plan(all, '', { numlock: true });
-assert.ok(!onlyHold.vkLeft && !onlyHold.vkRight && !onlyHold.vkLoop && onlyHold.vkHold && onlyHold.usable, 'only num-lock mode');
-assert.strictEqual(c.plan({ ...all, holdOn: false }, '', { numlock: true }).usable, false, 'the one left switched off: not started');
+const noLock = c.plan(all, '', { clickSpam: true, lock: false });
+assert.ok(noLock.vkLeft && !noLock.vkLock, 'lock left out, click spam stays');
+const onlyLock = c.plan(all, '', { lock: true });
+assert.ok(!onlyLock.vkLeft && !onlyLock.vkRight && onlyLock.vkLock && onlyLock.usable, 'only lock');
+assert.strictEqual(c.plan({ ...all, lockOn: false }, '', { lock: true }).usable, false, 'the one left switched off: not started');
 console.log('ok  off by default; a build without macros never starts the helper');
 
 // --- labels for the settings

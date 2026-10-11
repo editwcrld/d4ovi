@@ -1,7 +1,7 @@
 {
   "name": "d4-overlay",
   "version": "1.0.0",
-  "description": "Diablo IV companion overlay: item search, boss loot, crafting, builds and farm list, map tool, diablo.trade and the world boss timer",
+  "description": "Diablo IV companion overlay: item search, boss loot, crafting, builds and farm list, map tool, diablo.trade and the world boss, Helltide and own timers",
   "main": "main.js",
   "author": "V",
   "license": "MIT",

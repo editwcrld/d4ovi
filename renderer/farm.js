@@ -80,6 +80,7 @@ async function load() {
 function persist() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => api.saveBuilds(data), 300);
+  if (window.FarmView.onChange) window.FarmView.onChange();
 }
 function touch() { const b = build(); if (b) b.updatedAt = Date.now(); persist(); ctx.rerender(); }
 
@@ -1128,9 +1129,22 @@ function entries(b) {
 
 window.FarmView = {
   render,
-  reload: () => { if (!api) return Promise.resolve(); tipCache.clear(); return load().then(() => ctx && ctx.rerender()); },
+  reload: () => { if (!api) return Promise.resolve(); tipCache.clear(); return load().then(() => { if (ctx) ctx.rerender(); if (window.FarmView.onChange) window.FarmView.onChange(); }); },
   hideTip,
-  adopt: (d) => { if (d && d.builds) data = d; },      // builds imported from the settings
+  adopt: (d) => { if (d && d.builds) { data = d; if (window.FarmView.onChange) window.FarmView.onChange(); } },   // builds imported from the settings
   _state: () => ({ cat, data, open, tab, view, pickOpen }),
+  /** The active build and what it still needs: { name, total, missing } – null without a build. */
+  summary: async (a) => {
+    if (!api) api = a;
+    if (!cat || !data) await load();
+    const b = build();
+    if (!b) return null;
+    const p = progress(b);
+    return { name: b.name, total: p.total, missing: p.total - p.got };
+  },
+  onChange: null,                                     // set by app.js: a tick or a build changed
+  view: () => view,
+  /** Gear / Skills / Paragon – what the build opens on next. */
+  setView: (v) => { if (['gear', 'skills', 'paragon'].includes(v)) { view = v; pickOpen = false; hideTip(); } },
 };
 })();

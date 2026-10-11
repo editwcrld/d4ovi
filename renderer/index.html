@@ -30,6 +30,9 @@
     <button class="ri" data-section="activities" title="Activities">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 21V3.5"/><path d="M5.5 4.5h12l-2.2 3.4 2.2 3.4h-12"/></svg><span>Activities</span>
     </button>
+    <button class="ri" data-section="notes" title="Notes — per season">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17H6z"/><path d="M9 8.5h6M9 12h6M9 15.5h3.5"/></svg><span>Notes</span>
+    </button>
 
     <span class="rdiv"></span>
     <button class="ri" data-section="listings" title="diablo.trade — listings, the chat is one click away there">
@@ -37,10 +40,12 @@
     </button>
 
     <span class="sp"></span>
-    <div id="wb" title="World boss (diablo.trade)"><b>WB</b><span id="wbTime">--:--</span></div>
-    <div id="loopTag" title="Key loop running — the toggle key stops it" hidden><b>Loop</b><span>1234</span></div>
-    <div id="holdTag" title="Press &amp; hold running — the toggle key lets go" hidden><b>Hold</b><span>–</span></div>
-    <button class="ri" data-section="settings" title="Settings">
+    <div id="wb" class="tmr" title="World boss (diablo.trade)"><b>WB</b><span id="wbTime">--:--</span></div>
+    <div id="ht" class="tmr" title="Helltide"><b>HT</b><span id="htTime">--:--</span></div>
+    <div id="ct" class="tmr idle" title="Timer"><b>Timer</b><span id="ctTime">05:00</span></div>
+    <div id="miss" class="tmr miss" title="What your build still needs" hidden><b>To farm</b><span id="missN">–</span></div>
+    <div id="lockTag" class="tmr lock" title="Lock running — the toggle key stops it" hidden><b>Lock</b><span>–</span></div>
+    <button class="ri" data-section="settings" title="Settings"><i id="updDot" hidden></i>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 12h3M11 12h9M4 17h7M15 17h5"/><circle cx="16" cy="7" r="2.1"/><circle cx="9" cy="12" r="2.1"/><circle cx="13" cy="17" r="2.1"/></svg><span>Settings</span>
     </button>
     <button id="btnQuit" class="ri" title="Quit">

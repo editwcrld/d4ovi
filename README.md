@@ -3,7 +3,7 @@
 A small always-on-top companion for Diablo IV (windowed mode, Windows). It does not read or
 change the game's memory or files — it reads public web pages and shows them next to it.
 
-The optional *Macros* (click spam, loop skills, num-lock mode — below) are the exception:
+The optional *Macros* (click spam and lock — below) are the exception:
 they send mouse clicks and key presses to the game window. Blizzard's terms do not allow
 automating game input, so using them can put your account at risk. They are all **off** until
 switched on in *Settings → Macros*, each one past a "use at your own risk" warning — and a build
@@ -50,12 +50,38 @@ out and back in while the window changes size) and fades to the opacity you set:
 ⠿  WORLD BOSS 02h 15min 40sec  🔍  📋  🛍  ⚙  ✕
 ```
 
-handle · world boss timer · search · builds · diablo.trade · settings · quit. The horizontal bar
+handle · timers · search · builds · diablo.trade · settings · quit. The horizontal bar
 uses the same order. The timer keeps its full strength; in the warning time it turns red, grows
 the closer the spawn gets and blinks — a click stops the blinking. Otherwise a click on the timer
 opens again whatever was open last (builds, diablo.trade, a guide …), the search if nothing was.
 Moving the mouse over the pill only takes the fade off — it keeps its shape and its place, so you
 can drag it there.
+
+Next to the world boss sits the **Helltide** timer: orange while a Helltide runs (how long it
+still has) and red for its last 3 minutes, grey while there is none (when the next one starts).
+It needs no data source — a Helltide starts on every full hour and runs 55 minutes, then 5
+minutes pass. It never blinks.
+
+Then **your own timer**. Set its name (*Timer* by default) and what it counts down (5 minutes by
+default, 1–60) in the settings. A click starts it, another click starts it over, a right click
+clears it; for its last 30 seconds it turns red and blinks, at 0 it turns green and says
+**ready**. Clicking it never opens the panel. Handy for a boss without a schedule — the Fields
+of Hatred boss is back about five minutes after it died.
+
+*Settings → Hotkeys → Build: skills* / *Build: paragon* open the active build straight on that
+page (pressed again, it closes).
+
+*Settings → Hotkeys → Start the own timer* gives it a hotkey (a single F-key works) — it starts
+the timer over without taking the focus from the game.
+
+*Settings → Behaviour → Bar → What your build still needs* adds a **To farm** count next to the
+timers: how many items, aspects, charms and gems of the active build are not ticked off yet
+(green **done** once everything is). A click opens the build. Off by default.
+
+Everything about the timers is in *Settings → Behaviour → Timers*: each one can be switched off
+on its own (*World boss timer*, *Helltide timer*, *Own timer*), and *Show only timers* leaves just
+the handle and the timers (and the Lock tag while it runs) in the pill — a click on the world
+boss or Helltide opens the panel.
 
 Alerts punch through the fade and blink **on their own element only**: the timer when the world
 boss is closer than your warning threshold, the diablo.trade icon when a message arrives.
@@ -64,9 +90,35 @@ Each of the two states keeps its own place on the screen: drag the pill where yo
 it is idle, drag the bar while it is open. Both are saved as `posIdle` and `posOpen`, and
 *Settings → Appearance → Places* resets them.
 
+## Notes
+
+The **Notes** icon opens a page per season: a checklist (type a point, Enter; tick it off, ✕
+removes it, *Remove the ticked ones* clears up) and free text that is saved while you type.
+*+ Season* starts a new one, the list on top switches between them. *Copy* puts the season on
+the clipboard as Markdown (for Discord), *Save as file …* writes every season into one `.md` file.
+
+## Backup
+
+*Settings → Data → Backup*: choose a folder (one that OneDrive or Dropbox syncs keeps a copy off
+the PC), then *Back up now* — or switch on *Every day* for one backup a day when the overlay
+starts. Each backup is a folder of its own (`D4-Overlay-Backup-<date>_<time>`) with your settings
+(the notes included), builds and map progress; the newest 10 are kept. The login is never part of
+it. To restore, copy the files back into the data folder while the overlay is closed.
+
+## Tray and updates
+
+The icon in the Windows tray shows or hides the overlay (a click, or the menu), opens Search,
+Builds, Notes or Settings and quits. Hidden from the tray, the overlay stays hidden until it is
+shown there again.
+
+Once a day the overlay asks GitHub for the latest release of this repository. A newer version
+puts a green dot on Settings; *Settings → Data → Updates* links to it. Nothing is downloaded or
+installed by itself, and the check can be switched off there. (It needs published releases in a
+public repository — otherwise it says "no release published yet".)
+
 ## Macros
 
-*Settings → Macros* holds three input helpers. All of them are **off** by default; switching one
+*Settings → Macros* holds two input helpers. Both are **off** by default; switching one
 on first shows a *Use at your own risk* warning (Cancel keeps it off). They only send input while
 **Diablo IV is the window in front** — alt-tab or minimise and they pause, and anything held is
 let go.
@@ -86,31 +138,42 @@ the field remains clickable). *Del* clears a binding, the speed runs from 1 to 4
 second (default 15). Each click holds the button for 20–40 ms — a game reads the mouse once per
 frame, and a click that goes down and up inside one frame is dropped.
 
-### Loop skills
+### Lock
 
-Press the toggle key (default **F8**) in the game and the overlay presses the listed keys over
-and over, each one again after its own number of seconds, until you press the toggle key once
-more. The keys sit as tiles — `[1] [2] [Q] [+]`; at first there is only `[+]`. Click it and
-press a key (digits, letters, Space, Shift) or a mouse button (left, right, wheel, the two thumb
-buttons) and it becomes a tile; × on a tile takes it out, a key is in the list only once. Each
-key gets its own row with a slider, 0.2–30 s. Switched on, all keys go out at once; after that
-each keeps its own pace (say 1 every 0.5 s, 4 every 12 s for a long cooldown). While it runs, a
-green **Loop** tag sits next to the world boss timer.
+Press the toggle key (default **F9**) in the game and the overlay works through the listed keys
+until you press it once more. The keys sit as tiles — `[1] [2] [Q] [+]`; at first there is only
+`[+]`. Click it and press a key (digits, letters, Space, Shift) or a mouse button (left, right,
+wheel, the two thumb buttons) and it becomes a tile; × on a tile takes it out, a key is in the
+list only once.
 
-### Num-lock mode
+Every key gets a row: **grip · on/off · key · Lock switch · seconds**. The on/off button switches
+a key off for now — it stays in the list with its settings, greyed and left out, until you
+switch it on again. Otherwise it is one or the other:
 
-Press its toggle key (default **F9**) and the overlay holds the listed keys and mouse buttons
-down — as if you kept them pressed — until you press it again. The same tiles as above, without
-times. A green **Hold** tag shows while it holds. A held key behaves like one held on a real
-keyboard: it goes down, and after 0.3 s it repeats about 30 times a second — games that act on
-those repeats (a skill cast again and again) see a held key, not a single press. Mouse buttons
-just stay down; one you press and let go yourself goes down again within a quarter second.
+- **Lock on** (the default) — the key is held down, as if you kept it pressed; the seconds
+  slider is grey. A held key behaves like one on a real keyboard: it goes down, and after 0.3 s
+  it repeats about 30 times a second. Mouse buttons just stay down.
+- **Lock off** — the key is pressed again after its own number of seconds (0.2–30 s); switched
+  on, the timed keys go out at once, after that each keeps its own pace.
+
+**Priority:** timed keys always go out on time — pressed on top of the held keys, which stay down
+(letting go and pressing again would break off a held skill every time). Each tap lasts 60 ms, a
+few frames, so a slow frame cannot swallow it. Several timed keys due at once go out top to bottom; drag a row by its
+grip to change the order. The row says *timed · 1.*, *timed · 2.* …
+
+**Left click pauses it:** while you hold the left mouse button yourself, or left click spam runs,
+lock lets go of everything and waits; a quarter second after you let go it carries on. The
+overlay tells your own clicks from the ones it sends (a low level mouse hook sees the flag
+Windows puts on sent input), so a locked Mouse 1 does not pause itself.
+
+While it runs, a green **Lock** tag sits next to the world boss timer; it turns amber and reads
+**Wait** while a left click pauses it.
 
 ### Per character
 
-The tiles of loop skills and num-lock mode belong to a **character**: pick one in the
+The lock tiles belong to a **character**: pick one in the
 *Character* row and its keys load right away; **+ New** starts a copy of the current one, the
-name can be changed, *Delete* removes the one picked (one always stays). The toggle keys, the
+name can be changed, *Delete* removes the one picked (one always stays). The toggle key, the
 click spam and the on switches are shared.
 
 ### How it works
@@ -380,19 +443,21 @@ npm test           # all offline tests
 | Switch | 1 | 0 |
 |---|---|---|
 | `MACROS` | *Settings → Macros* is there | no Macros tab, and the input helper is never started |
-| `NUMLOCK` | num-lock mode is there | its card is gone and it never runs |
+| `LOCK` | lock is there | its card is gone and it never runs |
 | `CLICK_SPAM` | click spam is there | its card is gone and it never runs |
-| `LOOP_SKILLS` | loop skills are there | its card is gone and it never runs |
 
-All three at 0 is the same as `MACROS: 0`. `disable_macros.txt` in the project folder repeats this
+Both at 0 is the same as `MACROS: 0`. `disable_macros.txt` in the project folder repeats this
 in German, to find it quickly.
 
 ## Tests
 
-`npm test` runs sixteen files and prints one summary:
+`npm test` runs nineteen files and prints one summary:
 
 | File | Covers |
 |---|---|
+| `backup-test.js` | backup: which files go along, folder names, only the newest kept |
+| `updates-test.js` | update check: version numbers, GitHub's answers |
+| `settings-test.js` | settings: defaults, every migration of an older settings file |
 | `search-test.js` | boss loot search, keyword narrowing |
 | `extract-test.js` | maxroll page extraction |
 | `cookie-test.js` | cookie parsing (header, dev tools rows, JSON) |

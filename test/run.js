@@ -4,6 +4,9 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 
 const TESTS = [
+  ['settings', 'settings-test.js'],
+  ['update check', 'updates-test.js'],
+  ['backup', 'backup-test.js'],
   ['search', 'search-test.js'],
   ['maxroll extraction', 'extract-test.js'],
   ['cookies', 'cookie-test.js'],

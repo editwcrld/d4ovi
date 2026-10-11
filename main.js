@@ -22,13 +22,17 @@ const d2db = require('./lib/d2coredb');
 const place = require('./lib/place');
 const clicker = require('./lib/clicker');
 const features = require('./lib/features');
+const Settings = require('./lib/settings');
+const tray = require('./lib/tray');
+const updates = require('./lib/updates');
+const backup = require('./lib/backup');
+const VERSION = require('./package.json').version;   // app.getVersion() is Electron's when started from elsewhere
 // what this build has: MACROS leaves out the whole tab, the others each macro on its own
 const MACROS = {
   clickSpam: !!(features.MACROS && features.CLICK_SPAM),
-  loop: !!(features.MACROS && features.LOOP_SKILLS),
-  numlock: !!(features.MACROS && features.NUMLOCK),
+  lock: !!(features.MACROS && features.LOCK),
 };
-MACROS.any = MACROS.clickSpam || MACROS.loop || MACROS.numlock;
+MACROS.any = MACROS.clickSpam || MACROS.lock;
 const S = require('./renderer/search');          // same search logic the overlay uses
 const userscript = require('./lib/userscript');
 
@@ -47,58 +51,6 @@ const userscript = require('./lib/userscript');
   } catch (_) { /* stays in %APPDATA% */ }
 })();
 
-const DEFAULTS = {
-  d4Path: 'C:\\Program Files (x86)\\Diablo IV\\Diablo IV Launcher.exe',
-  d4WindowTitle: 'Diablo IV',
-  visibility: 'focused',                 // focused | running | always
-  orientation: 'vertical',               // vertical | horizontal
-  railWide: false,                       // show labels next to the rail icons
-  windowSize: 'medium',                  // small | medium | large – share of the screen
-  opacity: 1,
-  panelSize: null,                       // { w, h } in CSS pixels once the user resized it
-  textScale: 1,                          // 0.9 | 1 | 1.15 | 1.3 – on top of the screen based scaling
-  tradeUrl: 'https://diablo.trade/listings/items',
-  tradeOpenMode: 'internal',             // internal (app window, fills the field) | browser
-  maxrollUrl: 'https://maxroll.gg/d4/resources/boss-loot-table-cheat-sheet',
-  craftingUrl: 'https://maxroll.gg/d4/resources/crafting-cheat-sheet',
-  pressEnter: false,
-  wbWarnMin: 5,                          // minutes left before the world boss timer warns
-  wbBlink: true,
-  fadeOpacity: 0.35,                     // what the bar fades to when nothing is open
-  fadeAfterSec: 8,                       // seconds without input before it fades (0 = never)
-  idleShrink: true,                      // idle it also shrinks to timer/search/trade/quit
-  wbBright: true,                        // … but the timer keeps its full strength
-  msgBlink: true,                        // a new trade message blinks on its icon
-  clickGame: 'close',                    // a click into the game: close | keep (the open panel)
-  buildsNoFade: true,                    // … and do not fade while you play
-  coachSeen: false,                      // the one-time hint about closing and pinning
-  actDone: {},                           // activity guide steps ticked off, by guide
-  // macros – each one off until switched on (with a warning); left out of a build by lib/features.js
-  clickSpam: false,                      // rapid clicking while a thumb button is held
-  clickLeftBind: 'Mouse5',               // left click spam
-  clickRightBind: 'Mouse4',              // right click spam
-  clickCps: 15,                          // clicks per second
-  keyLoop: false,                        // loop skills: a toggle key presses the listed keys again and again
-  skillLoop: [],                         // … each key with its seconds between two presses: { key, sec }
-  keyLoopBind: 'F8',                     // switches it on and off
-  holdOn: false,                         // num-lock mode: a toggle key holds the listed keys / buttons down
-  holdKeys: [],                          // keys and Mouse1–Mouse5
-  holdBind: 'F9',                        // switches it on and off
-  macroChars: [],                        // per character: { name, skillLoop, holdKeys }
-  macroChar: 0,                          // the character in use
-  // (macroRev is no default: a settings file without it is one from before the macros moved)
-  hotkeySearch: 'Control+F',
-  hotkeyToggle: '',
-  hotkeyMap: '',
-  hotkeyFarm: 'Control+Shift+B',         // builds / farm list
-  hotkeyRev: 2,
-  favorites: [],
-  recent: [],
-  chatSeenAt: 0,                         // when the chat was last open (drives the red badge)
-  position: null,                        // old single place (migrated to posOpen)
-  posIdle: null,                         // where the shrunk pill sits
-  posOpen: null,                         // where the bar sits once it is awake
-};
 
 // Everything scales with the screen: on a large display the text, icons and spacing grow,
 // on 1920x1080 they stay at the base size. The user can nudge it further (text size setting).
@@ -124,7 +76,7 @@ function applyZoom() {
 const BAR_WIDTH = 300;                   // until the overlay reports its real width
 const BAR_HEIGHT = 52;
 
-let settings = { ...DEFAULTS };
+let settings = Settings.load({}).settings;
 let overlay = null;
 let lastState = { title: '', proc: '', pid: 0, running: false };
 let stopWatcher = null;
@@ -136,10 +88,12 @@ let barX = 0, barY = 0, curH = BAR_HEIGHT, curW = BAR_WIDTH, curBarW = BAR_WIDTH
 let capturing = false;                   // a hotkey is being recorded in the settings
 let isIdle = false;                      // the overlay reported "nothing open, nothing touched"
 let centreIdle = true;                   // no place dragged for the pill yet -> keep it centred
+let hiddenByHand = false;               // hidden from the tray – stays hidden until shown there again
 let placeLock = 0;                       // size reports that must not move the bar (just placed)
 
 const userFile = (n) => path.join(app.getPath('userData'), n);
 const send = (ch, payload) => { if (overlay && !overlay.isDestroyed()) overlay.webContents.send(ch, payload); };
+const sendAuthInfo = () => auth.status().then((s) => send('auth-info', s.loggedIn ? 'diablo.trade: signed in' : 'diablo.trade: not signed in'));
 
 // Diagnostics (console + <data>\overlay-log.txt). Past 1 MB the log starts over; the one
 // before stays as overlay-log.old.txt.
@@ -156,43 +110,11 @@ function dlog(...a) {
 }
 
 function loadSettings() {
-  try { settings = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(userFile('settings.json'), 'utf8')) }; }
-  catch (_) { settings = { ...DEFAULTS }; }
-  // rev 2: the builds hotkey got a default – an empty one from before is filled once, a chosen one stays
-  if ((settings.hotkeyRev || 1) < 2) {
-    if (!settings.hotkeyFarm) settings.hotkeyFarm = DEFAULTS.hotkeyFarm;
-    settings.hotkeyRev = 2;
-    saveSettingsFile();
-  }
-  // macro rev 1: the macros moved to their own tab and start switched off – each one is switched
-  // on again by hand, past the warning
-  if ((settings.macroRev || 0) < 1) {
-    settings.clickSpam = false;
-    settings.keyLoop = false;
-    settings.holdOn = false;
-    settings.macroRev = 1;
-    saveSettingsFile();
-  }
-  // macro rev 2: the key loop's fixed keys 1–4 became a list with seconds per key – the keys and
-  // seconds set before carry over
-  if (settings.macroRev < 2) {
-    const toList = (o) => {
-      const keys = String(o.keyLoopKeys == null ? '' : o.keyLoopKeys).toUpperCase().split('').filter((k) => /^[1-4Q]$/.test(k));
-      const secs = o.keyLoopSecs || {};
-      const own = (k) => (Number(secs[k]) > 0 ? Number(secs[k]) : Number(settings.keyLoopSec) || 1);
-      return [...new Set(keys)].map((k) => ({ key: k, sec: own(k) }));
-    };
-    // only keys someone actually set – the old default (all four, one second) becomes the new one
-    if (settings.keyLoopKeys != null && Object.keys(settings.keyLoopSecs || {}).length && toList(settings).length) settings.skillLoop = toList(settings);
-    if (Array.isArray(settings.macroChars)) {
-      settings.macroChars = settings.macroChars.filter((c) => c && typeof c === 'object').map((c) => ({
-        name: String(c.name || 'Character'), skillLoop: toList(c).length ? toList(c) : DEFAULTS.skillLoop, holdKeys: Array.isArray(c.holdKeys) ? c.holdKeys : [],
-      }));
-    }
-    delete settings.keyLoopKeys; delete settings.keyLoopSecs; delete settings.keyLoopSec;
-    settings.macroRev = 2;
-    saveSettingsFile();
-  }
+  let raw = {};
+  try { raw = JSON.parse(fs.readFileSync(userFile('settings.json'), 'utf8')); } catch (_) { /* first start */ }
+  const r = Settings.load(raw);
+  settings = r.settings;
+  if (r.changed) saveSettingsFile();
 }
 function saveSettingsFile() {
   try { fs.writeFileSync(userFile('settings.json'), JSON.stringify(settings, null, 2)); } catch (_) {}
@@ -213,16 +135,14 @@ function restartClicker() {
       send('click-spam', { on, button });
       dlog('click spam', on ? button + ' button, ' + Math.round(1000 / clicker.delayFor(settings.clickCps)) + '/s' : 'stopped');
     },
-    loop: (on) => { send('key-loop', on); dlog('loop skills', on ? 'on' : 'off'); },
-    hold: (on) => { send('hold-state', on); dlog('num-lock mode', on ? 'on' : 'off'); },
+    lock: (on) => { send('lock-state', { on, paused: false }); dlog('lock', on ? 'on' : 'off'); },
+    pause: (paused) => { send('lock-state', { on: true, paused }); dlog('lock', paused ? 'waits (left click)' : 'goes on'); },
   }, MACROS);
-  send('key-loop', false);                // a restarted helper starts switched off
-  send('hold-state', false);
+  send('lock-state', { on: false, paused: false });     // a restarted helper starts switched off
   dlog('Macros:', !MACROS.any ? 'not in this build' : p.usable
     ? (p.on ? clicker.label(settings.clickLeftBind) + ' = left, ' + clicker.label(settings.clickRightBind) + ' = right, '
       + (Number(settings.clickCps) || 15) + '/s' : 'no click spam')
-      + (p.vkLoop ? '; loop skills ' + settings.skillLoop.map((e) => e.key + ' every ' + e.sec + ' s').join(', ') + ' on ' + settings.keyLoopBind : '')
-      + (p.vkHold ? '; num-lock mode ' + settings.holdKeys.join('+') + ' on ' + settings.holdBind : '')
+      + (p.vkLock ? '; lock ' + settings.lockKeys.map((e) => e.key + (e.lock === false ? ' every ' + e.sec + ' s' : ' held')).join(', ') + ' on ' + settings.lockBind : '')
       + ', only while "' + p.title + '" is in front'
     : 'off');
   return p;
@@ -242,7 +162,8 @@ function onWindowState(st) {
   const show = settings.visibility === 'always' || d4Focused || oursFocused
     || (settings.visibility === 'running' && st.running);
   if (!overlay || overlay.isDestroyed()) return;
-  if (show) {
+  if (hiddenByHand) { if (overlay.isVisible()) overlay.hide(); }
+  else if (show) {
     hideTicks = 0;
     if (!overlay.isVisible()) overlay.showInactive();
   } else if (overlay.isVisible() && ++hideTicks >= 2) {   // debounce against flicker
@@ -265,14 +186,13 @@ function defaultPlace(idle) {
 }
 function checkCentre() { centreIdle = !onScreen(settings.posIdle); }
 function placeFor(idle) {
-  const p = idle ? settings.posIdle : (settings.posOpen || settings.position);
+  const p = idle ? settings.posIdle : settings.posOpen;
   return onScreen(p) ? { x: p.x, y: p.y } : defaultPlace(idle);
 }
 function rememberPlace() {
   const p = { x: barX, y: barY };
-  if (isIdle) settings.posIdle = p; else { settings.posOpen = p; settings.position = p; }
+  if (isIdle) settings.posIdle = p; else settings.posOpen = p;
 }
-function startPosition() { return placeFor(false); }
 
 /** Switches between the two states and moves the window to that state's place. */
 function setIdleState(on) {
@@ -288,6 +208,15 @@ function setIdleState(on) {
   saveSettingsFile();
 }
 
+/** Idle the bar is a flat pill, so it is placed like the horizontal one. */
+const flatBar = () => settings.orientation === 'horizontal' || (isIdle && settings.idleShrink !== false);
+/** Where a window of width w starts: centred under a flat bar, else from the bar – kept on screen. */
+function windowLeft(w, bw, wa, flat) {
+  return flat
+    ? Math.max(wa.x, Math.min(Math.round(barX + bw / 2 - w / 2), wa.x + wa.width - w))
+    : Math.max(wa.x, Math.min(barX, wa.x + wa.width - w));
+}
+
 // The bar keeps its place; only what opens grows. The two orientations behave differently:
 //   vertical   – the rail sits on the left, the panel opens to its right. The window simply
 //                starts at the bar and is clamped to the screen; the bar follows that clamp.
@@ -298,8 +227,7 @@ function applySize(barW, h, open, big) {
   if (!overlay || overlay.isDestroyed()) return;
   const wa = screen.getDisplayMatching({ x: barX, y: barY, width: curBarW, height: BAR_HEIGHT }).workArea;
   const z = applyZoom();
-  // idle the bar is a flat pill, so it is positioned like the horizontal one
-  const horizontal = settings.orientation === 'horizontal' || (isIdle && settings.idleShrink !== false);
+  const horizontal = flatBar();
   const f = { small: 0.85, medium: 1, large: 1.2 }[settings.windowSize] || 1;
   const panelW = Math.max(600, Math.min(Math.round(wa.width * (big ? 0.68 : 0.5) * f), big ? 1500 : 1200));
   const maxH = Math.max(380, Math.min(Math.round(wa.height * (big ? 0.8 : 0.62) * f), 1400));
@@ -319,13 +247,13 @@ function applySize(barW, h, open, big) {
   let x, y, offset = 0, up = false;
   if (horizontal) {
     barX = place.barLeft({ barX, bw, prevBw: curBarW, wa, idle: isIdle, centre: centreIdle, fixed: placeLock > 0 });
-    x = Math.max(wa.x, Math.min(Math.round(barX + bw / 2 - w / 2), wa.x + wa.width - w));
+    x = windowLeft(w, bw, wa, true);
     offset = barX - x;
     const below = wa.y + wa.height - (barY + BAR_HEIGHT);
     up = (hh - BAR_HEIGHT) > below && (barY - wa.y) > below;
     y = up ? barY + BAR_HEIGHT - hh : barY;
   } else {
-    x = Math.max(wa.x, Math.min(barX, wa.x + wa.width - w));
+    x = windowLeft(w, bw, wa, false);
     y = Math.max(wa.y, Math.min(barY, wa.y + wa.height - hh));
     barX = x; barY = y;                                                     // the bar follows the clamp
   }
@@ -343,7 +271,7 @@ function applySize(barW, h, open, big) {
 }
 
 function createOverlay() {
-  const pos = startPosition();
+  const pos = placeFor(false);
   barX = pos.x; barY = pos.y;
   overlay = new BrowserWindow({
     width: BAR_WIDTH, height: BAR_HEIGHT, x: pos.x, y: pos.y,
@@ -390,6 +318,10 @@ function registerHotkeys() {
   reg(settings.hotkeyToggle, () => { front(); send('toggle'); }, 'Show/hide');
   reg(settings.hotkeyMap, () => { front(); send('open-section', 'maptool'); }, 'Map tool');
   reg(settings.hotkeyFarm, () => { front(); send('open-section', 'farm'); }, 'Builds');
+  // the own timer starts (over) without taking the focus from the game
+  reg(settings.hotkeyTimer, () => send('timer-restart'), 'Own timer');
+  reg(settings.hotkeySkills, () => { front(); send('open-build-view', 'skills'); }, 'Build skills');
+  reg(settings.hotkeyParagon, () => { front(); send('open-build-view', 'paragon'); }, 'Build paragon');
   return errors;
 }
 
@@ -405,41 +337,40 @@ function dataInfo() {
   });
 }
 
-let busyLoot = false;
-async function refreshLoot(force) {
-  if (busyLoot) return loot;
-  const stale = !loot.fetchedAt || loot.version !== LOOT_VERSION || Date.now() - loot.fetchedAt > 24 * 3600 * 1000;
-  if (!force && !stale) return loot;
-  busyLoot = true;
-  send('notice', { text: 'Loading boss loot from maxroll.gg …', kind: 'info' });
+// The two maxroll cheat sheets (boss loot, crafting): read in a hidden window once a day, or
+// when the scraper changed (version), and cached in the data folder.
+const busy = new Set();
+async function refreshSheet(force, { key, cur, version, scrape, url, cache, loading, done, fail }) {
+  if (busy.has(key)) return cur;
+  const stale = !cur.fetchedAt || cur.version !== version || Date.now() - cur.fetchedAt > 24 * 3600 * 1000;
+  if (!force && !stale) return cur;
+  busy.add(key);
+  if (loading) send('notice', { text: loading, kind: 'info' });
   try {
-    loot = await scrapeMaxroll(BrowserWindow, settings.maxrollUrl);
-    fs.writeFileSync(userFile('maxroll-cache.json'), JSON.stringify(loot));
+    const got = await scrape(BrowserWindow, url);
+    fs.writeFileSync(userFile(cache), JSON.stringify(got));
+    done(got);
+    return got;
+  } catch (e) {
+    send('notice', { text: fail + ': ' + e.message, kind: 'error' });
+    return cur;
+  } finally { busy.delete(key); dataInfo(); }
+}
+const refreshLoot = (force) => refreshSheet(force, {
+  key: 'loot', cur: loot, version: LOOT_VERSION, scrape: scrapeMaxroll, url: settings.maxrollUrl, cache: 'maxroll-cache.json',
+  loading: 'Loading boss loot from maxroll.gg …', fail: 'Maxroll import failed',
+  done: (l) => {
+    loot = l;
     send('loot', loot);
     send('farm-ready');                     // the drop sources come from this sheet
     send('notice', { text: 'Boss loot updated (' + loot.sections.length + ' sections)', kind: 'ok' });
-  } catch (e) {
-    send('notice', { text: 'Maxroll import failed: ' + e.message, kind: 'error' });
-  } finally { busyLoot = false; dataInfo(); }
-  return loot;
-}
-
-let busyCraft = false;
-async function refreshCraft(force) {
-  if (busyCraft) return craft;
-  const stale = !craft.fetchedAt || craft.version !== CRAFT_VERSION || Date.now() - craft.fetchedAt > 24 * 3600 * 1000;
-  if (!force && !stale) return craft;
-  busyCraft = true;
-  try {
-    craft = await scrapeCrafting(BrowserWindow, settings.craftingUrl);
-    fs.writeFileSync(userFile('crafting-cache.json'), JSON.stringify(craft));
-    send('craft', craft);
-    dlog('Crafting loaded:', craft.tables.length, 'tables');
-  } catch (e) {
-    send('notice', { text: 'Crafting import failed: ' + e.message, kind: 'error' });
-  } finally { busyCraft = false; dataInfo(); }
-  return craft;
-}
+  },
+});
+const refreshCraft = (force) => refreshSheet(force, {
+  key: 'craft', cur: craft, version: CRAFT_VERSION, scrape: scrapeCrafting, url: settings.craftingUrl, cache: 'crafting-cache.json',
+  fail: 'Crafting import failed',
+  done: (c) => { craft = c; send('craft', craft); dlog('Crafting loaded:', craft.tables.length, 'tables'); },
+});
 
 async function refreshAll(force) {
   items.refresh(net, force)
@@ -463,9 +394,9 @@ async function refreshAll(force) {
 
 // ---------- IPC ----------
 ipcMain.handle('settings:get', () => settings);
-const CLICK_KEYS = ['clickSpam', 'clickLeftBind', 'clickRightBind', 'clickCps', 'keyLoop', 'skillLoop', 'keyLoopBind',
-  'holdOn', 'holdKeys', 'holdBind', 'd4WindowTitle', 'd4Path'];
-ipcMain.handle('app:features', () => ({ macros: MACROS.any, clickSpam: MACROS.clickSpam, loop: MACROS.loop, numlock: MACROS.numlock }));
+const CLICK_KEYS = ['clickSpam', 'clickLeftBind', 'clickRightBind', 'clickCps', 'lockOn', 'lockKeys', 'lockBind',
+  'd4WindowTitle', 'd4Path'];
+ipcMain.handle('app:features', () => ({ macros: MACROS.any, clickSpam: MACROS.clickSpam, lock: MACROS.lock }));
 ipcMain.handle('settings:save', (_e, patch) => {
   const before = JSON.stringify([settings.d4Path, settings.tradeUrl]);
   const clickBefore = JSON.stringify(CLICK_KEYS.map((k) => settings[k]));
@@ -593,10 +524,11 @@ ipcMain.handle('builds:open-source', (_e, url) => {
 });
 ipcMain.handle('builds:code', (_e, b) => { const c = builds.toCode(b); clipboard.writeText(c); return c; });
 // Text (a build code or JSON) -> builds added to the saved ones
-ipcMain.handle('builds:import-text', (_e, text) => {
+function importBuilds(text) {
   const got = builds.parseImport(text);
   return { added: got.length, data: got.length ? builds.save(builds.merge(builds.load(), got)) : builds.load() };
-});
+}
+ipcMain.handle('builds:import-text', (_e, text) => importBuilds(text));
 ipcMain.handle('builds:export', async () => {
   const r = await withDialog(() => dialog.showSaveDialog(overlay, {
     defaultPath: path.join(app.getPath('documents'), 'd4-builds.json'),
@@ -610,9 +542,8 @@ ipcMain.handle('builds:import-file', async () => {
   const r = await withDialog(() => dialog.showOpenDialog(overlay, { properties: ['openFile'], filters: [{ name: 'Builds', extensions: ['json', 'txt'] }] }));
   if (r.canceled || !r.filePaths[0]) return null;
   let text = '';
-  try { text = fs.readFileSync(r.filePaths[0], 'utf8'); } catch (_) { return { added: 0, data: builds.load() }; }
-  const got = builds.parseImport(text);
-  return { added: got.length, data: got.length ? builds.save(builds.merge(builds.load(), got)) : builds.load() };
+  try { text = fs.readFileSync(r.filePaths[0], 'utf8'); } catch (_) { /* unreadable: nothing added */ }
+  return importBuilds(text);
 });
 
 ipcMain.on('overlay:resize', (_e, barW, h, open, big) => applySize(barW, h, open, big));
@@ -642,15 +573,10 @@ ipcMain.on('overlay:resize-drag', (_e, phase, big) => {
   if (phase === 'end') { sizeDrag = null; saveSettingsFile(); return; }
   const z = curZoom || 1;
   const wa = screen.getDisplayMatching(b).workArea;
-  const horizontal = settings.orientation === 'horizontal' || (isIdle && settings.idleShrink !== false);
+  const flat = flatBar();
   const minW = Math.round(360 * z), minH = Math.round(220 * z);
   // where the right edge ends up for a width – the same placement as applySize
-  const rightOf = (w) => {
-    const x = horizontal
-      ? Math.max(wa.x, Math.min(Math.round(barX + curBarW / 2 - w / 2), wa.x + wa.width - w))
-      : Math.max(wa.x, Math.min(barX, wa.x + wa.width - w));
-    return x + w;
-  };
+  const rightOf = (w) => windowLeft(w, curBarW, wa, flat) + w;
   const right = p.x + sizeDrag.ox;
   let lo = minW, hi = wa.width;
   while (hi - lo > 1) { const m = (lo + hi) >> 1; if (rightOf(m) <= right) lo = m; else hi = m; }
@@ -676,7 +602,7 @@ ipcMain.on('overlay:opacity', (_e, v) => {
 });
 ipcMain.on('status:refresh', () => {
   dataInfo();
-  auth.status().then((st) => send('auth-info', st.loggedIn ? 'diablo.trade: signed in' : 'diablo.trade: not signed in'));
+  sendAuthInfo();
   send('chat-unread', lastUnread);
 });
 ipcMain.on('app:quit', () => app.quit());
@@ -705,6 +631,77 @@ ipcMain.handle('auth:import', async (_e, text) => {
   return { imported: n, status: await auth.status() };
 });
 ipcMain.handle('auth:logout', async () => { await auth.logout(); views.reload(); trade.reloadTimer(); return auth.status(); });
+
+// ---------- tray & updates ----------
+function setHiddenByHand(on) {
+  hiddenByHand = !!on;
+  dlog(on ? 'Hidden from the tray' : 'Shown from the tray');
+  if (!overlay || overlay.isDestroyed()) return;
+  if (on) overlay.hide();
+  else { overlay.showInactive(); if (lastState) onWindowState(lastState); }
+}
+function openFromTray(name) {
+  hiddenByHand = false;
+  if (!overlay || overlay.isDestroyed()) return;
+  overlay.show(); overlay.focus();
+  send('open-section', name);
+  tray.refresh();
+}
+let lastUpdate = null;
+/** Asks GitHub; on a newer version the overlay shows it (Settings › Data and a dot on Settings). */
+async function checkUpdates(byHand) {
+  lastUpdate = await updates.check(net, VERSION);
+  settings.updateCheckedAt = Date.now();
+  saveSettingsFile();
+  dlog('Update check:', lastUpdate.error ? 'failed – ' + lastUpdate.error : lastUpdate.newer ? lastUpdate.latest + ' available' : 'up to date');
+  send('update-info', lastUpdate);
+  if (byHand) {
+    send('notice', lastUpdate.error ? { text: 'Update check: ' + lastUpdate.error, kind: 'error' }
+      : lastUpdate.newer ? { text: 'Version ' + lastUpdate.latest + ' is out — Settings › Data has the link.', kind: 'ok' }
+        : { text: 'D4 Overlay ' + lastUpdate.current + ' is up to date.', kind: 'ok' });
+  }
+  return lastUpdate;
+}
+ipcMain.handle('updates:check', () => checkUpdates(false));
+ipcMain.handle('updates:last', () => lastUpdate);
+ipcMain.handle('app:version', () => VERSION);
+ipcMain.on('updates:open', () => {
+  const u = lastUpdate && lastUpdate.url;
+  shell.openExternal(/^https:\/\/github\.com\//.test(u || '') ? u : updates.PAGE);
+});
+
+// ---------- backup & notes export ----------
+function runBackup(byHand) {
+  try {
+    saveSettingsFile();                        // what is on screen goes along
+    const r = backup.run(app.getPath('userData'), settings.backupDir, { keep: 10 });
+    dlog('Backup:', r.dir, r.files.join(', '));
+    if (byHand) send('notice', { text: 'Backup saved — ' + r.files.length + ' files in ' + path.basename(r.dir), kind: 'ok' });
+    send('backup-done', Date.now());
+    return { ok: true, dir: r.dir, at: Date.now() };
+  } catch (e) {
+    dlog('Backup failed:', e.message);
+    send('notice', { text: 'Backup failed: ' + e.message, kind: 'error' });
+    return { ok: false, error: e.message };
+  }
+}
+ipcMain.handle('backup:pick', async () => {
+  const r = await withDialog(() => dialog.showOpenDialog(overlay, { title: 'Folder for the backups', properties: ['openDirectory', 'createDirectory'] }));
+  return r.canceled ? null : r.filePaths[0];
+});
+ipcMain.handle('backup:run', () => runBackup(true));
+ipcMain.handle('backup:last', () => backup.lastAt(settings.backupDir));
+ipcMain.on('backup:open', () => { if (settings.backupDir) shell.openPath(settings.backupDir); });
+// the notes as a text file (Markdown, so the checklist stays a checklist)
+ipcMain.handle('notes:save-file', async (_e, text, name) => {
+  const r = await withDialog(() => dialog.showSaveDialog(overlay, {
+    defaultPath: path.join(app.getPath('documents'), String(name || 'd4-notes').replace(/[\\/:*?"<>|]+/g, '-') + '.md'),
+    filters: [{ name: 'Notes', extensions: ['md', 'txt'] }],
+  }));
+  if (r.canceled || !r.filePath) return null;
+  fs.writeFileSync(r.filePath, String(text || ''));
+  return r.filePath;
+});
 
 // ---------- world boss timer & chat badge ----------
 // Prefer the unread counter from diablo.trade's own endpoint. If it does not report one,
@@ -759,12 +756,22 @@ else {
     trade.prepareSession();
     auth.watch(dlog, (names) => {
       send('notice', { text: 'Login saved (' + names.length + ' cookie' + (names.length === 1 ? '' : 's') + ') — kept after a restart.', kind: 'ok' });
-      auth.status().then((s) => send('auth-info', s.loggedIn ? 'diablo.trade: signed in' : 'diablo.trade: not signed in'));
+      sendAuthInfo();
     });
     auth.persistSession().then((n) => { if (n.length) dlog('Login made permanent at start:', n.join(', ')); });
-    auth.status().then((s) => send('auth-info', s.loggedIn ? 'diablo.trade: signed in' : 'diablo.trade: not signed in'));
+    sendAuthInfo();
 
     createOverlay();
+    tray.create({ hidden: () => hiddenByHand, setHidden: setHiddenByHand, open: openFromTray,
+      checkUpdates: () => checkUpdates(true), quit: () => app.quit() });
+    // the daily backup, at the start
+    if (settings.backupAuto && settings.backupDir && Date.now() - backup.lastAt(settings.backupDir) > 20 * 3600 * 1000) {
+      setTimeout(() => runBackup(false), 20000);
+    }
+    // once a day at most, a little after the start
+    if (settings.updateCheck !== false && Date.now() - (settings.updateCheckedAt || 0) > 20 * 3600 * 1000) {
+      setTimeout(() => checkUpdates(false), 15000);
+    }
     restartWatcher();
     restartClicker();
     registerHotkeys();
@@ -784,6 +791,7 @@ else {
     clicker.stop();
     if (stopWatcher) stopWatcher();
     trade.stopTimer();
+    tray.destroy();
     saveSettingsFile();
   });
   app.on('window-all-closed', () => app.quit());
