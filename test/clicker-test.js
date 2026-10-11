@@ -89,8 +89,14 @@ assert.ok(ls.includes('inGame = Active(title, proc)'), 'only while the game is i
 assert.ok(/repeatAt = now \+ 300/.test(ls) && /repeatAt = now \+ 33/.test(ls), 'a held key repeats like a real one');
 // a left click by hand or left click spam pauses it
 assert.ok(ls.includes('SetWindowsHookEx(14') && /\(s\.flags & 1\) == 0/.test(ls), 'a mouse hook tells a hand click from a sent one');
-assert.ok(/bool hand = handLeft \|\| \(spam && l\)/.test(ls), 'left click by hand or left click spam');
+assert.ok(/bool hand = handLeft \|\| map \|\| \(spam && l\)/.test(ls), 'left click by hand, the map, or left click spam');
 assert.ok(/< 250\)/.test(ls) && /locking && inGame && !paused/.test(ls), 'waits until let go, and a moment more');
+// the map: Tab opens and closes it, Esc closes it – lock waits while it is open
+assert.ok(ls.includes('SetWindowsHookEx(13') && /k\.vkCode == 0x09/.test(ls) && /mapOpen = !mapOpen/.test(ls), 'Tab toggles the map');
+assert.ok(/k\.vkCode == 0x1B && down\) mapOpen = false/.test(ls), 'Esc closes it');
+assert.ok(/!tabDown && active/.test(ls), 'a held Tab counts once, only in the game with lock on');
+assert.ok(/if \(mapOpen\) break;/.test(ls), 'the timed keys stop at once when the map opens');
+assert.ok(ls.includes('\\"map\\":true'), 'tells the overlay it waits for the map');
 assert.ok(ls.includes('"{\\"pause\\":true}"'), 'tells the overlay it waits');
 assert.strictEqual(c.plan({ ...lock, lockOn: false }, '').vkLock, 0, 'off switch');
 assert.strictEqual(c.plan({ ...lock, lockKeys: [] }, '').vkLock, 0, 'an empty list -> nothing');
@@ -101,7 +107,7 @@ const big = c.plan({ ...lock, clickSpam: true, d4WindowTitle: 'Diablo IV', lockK
 assert.ok(c.encoded(big).length < 30000, 'encoded helper fits the command line: ' + c.encoded(big).length);
 const plain = Buffer.from(c.encoded(big), 'base64').toString('utf16le');
 assert.ok(!/^\s*\/\//m.test(plain) && plain.includes('[Clicker]::Run(') && /^"@$/m.test(plain), 'comments gone, the here-string end still on its own line');
-console.log('ok  lock: held or timed per key, timed first in order, left click pauses, toggle, off switch');
+console.log('ok  lock: held or timed per key, timed first in order, left click and the map pause, toggle, off switch');
 
 // --- off unless switched on, and nothing at all when the build leaves the macros out
 const bare = { clickLeftBind: 'Mouse5', clickRightBind: 'Mouse4', lockKeys: [{ key: '1' }], lockBind: 'F9' };

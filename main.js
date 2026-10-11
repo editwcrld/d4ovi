@@ -136,7 +136,7 @@ function restartClicker() {
       dlog('click spam', on ? button + ' button, ' + Math.round(1000 / clicker.delayFor(settings.clickCps)) + '/s' : 'stopped');
     },
     lock: (on) => { send('lock-state', { on, paused: false }); dlog('lock', on ? 'on' : 'off'); },
-    pause: (paused) => { send('lock-state', { on: true, paused }); dlog('lock', paused ? 'waits (left click)' : 'goes on'); },
+    pause: (paused, map) => { send('lock-state', { on: true, paused, map }); dlog('lock', paused ? (map ? 'waits (map open)' : 'waits (left click)') : 'goes on'); },
   }, MACROS);
   send('lock-state', { on: false, paused: false });     // a restarted helper starts switched off
   dlog('Macros:', !MACROS.any ? 'not in this build' : p.usable
