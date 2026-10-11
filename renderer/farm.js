@@ -46,6 +46,10 @@ let imp = { open: false, value: '', busy: false, result: null, error: '', off: n
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   .replace(/[’']/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 const build = () => (data && data.builds.find((b) => b.id === data.active)) || null;
+/** The aspects in your codex: once you have one, it counts as done in every build. */
+const codex = () => (data && Array.isArray(data.codex) ? data.codex : []);
+/** What counts as done in a build: its own ticks, and every aspect in the codex. */
+const doneOf = (b) => new Set([].concat(b.done || [], codex()));
 const itemBy = (name) => cat && cat.items.find((x) => x.name === name);
 const aspectBy = (name) => cat && cat.aspects.find((x) => x.name === name);
 /**
@@ -198,7 +202,7 @@ function render(main, c) {
     const box = el('div', 'fview');
     wrap.appendChild(box);
     main.appendChild(wrap);
-    window.BuildCompare.render(box, b, { el, api, builds: data.builds, rerender: ctx.rerender, look: lookUp, choose: (id) => {
+    window.BuildCompare.render(box, b, { el, api, builds: data.builds, codex: codex(), rerender: ctx.rerender, look: lookUp, choose: (id) => {
       data.active = id; view = 'gear'; open = 'Helm'; pickOpen = false; routeAt = null; persist(); ctx.rerender();
     } });
     return;
@@ -245,7 +249,7 @@ function render(main, c) {
 /** What there is to farm in this build, and how much of it is ticked off. */
 function progress(b) {
   const all = entries(b);
-  const done = new Set(b.done || []);
+  const done = doneOf(b);
   const keys = [...all.items, ...all.aspects].map((e) => e.key).concat(extraStops(b).flatMap((st) => st.things.map((t) => t.doneKey)));
   return { total: keys.length, got: keys.filter((k) => done.has(k)).length };
 }
@@ -575,7 +579,7 @@ function slotInfo(b, key) {
   if (!s) return { key, s: null };
   const it = s.item ? variantOf(itemBy(s.item), s.base) : null;
   const keys = s.item ? [s.item] : (s.aspects || []);
-  const done = new Set(b.done || []);
+  const done = doneOf(b);
   let kind, src;
   if (s.item) {
     kind = rarityOf(it);
@@ -591,7 +595,12 @@ function slotInfo(b, key) {
 }
 function setGot(b, info, on) {
   const set = new Set(b.done || []);
-  info.keys.forEach((k) => (on ? set.add(k) : set.delete(k)));
+  if (info.s && !info.s.item) {
+    // an aspect goes into the codex – done in every build that uses it
+    const cx = new Set(codex());
+    info.keys.forEach((k) => { if (on) cx.add(k); else { cx.delete(k); set.delete(k); } });
+    data.codex = [...cx];
+  } else info.keys.forEach((k) => (on ? set.add(k) : set.delete(k)));
   b.done = [...set];
   touch();
 }
@@ -625,7 +634,10 @@ function openPicker(b, key) {
 function tick(el, b, info) {
   const ck = el('button', 'ck' + (info.got ? ' on' : ''));
   ck.innerHTML = CHECK;
-  ck.title = info.got ? 'Farmed – click to undo' : 'Got it';
+  const aspect = info.s && !info.s.item;
+  ck.title = aspect
+    ? (info.got ? 'In your codex – done in every build · click to undo' : 'Got it – into the codex, done in every build')
+    : (info.got ? 'Farmed – click to undo' : 'Got it');
   ck.setAttribute('aria-label', 'Farmed');
   ck.onclick = (e) => { e.stopPropagation(); setGot(b, info, !info.got); };
   return ck;
@@ -645,7 +657,7 @@ function clearBtn(el, b, key) {
  * sources (bosses first), the slots not picked yet come last.
  */
 function farmStops(b) {
-  thingGot.done = new Set(b.done || []);
+  thingGot.done = doneOf(b);
   const stops = new Map();
   const add = (key, title, place, order, thing) => {
     if (!stops.has(key)) stops.set(key, { key, title, place, order, things: [] });
@@ -680,7 +692,7 @@ const thingGot = (t) => (t.ext ? (t.doneKey && (thingGot.done || new Set()).has(
 /** One thing to farm: tick, name in its colour, the slot, its rolls – a click on the name picks another. */
 function thingRow(el, b, t, cls) {
   if (t.ext) {
-    const got = new Set(b.done || []).has(t.doneKey);
+    const got = doneOf(b).has(t.doneKey);
     const row = el('div', cls + ' ext' + (got ? ' got' : ''));
     const ck = el('button', 'ck' + (got ? ' on' : ''));
     ck.innerHTML = CHECK;

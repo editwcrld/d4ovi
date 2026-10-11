@@ -136,7 +136,7 @@ function restartClicker() {
       dlog('click spam', on ? button + ' button, ' + Math.round(1000 / clicker.delayFor(settings.clickCps)) + '/s' : 'stopped');
     },
     lock: (on) => { send('lock-state', { on, paused: false }); dlog('lock', on ? 'on' : 'off'); },
-    pause: (paused) => { send('lock-state', { on: true, paused }); dlog('lock', paused ? 'waits (left click / Space)' : 'goes on'); },
+    pause: (paused) => { send('lock-state', { on: true, paused }); dlog('lock', paused ? 'waits (left click)' : 'goes on'); },
   }, MACROS);
   send('lock-state', { on: false, paused: false });     // a restarted helper starts switched off
   dlog('Macros:', !MACROS.any ? 'not in this build' : p.usable
@@ -490,7 +490,14 @@ ipcMain.handle('d4:pick', async () => {
   const r = await withDialog(() => dialog.showOpenDialog(overlay, { properties: ['openFile'], filters: [{ name: 'Programs', extensions: ['exe'] }] }));
   return r.canceled ? null : r.filePaths[0];
 });
-ipcMain.handle('d4:launch', () => shell.openPath(settings.d4Path));
+/** Starts the game (or its launcher) – shell.openPath answers with an error text, empty when it worked. */
+async function launchD4() {
+  const err = await shell.openPath(settings.d4Path || '');
+  dlog('Start Diablo IV:', settings.d4Path, err ? '– ' + err : 'ok');
+  if (err) send('notice', { text: 'Diablo IV did not start: ' + err + ' — check the path in Settings › Data', kind: 'error' });
+  return err;
+}
+ipcMain.handle('d4:launch', () => launchD4());
 ipcMain.handle('userscript:copy', () => { clipboard.writeText(userscript); return true; });
 ipcMain.on('clipboard:write', (_e, t) => clipboard.writeText(String(t || '')));
 ipcMain.on('data:open-dir', () => shell.openPath(app.getPath('userData')));
@@ -762,7 +769,7 @@ else {
     sendAuthInfo();
 
     createOverlay();
-    tray.create({ hidden: () => hiddenByHand, setHidden: setHiddenByHand, open: openFromTray,
+    tray.create({ hidden: () => hiddenByHand, setHidden: setHiddenByHand, open: openFromTray, launch: launchD4,
       checkUpdates: () => checkUpdates(true), quit: () => app.quit() });
     // the daily backup, at the start
     if (settings.backupAuto && settings.backupDir && Date.now() - backup.lastAt(settings.backupDir) > 20 * 3600 * 1000) {

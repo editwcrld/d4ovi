@@ -1240,7 +1240,7 @@ function setMacros(b) {
   opt(ch.body, 'Characters', chars.length + ' saved', [btn('+ New', () => newChar()), del]);
 
   if (features.lock) {
-    const lk = macroCard(b, 'lockOn', 'Lock', 'Press the toggle key in the game: every key is held down (lock) or pressed again after its time — until you press it again. A left click or Space by hand (evade, teleport) or left click spam pauses it at once, until you let go.', 'lockBind');
+    const lk = macroCard(b, 'lockOn', 'Lock', 'Press the toggle key in the game: every key is held down (lock) or pressed again after its time — until you press it again. A left click by hand or left click spam pauses it until you let go.', 'lockBind');
     riskSwitch(lk.body, 'lockOn', 'Lock', 'Off means the toggle key does nothing');
     opt(lk.body, 'Toggle key', 'Switches it on and off', bindField('lockBind'));
     const keys = lockList();
@@ -1869,7 +1869,7 @@ async function init() {
     const t = $('lockTag');
     t.hidden = !on;
     t.classList.toggle('paused', !!paused);
-    t.title = paused ? 'Lock waits — goes on when you let go of the left button or Space' : 'Lock running — the toggle key stops it';
+    t.title = paused ? 'Lock waits — goes on when you let go of the left button' : 'Lock running — the toggle key stops it';
     t.firstChild.textContent = paused ? 'Wait' : 'Lock';
     t.lastChild.textContent = lockKeysOn() || '–';
   });

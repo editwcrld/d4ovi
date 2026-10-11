@@ -70,7 +70,7 @@ const glyphKeys = (b) => ((b.paragon && b.paragon.boards) || []).map((x) => x.gl
  * @returns {{slots: Array, same: number, changed: number, skills: object, charms: object,
  *            boards: object, glyphs: object, need: string[], have: string[], sockets: object}}
  */
-function diff(a, b) {
+function diff(a, b, owned) {
   const slots = [];
   SLOT_KEYS.forEach((key) => {
     const sa = a.slots && a.slots[key], sb = b.slots && b.slots[key];
@@ -85,7 +85,7 @@ function diff(a, b) {
   });
   const skills = split(((a.skills && a.skills.bar) || []).map((s) => s.name), ((b.skills && b.skills.bar) || []).map((s) => s.name));
   // what the other build needs that is neither ticked there nor already ticked in this one
-  const done = new Set([].concat(a.done || [], b.done || []));
+  const done = new Set([].concat(a.done || [], b.done || [], owned || []));   // owned: the aspects in the codex
   const keysB = tickKeys(b);
   return {
     slots,
@@ -118,7 +118,7 @@ const glyphName = (k) => (names && names.glyphs && names.glyphs[k] && names.glyp
 /**
  * @param {HTMLElement} box
  * @param {object} a       the open build
- * @param {object} ctx     { el, builds, rerender(), choose(id), look(name) -> {rarity, where}, api }
+ * @param {object} ctx     { el, builds, codex, rerender(), choose(id), look(name) -> {rarity, where}, api }
  */
 function render(box, a, ctx) {
   const el = ctx.el;
@@ -131,7 +131,7 @@ function render(box, a, ctx) {
   }
   if (forId !== a.id || !others.some((x) => x.id === withId)) { forId = a.id; withId = partner(ctx.builds, a).id; open = {}; }
   const b = others.find((x) => x.id === withId);
-  const d = diff(a, b);
+  const d = diff(a, b, ctx.codex);
   wantNames(a, b, ctx);
 
   // ---- from this build to that one

@@ -156,3 +156,16 @@ fs.writeFileSync(tmp, '{ broken');
 assert.strictEqual(builds.load().builds.length, 1, 'a damaged file does not break the overlay');
 fs.unlinkSync(tmp);
 console.log('ok  damaged builds.json');
+
+// the codex: aspects owned once count in every build
+const two = [
+  { id: 'aaaa1', name: 'One', slots: { Amulet: { aspects: ['Aspect of A'] }, Helm: { item: 'Harlequin Crest' } }, done: ['Aspect of A', 'Harlequin Crest'] },
+  { id: 'aaaa2', name: 'Two', slots: { Gloves: { aspects: ['Aspect of B'] } }, done: [] },
+];
+let cx = builds.clean({ active: 'aaaa1', builds: two });
+assert.deepStrictEqual(cx.codex, ['Aspect of A'], 'a file from before: ticked aspects go into the codex, items do not');
+cx = builds.clean({ active: 'aaaa1', builds: two, codex: ['Aspect of B', 'Aspect of B', '', 7] });
+assert.deepStrictEqual(cx.codex, ['Aspect of B', '7'], 'a codex of its own is kept, cleaned');
+assert.deepStrictEqual(builds.clean({ active: 'aaaa1', builds: two, codex: [] }).codex, [], 'emptied on purpose: stays empty');
+assert.deepStrictEqual(builds.empty().codex, []);
+console.log('ok  codex: aspects shared by every build');

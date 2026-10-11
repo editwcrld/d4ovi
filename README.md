@@ -108,7 +108,8 @@ it. To restore, copy the files back into the data folder while the overlay is cl
 
 ## Tray and updates
 
-The icon in the Windows tray shows or hides the overlay (a click, or the menu), opens Search,
+The icon in the Windows tray (its menu starts with *D4ovi*) shows or hides the overlay (a click,
+or the menu), starts Diablo IV (the path from *Settings → Data → Advanced*), opens Search,
 Builds, Notes or Settings and quits. Hidden from the tray, the overlay stays hidden until it is
 shown there again.
 
@@ -162,14 +163,13 @@ switch it on again. Otherwise it is one or the other:
 few frames, so a slow frame cannot swallow it. Several timed keys due at once go out top to bottom; drag a row by its
 grip to change the order. The row says *timed · 1.*, *timed · 2.* …
 
-**Left click and Space pause it:** the moment you press the left mouse button or Space yourself
-(evade, teleport), or left click spam runs, lock lets go of everything and waits — a timed key
-in progress is broken off too; a quarter second after you let go it carries on. The overlay
-tells your own input from the input it sends (low level mouse and keyboard hooks see the flag
-Windows puts on sent input), so a locked Mouse 1 or Space does not pause itself.
+**Left click pauses it:** while you hold the left mouse button yourself, or left click spam runs,
+lock lets go of everything and waits; a quarter second after you let go it carries on. The
+overlay tells your own clicks from the ones it sends (a low level mouse hook sees the flag
+Windows puts on sent input), so a locked Mouse 1 does not pause itself.
 
 While it runs, a green **Lock** tag sits next to the world boss timer; it turns amber and reads
-**Wait** while a left click or Space pauses it.
+**Wait** while a left click pauses it.
 
 ### Per character
 
@@ -338,6 +338,13 @@ Horadric Cube". Aspects are unlocked by salvaging a legendary that carries them 
 them, by completing a named dungeon. Which slots an aspect fits and which dungeon unlocks it is
 only in its tooltip; the overlay reads those once in the background (d4guides allows about 120
 requests a minute, so it takes ~5 minutes on the very first start) and keeps them.
+
+### The codex: aspects count in every build
+
+An aspect you tick goes into your **codex** — once you have it, it is done in every build that
+uses it (as in the game, where an aspect in the codex is there for every gear piece). Untick it
+in any build and it is gone from the codex again. Uniques, charms, gems and runes stay ticks of
+their own build. A `builds.json` from before takes every aspect ticked anywhere into the codex.
 
 ## Map tool
 

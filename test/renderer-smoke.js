@@ -1104,6 +1104,24 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   w.FarmView.setView('gear');
   console.log('ok  hotkeys to skills / paragon');
 
+  // the codex: an aspect ticked in one build is done in every build that uses it
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.FarmView.adopt({ active: 'cx1', codex: [], builds: [
+    { id: 'cx1', name: 'Sorc A', cls: 'Sorcerer', slots: { Amulet: { aspects: ['Aspect of Armageddon'] } }, done: [] },
+    { id: 'cx2', name: 'Sorc B', cls: 'Sorcerer', slots: { Gloves: { aspects: ['Aspect of Armageddon'] } }, done: [] },
+  ] });
+  rail('farm').click(); await sleep(80);
+  const ck = w.document.querySelector('#main .ck');
+  assert.ok(ck && /codex/.test(ck.title), 'an aspect tick says it goes into the codex');
+  ck.click(); await sleep(60);
+  assert.strictEqual(JSON.stringify(w.FarmView._state().data.codex), '["Aspect of Armageddon"]', 'ticked: into the codex');
+  assert.strictEqual(w.FarmView._state().data.builds[0].done.length, 0, 'not as a tick of this build alone');
+  w.FarmView._state().data.active = 'cx2';
+  const other = await w.FarmView.summary(w.d4api);
+  assert.ok(other.name === 'Sorc B' && other.missing === 0, 'the other build has it too');
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  console.log('ok  codex: an aspect counts in every build');
+
   assert.strictEqual(errors.length, 0, 'no runtime errors: ' + errors.join(' | '));
   console.log('ok  no runtime errors · api used: ' + [...new Set(calls)].join(', '));
   process.exit(0);
