@@ -949,7 +949,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   await setOnly();
   assert.ok(settings.pillTimersOnly === true && $('app').classList.contains('timersonly') && $('app').classList.contains('idle'), 'pill: timers only');
   const css = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'style.css'), 'utf8');
-  assert.ok(css.includes('#app.idle.shrink.timersonly #rail>.ri:not([data-section="settings"]){display:none}'), 'timers only: the settings button stays');
+  assert.ok(css.includes('#app.idle.shrink.timersonly #rail>.ri:not([data-section="settings"]):not(#btnQuit){display:none}'), 'timers only: settings and quit stay');
   await setOnly();
   assert.ok(settings.pillTimersOnly === false && !$('app').classList.contains('timersonly'), 'icons back');
   // hovering only takes the fade off – the pill keeps its shape and place so it can be dragged

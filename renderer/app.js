@@ -1169,7 +1169,7 @@ function setAppearance(root) {
   b = sect(root, 'Pill').body;
   const only = opt(b, 'Show only timers', settings.idleShrink === false
     ? 'Needs “Shrink to the small pill” (Behaviour › Bar)'
-    : 'The small pill shows the timers and the settings button, nothing else — a click on the world boss or Helltide opens the panel',
+    : 'The small pill shows the timers, settings and ✕ (quit), nothing else — a click on the world boss or Helltide opens the panel',
     sw(settings.pillTimersOnly === true, (v) => save({ pillTimersOnly: v }).then(applyLayout)));
   only.classList.toggle('off', settings.idleShrink === false);
   b = sect(root, 'Size').body;
@@ -1240,7 +1240,7 @@ function setMacros(b) {
   opt(ch.body, 'Characters', chars.length + ' saved', [btn('+ New', () => newChar()), del]);
 
   if (features.lock) {
-    const lk = macroCard(b, 'lockOn', 'Lock', 'Press the toggle key in the game: every key is held down (lock) or pressed again after its time — until you press it again. A left click by hand or left click spam pauses it until you let go. The map (Tab) pauses it until Tab or Esc closes it.', 'lockBind');
+    const lk = macroCard(b, 'lockOn', 'Lock', 'Press the toggle key in the game: every key is held down (lock) or pressed again after its time — until you press it again. A left click by hand or left click spam pauses it until you let go.', 'lockBind');
     riskSwitch(lk.body, 'lockOn', 'Lock', 'Off means the toggle key does nothing');
     opt(lk.body, 'Toggle key', 'Switches it on and off', bindField('lockBind'));
     const keys = lockList();
@@ -1865,13 +1865,12 @@ async function init() {
   api.onTimerRestart(() => { if (settings.ctTimer !== false) startCt(true); });
   api.onUpdateInfo(onUpdate);
   api.onBackupDone((t) => { backupAt = Number(t) || Date.now(); if (section === 'settings') render(); });
-  api.onLock(({ on, paused, map }) => {
+  api.onLock(({ on, paused }) => {
     const t = $('lockTag');
     t.hidden = !on;
     t.classList.toggle('paused', !!paused);
-    t.title = !paused ? 'Lock running — the toggle key stops it'
-      : map ? 'Lock waits — the map is open, Tab or Esc closes it' : 'Lock waits — goes on when you let go of the left button';
-    t.firstChild.textContent = !paused ? 'Lock' : map ? 'Map' : 'Wait';
+    t.title = paused ? 'Lock waits — goes on when you let go of the left button' : 'Lock running — the toggle key stops it';
+    t.firstChild.textContent = paused ? 'Wait' : 'Lock';
     t.lastChild.textContent = lockKeysOn() || '–';
   });
   api.onChatUnread((n) => {

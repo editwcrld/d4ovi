@@ -80,8 +80,8 @@ timers: how many items, aspects, charms and gems of the active build are not tic
 
 Everything about the timers is in *Settings → Behaviour → Timers*: each one can be switched off
 on its own (*World boss timer*, *Helltide timer*, *Own timer*). *Settings → Appearance → Pill →
-Show only timers* (the very first switch there) leaves just the handle, the timers and the
-settings button (and the Lock tag while it runs) in the pill — a click on the world boss or
+Show only timers* (the very first switch there) leaves just the handle, the timers, the
+settings button and ✕ (quit) (and the Lock tag while it runs) in the pill — a click on the world boss or
 Helltide opens the panel.
 
 Alerts punch through the fade and blink **on their own element only**: the timer when the world
@@ -168,12 +168,8 @@ lock lets go of everything and waits; a quarter second after you let go it carri
 overlay tells your own clicks from the ones it sends (a low level mouse hook sees the flag
 Windows puts on sent input), so a locked Mouse 1 does not pause itself.
 
-**The map pauses it:** Tab opens the map — lock waits until Tab (or Esc) closes it again, however
-long you look. The tag in the bar reads **Map** meanwhile. Pressing lock's toggle key starts it
-fresh, with the map counted as closed.
-
 While it runs, a green **Lock** tag sits next to the world boss timer; it turns amber and reads
-**Wait** while a left click pauses it, **Map** while the map is open.
+**Wait** while a left click pauses it.
 
 ### Per character
 
