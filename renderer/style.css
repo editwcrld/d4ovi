@@ -1033,3 +1033,7 @@ svg.para.drag g.board, svg.tree.drag .sk, svg.tree.drag .md{cursor:grabbing}
 #noteAdd{width:100%;max-width:none}
 .nclr{align-self:flex-start}
 .ntext{width:100%;min-height:160px;resize:vertical;font:15px/1.5 var(--ui);user-select:text}
+
+/* the own timer's time: hh:mm:ss, red for a moment when it is no time */
+input.clock{width:110px;text-align:center;font-variant-numeric:tabular-nums}
+input.clock.bad{border-color:var(--red);color:var(--red-soft)}

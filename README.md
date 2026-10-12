@@ -62,8 +62,9 @@ still has) and red for its last 3 minutes, grey while there is none (when the ne
 It needs no data source — a Helltide starts on every full hour and runs 55 minutes, then 5
 minutes pass. It never blinks.
 
-Then **your own timer**. Set its name (*Timer* by default) and what it counts down (5 minutes by
-default, 1–60) in the settings. A click starts it, another click starts it over, a right click
+Then **your own timer**. Set its name (*Timer* by default) and its time as `hh:mm:ss` (5:00 by
+default, up to 99:59:59 — `45:00`, `1:30:00` or plain seconds like `90`) in the settings, and
+whether it counts **down** from that time or **up** from 0:00 to it. A click starts it, another click starts it over, a right click
 clears it; for its last 30 seconds it turns red and blinks, at 0 it turns green and says
 **ready**. Clicking it never opens the panel. Handy for a boss without a schedule — the Fields
 of Hatred boss is back about five minutes after it died.

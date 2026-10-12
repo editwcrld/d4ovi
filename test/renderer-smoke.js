@@ -934,6 +934,38 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(settings.ctName === 'Alzuuda' && ct.querySelector('b').textContent.startsWith('Alzu'), 'the timer takes its name');
   nm.value = ''; nm.dispatchEvent(new w.Event('change')); await sleep(30);
   assert.ok(ct.querySelector('b').textContent.startsWith('Time'), 'no name: "Timer"');
+  // its time as hh:mm:ss – anything else is put back
+  const tin = () => w.document.getElementById('ctTimeIn');
+  assert.strictEqual(tin().value, '05:00', 'the time as a clock');
+  tin().value = '1:30:00'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.ok(settings.ctSecs === 5400 && $('ctTime').textContent === '1:30:00', 'hh:mm:ss is taken, the pill shows it');
+  tin().value = 'abc'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.ok(settings.ctSecs === 5400 && tin().value === '1:30:00', 'no time: the old one comes back');
+  tin().value = '100:00:00'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.strictEqual(settings.ctSecs, 5400, 'past 99:59:59: refused');
+  tin().value = '90'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.ok(settings.ctSecs === 90 && $('ctTime').textContent === '01:30', 'plain seconds work too');
+  // counting up: from 0:00 to its time, red for the last 30 seconds, ready at the end
+  [...w.document.querySelectorAll('.opt')].find((o) => o.querySelector('.txt b').textContent === 'Counting')
+    .querySelectorAll('.seg button')[1].click(); await sleep(30);
+  assert.ok(settings.ctUp === true && $('ctTime').textContent === '00:00', 'counting up starts at 0:00');
+  const upNow = Date.now;
+  ct.click(); await sleep(20);
+  w.Date.now = Date.now = () => upNow() + 20000;
+  await sleep(1100);
+  assert.ok(/^00:(19|20|21)$/.test($('ctTime').textContent) && !ct.classList.contains('soon'), 'counts up: 20 s in, not red yet');
+  w.Date.now = Date.now = () => upNow() + 65000;
+  await sleep(1100);
+  assert.ok(/^01:0[4-9]$/.test($('ctTime').textContent) && ct.classList.contains('soon') && ct.classList.contains('blink'), 'the last 30 s before its time: red and blinking: ' + $('ctTime').textContent + ' ' + ct.className);
+  w.Date.now = Date.now = () => upNow() + 95000;
+  await sleep(1100);
+  assert.ok(ct.classList.contains('ready') && $('ctTime').textContent === 'ready', 'at its time: ready');
+  w.Date.now = Date.now = upNow;
+  ct.dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true })); await sleep(20);
+  [...w.document.querySelectorAll('.opt')].find((o) => o.querySelector('.txt b').textContent === 'Counting')
+    .querySelectorAll('.seg button')[0].click(); await sleep(30);
+  tin().value = '5:00'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.ok(settings.ctUp === false && settings.ctSecs === 300, 'back to 5:00, counting down');
   w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
   // the pill with the timers only
   assert.ok(!$('app').classList.contains('timersonly'), 'icons in the pill by default');

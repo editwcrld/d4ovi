@@ -23,7 +23,10 @@ assert.deepStrictEqual(DEFAULTS.recent, [], 'defaults unchanged');
 
 // the Fields of Hatred timers became one timer of your own
 r = load({ macroRev: 3, fohTimers: false, fohMin: 7 });
-assert.ok(r.changed && r.settings.ctTimer === false && r.settings.ctMin === 7, 'switch and minutes carry over');
+assert.ok(r.changed && r.settings.ctTimer === false && r.settings.ctSecs === 420, 'switch and minutes carry over');
+r = load({ macroRev: 3, ctMin: 12 });
+assert.ok(r.changed && r.settings.ctSecs === 720 && !('ctMin' in r.settings), 'the slider\'s minutes become seconds');
+assert.ok(load({}).settings.ctSecs === 300 && load({}).settings.ctUp === false, '5:00, counting down by default');
 assert.ok(!('fohTimers' in r.settings) && !('fohMin' in r.settings), 'old keys gone');
 console.log('ok  Fields of Hatred -> own timer');
 

@@ -158,15 +158,28 @@ function renderHt(wide) {
 }
 
 // ---- your own timer: a click starts it (again), a right click clears it; red and blinking
-// for the last 30 seconds, "ready" at 0
-const CT_WARN = 30;
+// for the last 30 seconds, "ready" at the end. It counts down from its time – or, counting up,
+// from 0:00 to its time.
+const CT_WARN = 30, CT_MAX = 99 * 3600 + 59 * 60 + 59;
 let ctEnd = 0;                                       // when it runs out (0 = not counting)
-const ctSecs = () => Math.round(60 * Math.max(1, Math.min(60, Number(settings && settings.ctMin) || 5)));
+const ctSecs = () => Math.max(1, Math.min(CT_MAX, Math.round(Number(settings && settings.ctSecs) || 300)));
+const ctUp = () => !!(settings && settings.ctUp);
 const ctName = () => String((settings && settings.ctName) || '').trim() || 'Timer';
+/** 5:00, 45:10, 1:30:00 – hours only when there are any. */
+const fmtClock = (s) => (s >= 3600 ? Math.floor(s / 3600) + ':' + pad2((s % 3600) / 60) : pad2(s / 60)) + ':' + pad2(s % 60);
+/** "1:30:00", "5:00", "90" (seconds), "1:5" -> seconds; null when it is no time. */
+function parseClock(text) {
+  const parts = String(text || '').trim().split(':');
+  if (!parts.length || parts.length > 3 || parts.some((p) => !/^\d{1,3}$/.test(p.trim()))) return null;
+  const n = parts.map(Number);
+  const secs = n.reduce((acc, v) => acc * 60 + v, 0);
+  return secs >= 1 && secs <= CT_MAX ? secs : null;
+}
 function renderCt(wide) {
   const box = $('ct');
   box.hidden = settings && settings.ctTimer === false;
   if (box.hidden) return;
+  const total = ctSecs(), up = ctUp();
   const left = ctEnd ? Math.ceil((ctEnd - Date.now()) / 1000) : null;
   const state = left == null ? 'idle' : left > 0 ? 'run' : 'ready';
   box.classList.toggle('idle', state === 'idle');
@@ -175,9 +188,11 @@ function renderCt(wide) {
   box.classList.toggle('soon', state === 'run' && left <= CT_WARN);
   box.classList.toggle('blink', state === 'run' && left <= CT_WARN);
   box.querySelector('b').textContent = wide ? ctName() : ctName().slice(0, 5);
-  $('ctTime').textContent = state === 'run' ? fmtMs(left) : state === 'ready' ? 'ready' : fmtMs(ctSecs());
-  box.title = ctName() + ' — ' + (state === 'run' ? 'runs out in ' + fmtMs(left) : state === 'ready' ? 'run out' : 'not running')
-    + '\nClick: start ' + fmtMs(ctSecs()) + ' (again) · right click: clear';
+  const shown = state === 'run' ? (up ? total - left : left) : up ? 0 : total;
+  $('ctTime').textContent = state === 'ready' ? 'ready' : fmtClock(shown);
+  box.title = ctName() + ' — ' + (state === 'run' ? (up ? fmtClock(total - left) + ' of ' + fmtClock(total) + ', ' : '') + 'done in ' + fmtClock(left)
+    : state === 'ready' ? 'done' : 'not running')
+    + '\nClick: start ' + (up ? 'counting up to ' : '') + fmtClock(total) + ' (again) · right click: clear';
 }
 // ---- what the active build still needs: switched on in the settings; a click opens the build
 async function updateMissing() {
@@ -1154,9 +1169,20 @@ function setBehaviour(root) {
   name.type = 'text'; name.id = 'ctName'; name.value = ctName(); name.maxLength = 16; name.spellcheck = false;
   name.onchange = () => save({ ctName: name.value.trim() }).then(renderTimers);
   const cn = opt(b, 'Its name', 'Shown above the time', name);
-  const cm = opt(b, 'It counts down', 'What a click on it starts',
-    slider(1, 60, ctSecs() / 60, ' min', (v) => save({ ctMin: v }).then(renderTimers)));
-  [cn, cm].forEach((o) => o.classList.toggle('off', settings.ctTimer === false));
+  const time = el('input');
+  time.type = 'text'; time.id = 'ctTimeIn'; time.className = 'clock'; time.value = fmtClock(ctSecs());
+  time.maxLength = 9; time.spellcheck = false; time.placeholder = 'hh:mm:ss';
+  time.title = 'hh:mm:ss — e.g. 5:00, 45:00 or 1:30:00';
+  time.onchange = () => {
+    const v = parseClock(time.value);
+    if (v == null) { time.value = fmtClock(ctSecs()); time.classList.add('bad'); setTimeout(() => time.classList.remove('bad'), 900); return; }
+    save({ ctSecs: v }).then(renderTimers);
+  };
+  time.onkeydown = (e) => { if (e.key === 'Enter') time.blur(); };
+  const cm = opt(b, 'Its time', 'hh:mm:ss, up to 99:59:59 — what a click on it starts', time);
+  const cu = opt(b, 'Counting', 'Down from its time, or up from 0:00 to its time',
+    seg([['down', 'Down'], ['up', 'Up']], ctUp() ? 'up' : 'down', (v) => save({ ctUp: v === 'up' }).then(renderTimers)));
+  [cn, cm, cu].forEach((o) => o.classList.toggle('off', settings.ctTimer === false));
   opt(b, 'Timers always bright', 'They ignore the pill fade',
     sw(settings.wbBright !== false, (v) => save({ wbBright: v }).then(applyLayout)));
   b = sect(root, 'Messages').body;
