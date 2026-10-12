@@ -19,6 +19,8 @@ const maxbuild = require('./lib/maxbuild');
 const buildimport = require('./lib/buildimport');
 const zhdict = require('./lib/zhdict');
 const d2db = require('./lib/d2coredb');
+const builder = require('./lib/builder');
+const builderipc = require('./lib/builderipc');
 const place = require('./lib/place');
 const clicker = require('./lib/clicker');
 const features = require('./lib/features');
@@ -543,6 +545,13 @@ function importBuilds(text) {
   return { added: got.length, data: got.length ? builds.save(builds.merge(builds.load(), got)) : builds.load() };
 }
 ipcMain.handle('builds:import-text', (_e, text) => importBuilds(text));
+
+// ---------- builder: pick a class and a skill, get a build – lib/builder.js, lib/builderipc.js ----------
+const builderApi = builderipc.create({ net, log: (...a) => dlog(...a), catalog: () => farm.catalog(loot, craft), importBuilds });
+ipcMain.handle('builder:catalog', () => builderApi.catalog());
+ipcMain.handle('builder:plan', (_e, cls, key, opts) => builderApi.plan(String(cls || ''), String(key || ''), opts || {}));
+ipcMain.handle('builder:proven', (_e, cls, key) => builderApi.proven(String(cls || ''), String(key || '')));
+ipcMain.handle('builder:save', (_e, cls, key, picks) => builderApi.save(String(cls || ''), String(key || ''), picks || {}));
 ipcMain.handle('builds:export', async () => {
   const r = await withDialog(() => dialog.showSaveDialog(overlay, {
     defaultPath: path.join(app.getPath('documents'), 'd4-builds.json'),
@@ -755,6 +764,7 @@ else {
     maxbuild.configure({ namesFile: userFile('maxroll-names.json') });
     zhdict.configure({ file: userFile('zh-dict.json') });
     d2db.configure({ file: userFile('d2core-db.json') });
+    builder.configure({ file: userFile('builder-db.json') });
 
     views.setLogger(dlog);
     views.setOnEscape(() => send('escape'));

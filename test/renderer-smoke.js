@@ -66,6 +66,9 @@ const farmCat = {
   ],
 };
 let buildsData = { active: 'b1', builds: [{ id: 'b1', name: 'My build', cls: 'All', slots: {}, done: [] }] };
+// the builder: a real Rain of Arrows plan and its proven builds, made by lib/builder.js (test/fixtures)
+const BF = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'builder.json'), 'utf8'));
+let builderSaved = null;
 let savedBuilds = null;
 let importNo = 0;
 
@@ -131,6 +134,14 @@ w.d4api = new Proxy({}, { get: (_, k) => {
       nodes: { A: { name: 'Generic_Normal_Dex', r: 0, d: '+5 Dexterity', t: '' }, S: { name: 'Glyph Socket', r: 0, d: '', t: 'socket' } },
       boards: { Paragon_Rogue_00: { name: 'Start', rows: [',,,', ',A,A,S', ',,,'] } } });
     if (k === 'openBuildSource') return Promise.resolve(true);
+    if (k === 'builderCatalog') return Promise.resolve(BF.catalog);
+    if (k === 'builderPlan') return Promise.resolve(JSON.parse(JSON.stringify(BF.plan)));
+    if (k === 'builderProven') return Promise.resolve(JSON.parse(JSON.stringify(BF.proven)));
+    if (k === 'builderSave') {
+      builderSaved = a[2];
+      const nb = { id: 'bd1', name: 'Rain of Arrows Rogue', cls: 'Rogue', slots: { Helm: { item: "Leoric's Crown" } }, done: [] };
+      return Promise.resolve({ added: 1, data: { active: 'bd1', codex: [], builds: (savedBuilds || buildsData).builds.concat([nb]) } });
+    }
     if (k === 'importBuildText' && /^\{/.test(a[0])) {
       const got = JSON.parse(a[0]).builds.map((b, i) => Object.assign({ id: 'm' + (importNo++) + '_' + i, done: [] }, b));
       const base = (savedBuilds || buildsData).builds;
@@ -144,7 +155,7 @@ w.d4api = new Proxy({}, { get: (_, k) => {
   };
 } });
 
-for (const f of ['cards.js', 'search.js', 'farm.js', 'buildviews.js', 'compare.js', 'app.js']) w.eval(fs.readFileSync(path.join(dir, f), 'utf8'));
+for (const f of ['cards.js', 'search.js', 'farm.js', 'buildviews.js', 'compare.js', '../lib/dmgmodel.js', '../lib/optimizer.js', 'builder.js', 'app.js']) w.eval(fs.readFileSync(path.join(dir, f), 'utf8'));
 const $ = (id) => w.document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rail = (name) => w.document.querySelector('#rail .ri[data-section=' + name + ']');
@@ -1153,6 +1164,61 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(other.name === 'Sorc B' && other.missing === 0, 'the other build has it too');
   w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
   console.log('ok  codex: an aspect counts in every build');
+
+  // --- builder: class → skill → proven build explained → consensus → own build, search, swap, boosts, mods, paragon, save
+  {
+    const q = (s) => w.document.querySelector(s);
+    const qa = (s) => [...w.document.querySelectorAll(s)];
+    const click = (sel, text) => { const x = qa(sel).find((y) => !text || y.textContent.includes(text)); assert.ok(x, 'builder: ' + sel + ' ' + (text || '')); x.click(); };
+    rail('builder').click(); await sleep(60);
+    assert.ok(rail('builder').classList.contains('on') && q('#main.bd'), 'builder opens');
+    assert.ok(q('.bd-head #ptools'), 'pin and close sit in the builder head');
+    click('.bd-cls', 'Rogue'); await sleep(30);
+    assert.ok(qa('.bd-sk').length > 10 && txt().includes('Rain of Arrows'), 'the rogue\'s skills');
+    click('.bd-sk', 'Rain of Arrows'); await sleep(120);
+    assert.ok(qa('.bd-src').length >= 4, 'proven builds, the consensus and "build it yourself"');
+    assert.ok(q('.bd-src.bd-on .bd-site').textContent && !q('.bd-src.bd-own.bd-on'), 'opens on the best proven build');
+    assert.ok(txt().includes('Why this build works') && qa('.bd-adv li').length >= 3, 'explained');
+    assert.ok(txt().includes("Leoric's Crown") && qa('.bd-used').length, 'its pieces, with how many top builds use them');
+    click('.bd-gs', "Leoric's Crown"); await sleep(30);
+    assert.ok(q('.bd-det h3').textContent === "Leoric's Crown" && txt().includes('Sockets'), 'a piece: stats and sockets');
+    click('.bd-src', 'agree on'); await sleep(30);
+    assert.ok(qa('.bd-gs').length >= 8 && qa('.bd-used.bd-hi').length, 'the consensus per slot');
+    click('.bd-src', 'Build it yourself'); await sleep(80);
+    assert.ok(qa('.bd-gs').length === 10 && qa('.bd-gs .bd-up').length, 'own build: ten slots with their share');
+    const firstHelm = q('.bd-gs .bd-n').textContent;
+    $('bdq').value = 'crit'; $('bdq').dispatchEvent(new w.Event('input')); await sleep(30);
+    assert.ok(qa('#bdside .bd-alt').length > 3 && /dmg|equipped/.test(q('#bdside .bd-alt .bd-v').textContent), 'search shows what each adds');
+    $('bdq').value = ''; $('bdq').dispatchEvent(new w.Event('input')); await sleep(20);
+    click('.bd-gs', 'Helm'); await sleep(30);
+    click('#bdside .bd-alt .tbtn', 'Use'); await sleep(60);
+    assert.notStrictEqual(q('.bd-gs .bd-n').textContent, firstHelm, 'Use swaps the piece');
+    click('.back'.replace('.', '.bd-')); await sleep(30);
+    const condsBefore = qa('.bd-gs .bd-n').map((x) => x.textContent).join();
+    const off = qa('.bd-cond:not(.bd-on)').find((x) => x.querySelector('.bd-gn'));
+    assert.ok(off, 'a conditional boost shows what it would add');
+    off.click(); await sleep(80);
+    assert.ok(qa('.bd-cond.bd-on').some((x) => x.textContent.startsWith(off.firstChild.textContent)), 'switched on');
+    assert.ok(typeof condsBefore === 'string', 'recomputed');
+    click('.bd-goalrow button', 'Speed farm'); await sleep(60);
+    assert.ok(q('.bd-goalrow .bd-on').textContent === 'Speed farm', 'goal switches');
+    click('.bd-bs', 'Rain of Arrows'); await sleep(30);
+    const mo = qa('.bd-mo:not(.bd-on)')[0];
+    mo.click(); await sleep(30);
+    assert.ok(q('.bd-bs.bd-main .bd-mods').textContent.includes(mo.querySelector('b').textContent), 'a modifier is picked');
+    click('.bd-views button', 'Paragon'); await sleep(30);
+    assert.ok(qa('.bd-bl').length >= 2 && qa('.bd-pn.bd-on').length > 10, 'paragon: boards and the suggested nodes');
+    $('bdpts').value = 5; $('bdpts').dispatchEvent(new w.Event('input')); await sleep(30);
+    assert.strictEqual(qa('.bd-pn.bd-on').length, 5, 'the slider shows the first points');
+    click('.bd-views button', 'Goals'); await sleep(20);
+    assert.ok(qa('.bd-card').length >= 5, 'goals');
+    click('.bd-views button', 'Build'); await sleep(40);
+    click('.bd-head .tbtn', 'Save as build'); await sleep(80);
+    assert.ok(builderSaved && builderSaved.pieces && builderSaved.pieces.Helm && builderSaved.mods, 'saved with the picks and modifiers');
+    assert.ok(rail('farm').classList.contains('on') && w.FarmView._state().data.active === 'bd1', 'lands in the farm list as the active build');
+    w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+    console.log('ok  builder: proven builds explained, consensus, own build (search, swap, boosts, goal, modifiers), paragon, save');
+  }
 
   assert.strictEqual(errors.length, 0, 'no runtime errors: ' + errors.join(' | '));
   console.log('ok  no runtime errors · api used: ' + [...new Set(calls)].join(', '));

@@ -59,7 +59,7 @@ function activeClass() {
 // ---------------------------------------------------------------- size reporting
 function reportSize() {
   const open = !$('panel').hidden;
-  const big = !!EMBEDDED[section] || section === 'farm';   // embedded pages and the farm list get more room
+  const big = !!EMBEDDED[section] || section === 'farm' || section === 'builder';   // embedded pages, the farm list and the builder get more room
   api.resize(Math.ceil($('rail').getBoundingClientRect().width), Math.ceil($('shell').getBoundingClientRect().height), open, big);
   setTimeout(syncView, 30);
 }
@@ -337,7 +337,7 @@ function render() {
   tools.classList.remove('docked');
   $('panel').appendChild(tools);                     // out of the way before the content is cleared
   renderSection();
-  const host = !$('top').hidden ? $('top') : section === 'farm' ? $('main').querySelector('.fbar') : section === 'settings' || section === 'notes' ? $('main').querySelector('.sethead') : null;
+  const host = !$('top').hidden ? $('top') : section === 'farm' ? $('main').querySelector('.fbar') : section === 'builder' ? $('main').querySelector('.bd-head') : section === 'settings' || section === 'notes' ? $('main').querySelector('.sethead') : null;
   if (host) { host.appendChild(tools); tools.classList.add('docked'); }
 }
 function renderSection() {
@@ -345,11 +345,11 @@ function renderSection() {
   const sm = document.querySelector('.setmain');
   setScroll.top = sm ? sm.scrollTop : 0;
   main.textContent = ''; side.textContent = '';
-  main.classList.remove('farm', 'settings', 'notes');
+  main.classList.remove('farm', 'settings', 'notes', 'bd');
   $('cols').classList.remove('narrow', 'detail');
   side.classList.toggle('results', section === 'search');
   $('qClear').hidden = !$('q').value;
-  const ownPage = section === 'settings' || section === 'farm' || section === 'notes';
+  const ownPage = section === 'settings' || section === 'farm' || section === 'notes' || section === 'builder';
   $('top').hidden = !section || ownPage;
   side.hidden = !section || !!EMBEDDED[section] || ownPage;
   $('chips').textContent = '';
@@ -362,10 +362,24 @@ function renderSection() {
   if (EMBEDDED[section]) { renderEmbeddedSidebar(); reportSize(); return; }
 
   if (section === 'farm') { window.FarmView.render(main, farmCtx); reportSize(); return; }
+  if (section === 'builder') { window.BuilderView.render(main, builderCtx); reportSize(); return; }
   if (section === 'search') renderSearch(main, side);
   if (section === 'activities') renderActivities(main, side);
   reportSize();
 }
+
+// What the builder (builder.js) may use from here – it keeps where you scrolled to when it redraws
+const builderCtx = {
+  get api() { return api; },
+  rerender: () => {
+    if (section !== 'builder') return;
+    const y = $('main').scrollTop;
+    render();
+    $('main').scrollTop = y;
+  },
+  note: (t, kind) => showNote(t, kind, 3500),
+  openFarm: () => openSection('farm'),
+};
 
 // What the farm list (farm.js) may use from here
 const farmCtx = {
@@ -1760,7 +1774,7 @@ function wireResize() {
   // the main process reads the cursor itself and keeps the corner under it – the window
   // moves while it grows, so the coordinates in here would drift
   let from = null, frame = 0;
-  const big = () => !!EMBEDDED[section] || section === 'farm';
+  const big = () => !!EMBEDDED[section] || section === 'farm' || section === 'builder';
   grip.addEventListener('pointerdown', (e) => {
     from = true;
     try { grip.setPointerCapture(e.pointerId); } catch (_) {}   // not available everywhere

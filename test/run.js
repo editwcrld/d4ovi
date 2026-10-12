@@ -22,6 +22,7 @@ const TESTS = [
   ['maxroll build import', 'maxbuild-test.js'],
   ['d4builds + d2core import', 'sitebuilds-test.js'],
   ['infinitybuilds import', 'infinitybuilds-test.js'],
+  ['builder engine', 'builder-test.js'],
   ['overlay UI', 'renderer-smoke.js'],
 ];
 

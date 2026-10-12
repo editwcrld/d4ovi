@@ -18,6 +18,7 @@ A narrow icon rail (48 px) that can be expanded to show labels, and switched bet
 |---|---|---|
 | 🔍 | **Search** | One box for everything: items, boss loot, crafting recipes, activities |
 | 📋 | **Builds** | Your builds: gear with stats, where each piece drops, skill tree, paragon — see below |
+| ✎ | **Builder** | Pick a class and a skill: the proven builds for it explained, or build it yourself — see below |
 | 🗺 | **Map tool** | The maxroll map tool, embedded — see below |
 | ⚑ | **Activities** | Six maxroll guides: Secret Cow Level, Dark Citadel, Artificer's Tower, Echoing Hatred, Gathering Legions, World Events |
 | 🛍 | **diablo.trade** | Your listings with your own login — the chat is one click away there; unread messages show a red badge |
@@ -351,6 +352,61 @@ uses it (as in the game, where an aspect in the codex is there for every gear pi
 in any build and it is gone from the codex again. Uniques, charms, gems and runes stay ticks of
 their own build. A `builds.json` from before takes every aspect ticked anywhere into the codex.
 
+## Builder
+
+For players who follow guides and want to make a build of their own. Pick a **class**, then the
+**skill** that should do the damage (skill icons; S / A marks a skill a current maxroll endgame
+guide is built around). The build opens on one sheet: skill bar on top, the gear as the game shows
+it, what the picked piece does on the right.
+
+**Where the build comes from** — a row of cards above the sheet:
+
+- **Proven builds** first: maxroll's tier list, d2core's most liked builds of the season and
+  infinitybuilds' most liked (Mekuna, Rob …), one site after the other. Each opens explained —
+  *Why this build works*: where the damage comes from, crits (or why a damage-over-time skill
+  ignores them), where Vulnerable comes from, what keeps it alive, speed (Enigma's Teleport),
+  Leoric's Crown and the soul splinters it boosts, what the build relies on, and what the model
+  cannot count. Every piece shows its share (what the build loses without it), its stats and
+  sockets in that build, and *6/8* — in how many of the top builds it appears.
+- **What the top builds agree on** — the most used piece per slot, the skills, sockets and
+  charm sets they share.
+- **Build it yourself** — the model picks every slot (one mythic at most, an aspect once) by what
+  it adds; *Make it my own* on a proven build starts from that one. Click a slot (*Change*) or
+  search: every option says what it adds on top of everything else you wear (+% damage, toughness,
+  speed). *Build for* Pit push / Speed farm / Bosses weighs damage, toughness and speed.
+  *Conditional boosts* are bonuses that only work while something is true (Berserking, an Elite,
+  "to isolated enemies" …): the ones the build provides are on, each other one says what it would
+  add — switch it on and the gear is picked again. Each skill on the bar shows its modifiers; a
+  click lists the three variants and both upgrade pairs with what they add.
+
+*Paragon* shows the suggested boards, glyphs and the order of nodes per board (a slider walks
+through the points). *Goals* lists the numbers to aim for with why. **Save as build** puts it
+into the farm list — the gear with the rolls to look for, the skill bar and modifiers (lit in the
+skill tree), the paragon boards joined at their gates, the charm set — or a proven build exactly
+as imported.
+
+**How the numbers are made** (`lib/dmgmodel.js`, `lib/optimizer.js`):
+
+```
+damage = weapon × skill % × main stat × (1 + [+] pool) × (1 + damage multipliers) × every [x]
+         × crit (on crits) × Vulnerable (on Vulnerable enemies) × damage over time
+crit   = (A + crit damage [+]) / A × 1.5 × (1 + crit damage multiplier), A = 1 + [+] pool
+```
+
+from d4guides' *Damage Calculation* (patch 3.2.2, the model gives its worked example to the
+point) and maxroll's *In-Depth Damage Guide*; toughness is life over the damage reduction sources
+multiplied (maxroll's defence guide). Item, aspect, splinter and gem texts are read into effects
+— value, [x] or [+], who the sentence is about (your skill, a group it is in, or a side effect
+like Arrow Storms), the condition it needs, drawbacks. Procs ("unleash a Rank 20 Chain
+Lightning", Crushing Blow) are shown, not guessed as a number. The souls a Splinter of the Black
+Soulstone counts are a slider.
+
+Data: maxroll's game data (skills, modifiers, sets, tiers), d2core's item files (uniques with
+their fixed stats and runewords, aspects, soul splinters, gems, affixes per slot, tempers,
+paragon), maxroll's tier list, d2core's and infinitybuilds' build lists — the proven builds come
+in through the overlay's own importers. Kept in `builder-db.json`, fetched weekly (the tier list
+daily); proven builds once a day per skill.
+
 ## Map tool
 
 The maxroll map tool is **embedded**, not rebuilt — it is a canvas application with no open data
@@ -398,7 +454,7 @@ D4-Overlay-Data\            ← created automatically
    settings.json
    items-cache.json  d4guides-cache.json  maxroll-cache.json
    crafting-cache.json  activities-cache.json  mythics-cache.json
-   farm-cache.json  farm-tooltips.json  maxroll-names.json  zh-dict.json  d2core-db.json
+   farm-cache.json  farm-tooltips.json  maxroll-names.json  zh-dict.json  d2core-db.json  builder-db.json
    map-progress.json  builds.json
    Partitions\trade\        ← your diablo.trade login
    overlay-log.txt          ← restarts past 1 MB, the one before is overlay-log.old.txt
@@ -428,6 +484,9 @@ them **only the .exe**.
 | d4builds.gg (public Firestore document `builds/<id>`) | build import | when you import |
 | d2core.com (CloudBase function `function-planner-queryplandetail`, anonymous) | build import | when you import |
 | d2core.com database (`cloudstorage.d2core.com/data/d4/<build>/…_enUS.json`) | stat texts, skill tree, paragon boards | weekly, on first use |
+| maxroll `data.min.json` + d2core `uniqueItem`, `aspect`, `affix`, `soulSplinter`, `gem` | builder: skills, items, effects, rolls per slot | weekly, on first use |
+| maxroll.gg *Endgame Tier List* | builder: S / A marks, proven builds | daily |
+| d2core.com `function-planner-queryplanlist` (anonymous), infinitybuilds.gg build list | builder: proven builds per skill | daily, when a skill is opened |
 | maxroll `data.enus.json` + `data.zhcn.json` | Chinese → English dictionary for d2core titles | weekly, on the first d2core import |
 | diablo.trade (signed out page) | world boss timer | every 15 s |
 | diablo.trade `api/chat/conversations` | unread messages | every 15 s |
@@ -447,6 +506,7 @@ npm install
 npm start          # run from source
 npm run dist       # build dist\D4-Overlay-<version>-portable.exe
 npm test           # all offline tests
+node test/builder-live.js   # the builder against the real sites (needs the internet)
 ```
 
 ### Building
@@ -465,7 +525,7 @@ in German, to find it quickly.
 
 ## Tests
 
-`npm test` runs nineteen files and prints one summary:
+`npm test` runs twenty files and prints one summary:
 
 | File | Covers |
 |---|---|
@@ -484,10 +544,11 @@ in German, to find it quickly.
 | `clicker-test.js` | macros: bindings, speed limits, key lists, off by default, what the helper is told |
 | `maxbuild-test.js` | maxroll import: links, guide page, planner variant → build, dual wield |
 | `infinitybuilds-test.js` | infinitybuilds import: links and variants, English names, stat values like the site's tooltips, command skills, paragon, charms |
+| `builder-test.js` | builder: the damage formula (d4guides' example), reading item texts (multipliers, whose skill, conditions, splinters, souls), the optimizer, proven build lists and their consensus |
 | `sitebuilds-test.js` | d4builds + d2core import: links, variants, slots, aspects by game id, Chinese titles |
 | `farm-test.js` | farm list: slots, sources, aspect tooltips, merged variants; builds: save, ticks, code, import |
 | `compare-test.js` | comparing two builds: partner variant, gear, skills, charms, paragon, what is left to farm |
-| `renderer-smoke.js` | the whole UI in jsdom: every section (incl. farm list, builds, compare), settings and macros, the cards in each view, hotkeys, Esc, idle fade |
+| `renderer-smoke.js` | the whole UI in jsdom: every section (incl. farm list, builds, compare, builder), settings and macros, the cards in each view, hotkeys, Esc, idle fade |
 
 If something misbehaves at runtime, `overlay-log.txt` in the data folder records cookie changes,
 view navigation, zoom and data loading.
