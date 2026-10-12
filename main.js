@@ -129,15 +129,22 @@ function gameProcNames() {
   return Array.from(names);
 }
 // The helper only clicks while the game window is in front, so it needs to know it.
+let lockRunning = false;                 // what the helper last said: lock on or off
 function restartClicker() {
   const p = clicker.start(settings, gameProcNames()[0], dlog, {
     spam: (on, button) => {
       send('click-spam', { on, button });
       dlog('click spam', on ? button + ' button, ' + Math.round(1000 / clicker.delayFor(settings.clickCps)) + '/s' : 'stopped');
     },
-    lock: (on) => { send('lock-state', { on, paused: false }); dlog('lock', on ? 'on' : 'off'); },
-    pause: (paused) => { send('lock-state', { on: true, paused }); dlog('lock', paused ? 'waits (left click)' : 'goes on'); },
+    lock: (on) => { lockRunning = on; send('lock-state', { on, paused: false }); dlog('lock', on ? 'on' : 'off'); },
+    // a pause only ever shows while lock runs – a late "goes on" must not bring the tag back
+    pause: (paused, map) => {
+      if (!lockRunning) return;
+      send('lock-state', { on: true, paused, map });
+      dlog('lock', paused ? (map ? 'waits (map open)' : 'waits (left click)') : 'goes on');
+    },
   }, MACROS);
+  lockRunning = false;
   send('lock-state', { on: false, paused: false });     // a restarted helper starts switched off
   dlog('Macros:', !MACROS.any ? 'not in this build' : p.usable
     ? (p.on ? clicker.label(settings.clickLeftBind) + ' = left, ' + clicker.label(settings.clickRightBind) + ' = right, '

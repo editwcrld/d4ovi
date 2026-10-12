@@ -1240,7 +1240,7 @@ function setMacros(b) {
   opt(ch.body, 'Characters', chars.length + ' saved', [btn('+ New', () => newChar()), del]);
 
   if (features.lock) {
-    const lk = macroCard(b, 'lockOn', 'Lock', 'Press the toggle key in the game: every key is held down (lock) or pressed again after its time — until you press it again. A left click by hand or left click spam pauses it until you let go.', 'lockBind');
+    const lk = macroCard(b, 'lockOn', 'Lock', 'Press the toggle key in the game: every key is held down (lock) or pressed again after its time — until you press it again. A left click by hand or left click spam pauses it until you let go. The map (Tab) pauses it until Tab or Esc closes it.', 'lockBind');
     riskSwitch(lk.body, 'lockOn', 'Lock', 'Off means the toggle key does nothing');
     opt(lk.body, 'Toggle key', 'Switches it on and off', bindField('lockBind'));
     const keys = lockList();
@@ -1865,12 +1865,13 @@ async function init() {
   api.onTimerRestart(() => { if (settings.ctTimer !== false) startCt(true); });
   api.onUpdateInfo(onUpdate);
   api.onBackupDone((t) => { backupAt = Number(t) || Date.now(); if (section === 'settings') render(); });
-  api.onLock(({ on, paused }) => {
+  api.onLock(({ on, paused, map }) => {
     const t = $('lockTag');
     t.hidden = !on;
     t.classList.toggle('paused', !!paused);
-    t.title = paused ? 'Lock waits — goes on when you let go of the left button' : 'Lock running — the toggle key stops it';
-    t.firstChild.textContent = paused ? 'Wait' : 'Lock';
+    t.title = !paused ? 'Lock running — the toggle key stops it'
+      : map ? 'Lock waits — the map is open, Tab or Esc closes it' : 'Lock waits — goes on when you let go of the left button';
+    t.firstChild.textContent = !paused ? 'Lock' : map ? 'Map' : 'Wait';
     t.lastChild.textContent = lockKeysOn() || '–';
   });
   api.onChatUnread((n) => {

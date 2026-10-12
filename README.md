@@ -168,8 +168,12 @@ lock lets go of everything and waits; a quarter second after you let go it carri
 overlay tells your own clicks from the ones it sends (a low level mouse hook sees the flag
 Windows puts on sent input), so a locked Mouse 1 does not pause itself.
 
+**The map pauses it:** Tab opens the map — lock waits until Tab (or Esc) closes it again, however
+long you look. The tag in the bar reads **Map** meanwhile. Pressing lock's toggle key starts it
+fresh, with the map counted as closed.
+
 While it runs, a green **Lock** tag sits next to the world boss timer; it turns amber and reads
-**Wait** while a left click pauses it.
+**Wait** while a left click pauses it, **Map** while the map is open.
 
 ### Per character
 
