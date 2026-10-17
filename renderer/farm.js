@@ -30,7 +30,7 @@ let cat = null;                    // { items, aspects, details }
 let data = null;                   // { active, builds }
 let open = 'Helm', tab = null, q = '';
 let pickOpen = false;              // the search dropdown for the open slot
-let view = 'gear';                 // gear | skills | paragon | compare
+let view = 'gear';                 // guide | gear | skills | paragon | compare
 let layout = 'route';              // route (where to go, what you get) | list (all at once) | slots (as in the game)
 try { const l = localStorage.getItem('farm.layout'); if (l === 'list' || l === 'slots') layout = l; } catch (_) { /* private storage */ }
 let routeAt = null;                // the stop picked in the route
@@ -148,15 +148,11 @@ function rollBox(s) {
   const d = document.createElement('div');
   d.className = 'ftt-roll';
   const h = document.createElement('b'); h.textContent = 'This build’s roll'; d.appendChild(h);
-  (s.stats || []).forEach((x) => {
-    const l = document.createElement('div');
-    l.className = 'st' + (x.g ? ' ga' : '') + (x.tmp ? ' tmp' : '');
-    l.textContent = (x.g ? '✦ ' : x.tmp ? '⚒ ' : '· ') + x.t;
-    d.appendChild(l);
-  });
+  (s.stats || []).forEach((x) => d.appendChild(SCard.statLine(x)));
   if (s.sockets && s.sockets.length) {
     const l = document.createElement('div'); l.className = 'sock'; l.textContent = '◆ ' + s.sockets.join(' · '); d.appendChild(l);
   }
+  const lg = SCard.craftLegend(s.stats); if (lg) d.appendChild(lg);
   return d;
 }
 
@@ -169,6 +165,7 @@ function render(main, c) {
   const el = c.el;
   hideTip();
   if (window.BuildViews) window.BuildViews.hideTip();
+  if (window.BuildGuide) window.BuildGuide.hideTip();
   main.classList.add('farm');
   if (!cat || !data) {
     main.appendChild(el('div', 'empty', 'Loading your builds …'));
@@ -198,6 +195,13 @@ function render(main, c) {
     return;
   }
   wrap.appendChild(toolbar(el, b));
+  if (view === 'guide' && window.BuildGuide) {
+    const box = el('div', 'fview');
+    wrap.appendChild(box);
+    main.appendChild(wrap);
+    window.BuildGuide.render(box, b, { api, rerender: ctx.rerender });
+    return;
+  }
   if (view === 'compare' && window.BuildCompare) {
     const box = el('div', 'fview');
     wrap.appendChild(box);
@@ -404,7 +408,8 @@ function toolbar(el, b) {
     });
     t.appendChild(s);
   };
-  seg([['gear', 'Gear'], ['skills', 'Skills', b.skills ? '' : 'Import a build from maxroll, d2core, infinitybuilds or d4builds to see it', !b.skills],
+  seg([['guide', 'Cheat sheet', 'Breakpoints, what to set up, how to play it and why it works – from the guide'],
+    ['gear', 'Gear'], ['skills', 'Skills', b.skills ? '' : 'Import a build from maxroll, d2core, infinitybuilds or d4builds to see it', !b.skills],
     ['paragon', 'Paragon', b.paragon ? '' : 'Import a build from maxroll, d2core, infinitybuilds or d4builds to see it', !b.paragon],
     ['compare', 'Compare', data.builds.length > 1 ? 'Side by side with another build or variant' : 'Needs a second build', data.builds.length < 2]],
   view, (id) => { view = id; pickOpen = false; hideTip(); ctx.rerender(); }, 'ftabs');
@@ -447,7 +452,11 @@ async function loadLink() {
   if (imp.value.trim() !== url) return;              // typed on meanwhile
   imp.busy = false;
   if (!r || r.error) imp.error = (r && r.error) || 'Nothing found at that link.';
-  else imp.result = r;
+  else {
+    imp.result = r;
+    // a link that names its variant (?var=2, ?variant=…, a planner's #3): only that one is ticked
+    if (/[?&](var|variant)=|planner\/[^#]+#\d+/i.test(url) && r.variants.length > 1) r.variants.forEach((_, i) => { if (i !== (r.preselect || 0)) imp.off.add(i); });
+  }
   ctx.rerender();
 }
 function closeImport() { imp = { open: false, value: '', busy: false, result: null, error: '', off: new Set() }; ctx.rerender(); }
@@ -578,12 +587,15 @@ function slotInfo(b, key) {
   const s = b.slots[key];
   if (!s) return { key, s: null };
   const it = s.item ? variantOf(itemBy(s.item), s.base) : null;
-  const keys = s.item ? [s.item] : (s.aspects || []);
+  const keys = s.item ? [s.item].concat(s.tf ? [s.tf] : []) : (s.aspects || []);
   const done = doneOf(b);
   let kind, src;
   if (s.item) {
     kind = rarityOf(it);
     src = it ? sourceLine(it.src) : 'Not in the item list any more';
+    // the aspect transfigured onto it comes from salvaging or its dungeon, like any aspect
+    const ta = s.tf && aspectBy(s.tf);
+    if (s.tf) src += ' · ◈ ' + (ta ? ta.short || ta.name : s.tf) + ': ' + (ta ? ta.src.map((y) => y.src).join(' / ') : 'Salvage a legendary');
   } else {
     kind = 'Aspect';
     // every place once, dungeons first ("Dungeon: Forgotten Depths / Salvage a legendary")
@@ -613,6 +625,15 @@ function slotNames(el, b, info, cls, noTip) {
     const nm = el('span', 'nm ' + rcls(rarityOf(info.it)), info.s.item);
     if (info.it && !noTip) wireTip(nm, 'item', info.it.id, info.s);
     box.appendChild(nm);
+    // + ◈ the aspect transfigured onto the unique
+    if (info.s.tf) {
+      const a = aspectBy(info.s.tf);
+      box.appendChild(el('span', 'plus', '+ ◈'));
+      const an = el('span', 'nm r-legendary', a ? a.short : info.s.tf);
+      an.title = 'Transfigured onto it (Horadric Cube)';
+      if (a && !noTip) wireTip(an, 'aspect', a.id, info.s);
+      box.appendChild(an);
+    }
   } else {
     info.s.aspects.forEach((n, i) => {
       const a = aspectBy(n);
@@ -723,7 +744,7 @@ function thingRow(el, b, t, cls) {
   top.appendChild(el('span', 'tsl', t.label));
   body.appendChild(top);
   if (t.how) body.appendChild(el('div', 'thow', t.how));
-  (t.stats || []).forEach((x) => body.appendChild(el('div', 'tst' + (x.g ? ' ga' : '') + (x.tmp ? ' tmp' : ''), (x.g ? '✦ ' : x.tmp ? '⚒ ' : '') + x.t)));
+  (t.stats || []).forEach((x) => body.appendChild(SCard.statLine(x, 'tst')));
   if (t.sockets && t.sockets.length) {
     const g = el('div', 'gems');
     t.sockets.forEach((x) => g.appendChild(el('span', 'gem ' + gemKind(x), x)));
@@ -896,7 +917,7 @@ function slotsView(el, b) {
 function slotCard(b, key, info) {
   const mk = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; };
   const d = mk('div', 'ctt');
-  const names = info.s.item ? [info.s.item] : (info.s.aspects || []).map((n) => (aspectBy(n) ? aspectBy(n).name : n));
+  const names = info.s.item ? [info.s.item].concat(info.s.tf ? ['◈ ' + (aspectBy(info.s.tf) ? aspectBy(info.s.tf).name : info.s.tf)] : []) : (info.s.aspects || []).map((n) => (aspectBy(n) ? aspectBy(n).name : n));
   names.forEach((n) => d.appendChild(mk('div', 'nm ' + (KCLS[info.kind] || ''), n)));
   d.appendChild(mk('div', 'ty', kindLine(info, slotLabel(b, key))));
   if (info.src) {
@@ -907,8 +928,9 @@ function slotCard(b, key, info) {
   }
   if ((info.s.stats || []).length) {
     const st = mk('div', 'sec');
-    info.s.stats.forEach((x) => st.appendChild(mk('div', 'st' + (x.g ? ' ga' : '') + (x.tmp ? ' tmp' : ''), (x.g ? '✦ ' : x.tmp ? '⚒ ' : '· ') + x.t)));
+    info.s.stats.forEach((x) => st.appendChild(SCard.statLine(x)));
     d.appendChild(st);
+    const lg = SCard.craftLegend(info.s.stats); if (lg) d.appendChild(lg);
   }
   if ((info.s.sockets || []).length) d.appendChild(mk('div', 'sec sock', '◆ ' + info.s.sockets.join(' · ')));
   d.appendChild(mk('div', 'sec hint', info.got ? 'Farmed · click to choose another' : 'Click to choose another'));
@@ -1129,7 +1151,7 @@ function entries(b) {
       out.items.push({ key: s.item, name: s.item, kind: 'item', id: it && it.id, rarity: rarityOf(it), slot,
         where: sourceLine(src), loc: src.map((x) => x.src + (x.loc ? ' — ' + x.loc : '')).join('\n'), order: src[0].order });
     }
-    (s.aspects || []).forEach((n) => {
+    (s.aspects || []).concat(s.item && s.tf ? [s.tf] : []).forEach((n) => {
       const a = aspectBy(n);
       const src = a ? a.src : [{ src: 'Salvage a legendary', loc: '', order: 6 }];
       out.aspects.push({ key: n, name: a ? a.name : n, kind: 'aspect', id: a && a.id, rarity: 'Legendary', slot,
@@ -1157,6 +1179,6 @@ window.FarmView = {
   onChange: null,                                     // set by app.js: a tick or a build changed
   view: () => view,
   /** Gear / Skills / Paragon – what the build opens on next. */
-  setView: (v) => { if (['gear', 'skills', 'paragon'].includes(v)) { view = v; pickOpen = false; hideTip(); } },
+  setView: (v) => { if (['guide', 'gear', 'skills', 'paragon'].includes(v)) { view = v; pickOpen = false; hideTip(); } },
 };
 })();

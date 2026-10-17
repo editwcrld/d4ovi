@@ -134,9 +134,22 @@ w.d4api = new Proxy({}, { get: (_, k) => {
       nodes: { A: { name: 'Generic_Normal_Dex', r: 0, d: '+5 Dexterity', t: '' }, S: { name: 'Glyph Socket', r: 0, d: '', t: 'socket' } },
       boards: { Paragon_Rogue_00: { name: 'Start', rows: [',,,', ',A,A,S', ',,,'] } } });
     if (k === 'openBuildSource') return Promise.resolve(true);
+    // the cheat sheet: the recipe d4builder read out of the guide's notes (lib/guideinfo.js)
+    if (k === 'guideSheet') return Promise.resolve({ own: true, site: 'maxroll', url: 'https://maxroll.gg/d4/build-guides/rain-of-arrows-rogue-guide', skill: 'Rain of Arrows', variant: 'Endgame',
+      summary: 'Beastfall Boots with Preparation make Rain of Arrows spend Energy.', core: [{ name: 'Beastfall Boots', kind: 'unique', role: 'a must', quote: 'Beastfall Boots is a must.' }],
+      thresholds: [{ stat: 'Maximum Energy', op: '>=', value: 225, why: 'three Preparation triggers', quote: '225 Maximum Energy.' }, { stat: 'Rain of Arrows Cooldown', op: '<=', value: 15, unit: 's' }],
+      rotation: [{ step: 'Spam Rain of Arrows' }], options: [{ when: 'bossing', then: 'Rustbitten Dirk' }] });
     if (k === 'builderCatalog') return Promise.resolve(BF.catalog);
     if (k === 'builderPlan') return Promise.resolve(JSON.parse(JSON.stringify(BF.plan)));
     if (k === 'builderProven') return Promise.resolve(JSON.parse(JSON.stringify(BF.proven)));
+    // what Save would keep – the builder's Skills, Paragon and talisman views draw it
+    if (k === 'builderPreview') return Promise.resolve({ name: 'Rain of Arrows Rogue', cls: 'Rogue',
+      slots: { Helm: { item: "Leoric's Crown", sockets: ['Abyssal Splinter of Pain', 'Royal Emerald'] }, Weapon: { item: 'Insight', sockets: ['Ral', 'Tir'] } },
+      skills: { bar: [{ id: 7, key: 'Rogue_RainofArrows', name: 'Rain of Arrows', icon: 0, rank: 5, mods: ['Crashing Waves'] }], ranks: { 7: 5, '7_9': 1 } },
+      paragon: { boards: [{ k: 'Paragon_Rogue_00', x: 0, y: 0, rot: 0, nodes: [[1, 1], [1, 2]], glyph: 'G1', glyphRank: 0 }] },
+      charms: { seal: { name: 'Mythic Unique Horadric Seal', q: 'Mythic', set: '', stats: [], d: [] },
+        list: [{ name: 'The Grandfather', q: 'Mythic', set: '', stats: [], d: ['Increases your Critical Strike Damage by 120%[x].'] }, { name: 'Linta of the Sightless', q: 'Set', set: 'Legacy of the Sightless', stats: [], d: [] }],
+        sets: [{ name: 'Legacy of the Sightless', have: 1, bonuses: [{ n: 2, d: ['Two piece bonus'], on: false }] }] } });
     if (k === 'builderSave') {
       builderSaved = a[2];
       const nb = { id: 'bd1', name: 'Rain of Arrows Rogue', cls: 'Rogue', slots: { Helm: { item: "Leoric's Crown" } }, done: [] };
@@ -155,7 +168,7 @@ w.d4api = new Proxy({}, { get: (_, k) => {
   };
 } });
 
-for (const f of ['cards.js', 'search.js', 'farm.js', 'buildviews.js', 'compare.js', '../lib/dmgmodel.js', '../lib/optimizer.js', 'builder.js', 'app.js']) w.eval(fs.readFileSync(path.join(dir, f), 'utf8'));
+for (const f of ['cards.js', 'search.js', 'guide.js', 'farm.js', 'buildviews.js', 'compare.js', '../lib/dmgmodel.js', '../lib/optimizer.js', 'builder.js', 'app.js']) w.eval(fs.readFileSync(path.join(dir, f), 'utf8'));
 const $ = (id) => w.document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rail = (name) => w.document.querySelector('#rail .ri[data-section=' + name + ']');
@@ -456,7 +469,8 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.strictEqual(slot('Weapon').querySelector('.tsl').textContent, 'Bow', 'a weapon is named by its kind');
   assert.ok(slot('Weapon 2') && slot('Weapon 2').querySelector('.tsl').textContent === 'Sword', 'a third weapon has its own slot');
   const lines = [...slot('Weapon').querySelectorAll('.tst')];
-  assert.deepStrictEqual(lines.map((l) => l.textContent), ['✦ +10.0% Attack Speed', '8.0% Cooldown Reduction', '⚒ +1,500 Maximum Life'], 'stats with greater / tempered marks');
+  // the crafting mark (✦ greater, ⚒ temper, · none) and the text, the same in every view (cards.js statLine)
+  assert.deepStrictEqual(lines.map((l) => l.querySelector('.cx-marks').textContent + ' ' + l.querySelector('.cx-t').textContent), ['✦ +10.0% Attack Speed', '· 8.0% Cooldown Reduction', '⚒ +1,500 Maximum Life'], 'stats with greater / tempered marks');
   assert.ok(lines[0].classList.contains('ga') && lines[2].classList.contains('tmp'));
   assert.strictEqual(slot('Weapon').querySelector('.gems .gem').textContent, 'Horadric Sapphire', 'sockets');
   // seal, charms and what goes into the sockets: things to farm as well, counted in the progress
@@ -567,17 +581,28 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   // compare: the open build against another one, as a move from this one to that one
   tab('Compare').click(); await sleep(40);
   const cmpSel = w.document.querySelector('.cmp-head select');
-  assert.ok(w.document.querySelector('.cmp-sec .stitle h3') && cmpSel && cmpSel.options.length >= 1, 'compare: gear section, a build to pick');
-  assert.ok([...w.document.querySelectorAll('.scard.cmp-sec')].every((c) => c.querySelector('.sicon svg') && /change|same|left/.test(c.querySelector('.sstate').textContent)), 'compare: each part a card with what changes');
-  assert.ok(/Changes:|the same/.test(w.document.querySelector('.cmp-sum').textContent), 'compare: the summary');
+  assert.ok(cmpSel && cmpSel.options.length >= 1, 'compare: a build to pick');
+  // three numbers, one line per slot that changes, the rest as chips
+  assert.strictEqual(w.document.querySelectorAll('.cmp-tiles .cmp-tile').length, 3, 'compare: pieces that change, of them you have, left to farm');
+  assert.ok(w.document.querySelector('.cmp-table .cmp-r:not(.cmp-th)') || w.document.querySelector('.cmp-none'), 'compare: a line per change');
+  assert.ok(['Skills', 'Paragon', 'Glyphs', 'Talisman'].every((x) => [...w.document.querySelectorAll('.cmp-chip b')].some((b) => b.textContent === x)), 'compare: skills, paragon, glyphs, talisman as chips');
   const fold = w.document.querySelector('.cmp-fold');
-  if (fold) { fold.click(); await sleep(30); assert.ok(w.document.querySelector('.cmp-fold.on'), 'compare: unchanged slots fold out'); }
+  if (fold) { fold.click(); await sleep(30); assert.ok(w.document.querySelector('.cmp-fold.on'), 'compare: what stays the same folds out'); }
   const target = cmpSel.options[cmpSel.options.length - 1];
   cmpSel.value = target.value; cmpSel.dispatchEvent(new w.Event('change')); await sleep(30);
   assert.strictEqual(w.document.querySelector('.cmp-head select').value, target.value, 'compare: another build picked');
   w.document.querySelector('.cmp-head .ab').click(); await sleep(40);
   assert.ok(!w.document.querySelector('.cmp-head') && w.document.querySelector('.fbar .bpick b').textContent === target.textContent, 'compare: "Open this build" switches to it, back on the gear');
   console.log('ok  compare two builds');
+  // the cheat sheet: breakpoints, set up once, how to play, why it works – the author's words on hover
+  tab('Cheat sheet').click(); await sleep(60);
+  assert.ok(w.document.querySelectorAll('.gd-bp').length === 2 && w.document.querySelector('.gd-bp b').textContent === '225', 'cheat sheet: the breakpoints as numbers');
+  assert.strictEqual(w.document.querySelectorAll('.gd-bp b')[1].textContent, '≤ 15 s', 'a cap reads "≤"');
+  assert.ok(w.document.querySelector('.gd-rot li') && w.document.querySelector('.gd-sum') && w.document.querySelector('.gd-opts li'), 'cheat sheet: rotation, why it works, swaps');
+  w.document.querySelector('.gd-bp').dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 10, clientY: 10 })); await sleep(10);
+  assert.ok(/225 Maximum Energy/.test(w.document.querySelector('.gd-tip').textContent), 'hover: the author’s own words');
+  w.document.querySelector('.gd-bp').dispatchEvent(new w.MouseEvent('mouseleave')); await sleep(10);
+  tab('Gear').click(); await sleep(30);
   await type('');
 
   // --- embedded sections ask for a view
@@ -743,12 +768,18 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(!w.document.querySelector('.lockrow'), 'no rows yet');
   const addKey = async (kind, code) => {
     plus(kind).click(); await sleep(20);
+    // a save just before (a rename) redraws the section a moment later – then the new [+] is clicked
+    if (!plus(kind).classList.contains('rec')) { await sleep(150); plus(kind).click(); await sleep(20); }
     assert.ok(plus(kind).classList.contains('rec'), '+ waits for a key');
     plus(kind).dispatchEvent(new w.KeyboardEvent('keydown', { key: code.slice(-1), code, bubbles: true })); await sleep(40);
   };
   const addMouse = async (kind, button) => {
     plus(kind).click(); await sleep(20);
-    plus(kind).dispatchEvent(new w.MouseEvent('mousedown', { button, bubbles: true })); await sleep(40);
+    const p = plus(kind);
+    p.dispatchEvent(new w.MouseEvent('mousedown', { button, bubbles: true }));
+    p.dispatchEvent(new w.MouseEvent('mouseup', { button, bubbles: true }));
+    if (button === 0) p.dispatchEvent(new w.MouseEvent('click', { button, bubbles: true }));   // as a real left click goes on
+    await sleep(40);
   };
   await addKey('lock', 'Digit1');
   sameJson(tileText('lock'), ['1', '+'], '[1][+]');
@@ -1170,8 +1201,12 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
     const q = (s) => w.document.querySelector(s);
     const qa = (s) => [...w.document.querySelectorAll(s)];
     const click = (sel, text) => { const x = qa(sel).find((y) => !text || y.textContent.includes(text)); assert.ok(x, 'builder: ' + sel + ' ' + (text || '')); x.click(); };
-    rail('builder').click(); await sleep(60);
-    assert.ok(rail('builder').classList.contains('on') && q('#main.bd'), 'builder opens');
+    // Builds is one place: the farm list and "Find a build" (the builder) under one rail icon
+    assert.ok(!rail('builder'), 'no rail icon of its own');
+    rail('farm').click(); await sleep(60);
+    assert.ok(q('.fbar .bswitch') && q('.bswitch .on').textContent === 'My builds', 'Builds opens on your farm list, the switch in its head');
+    click('.bswitch button', 'Find a build'); await sleep(60);
+    assert.ok(rail('farm').classList.contains('on') && q('#main.bd') && q('.bd-head .bswitch .on').textContent === 'Find a build', 'builder opens under Builds');
     assert.ok(q('.bd-head #ptools'), 'pin and close sit in the builder head');
     click('.bd-cls', 'Rogue'); await sleep(30);
     assert.ok(qa('.bd-sk').length > 10 && txt().includes('Rain of Arrows'), 'the rogue\'s skills');
@@ -1185,12 +1220,20 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
     click('.bd-src', 'agree on'); await sleep(30);
     assert.ok(qa('.bd-gs').length >= 8 && qa('.bd-used.bd-hi').length, 'the consensus per slot');
     click('.bd-src', 'Build it yourself'); await sleep(80);
-    assert.ok(qa('.bd-gs').length === 10 && qa('.bd-gs .bd-up').length, 'own build: ten slots with their share');
+    assert.ok(qa('.bd-gs').length === 11 && qa('.bd-gs .bd-up').length, 'own build: eleven slots (a rogue: ranged weapon and two blades) with their share');
+    assert.ok(['Ranged', 'Melee (dual wield)'].every((l) => qa('.bd-gs .bd-s').some((x) => x.textContent.startsWith(l))), 'weapons named by their kind');
+    assert.ok(/top \d+ builds use per slot/.test(q('.bd-startnote').textContent) && q('.bd-gs .bd-n').textContent === "Leoric's Crown", 'it starts from what the top builds use – Leoric\'s Crown on the helm');
+    click('.bd-startnote .tbtn', 'experimental'); await sleep(60);
+    assert.ok(/experimental/.test(q('.bd-startnote').textContent), 'the model\'s own pick, said so');
+    click('.bd-startnote .tbtn', 'top builds use'); await sleep(60);
+    assert.strictEqual(q('.bd-gs .bd-n').textContent, "Leoric's Crown", 'and back');
     const firstHelm = q('.bd-gs .bd-n').textContent;
     $('bdq').value = 'crit'; $('bdq').dispatchEvent(new w.Event('input')); await sleep(30);
     assert.ok(qa('#bdside .bd-alt').length > 3 && /dmg|equipped/.test(q('#bdside .bd-alt .bd-v').textContent), 'search shows what each adds');
     $('bdq').value = ''; $('bdq').dispatchEvent(new w.Event('input')); await sleep(20);
+    assert.ok(qa('.bd-tal').length === 3 && txt().includes('Seal swap') && txt().includes('Golden Epiphany'), 'the talisman three ways: Mythic seal, Golden Epiphany, the seal swap');
     click('.bd-gs', 'Helm'); await sleep(30);
+    assert.ok(qa('#bdside .bd-stats .cx-line.tmp').length === 1, 'a slot: the temper the model picked for it – one a piece');
     click('#bdside .bd-alt .tbtn', 'Use'); await sleep(60);
     assert.notStrictEqual(q('.bd-gs .bd-n').textContent, firstHelm, 'Use swaps the piece');
     click('.back'.replace('.', '.bd-')); await sleep(30);
@@ -1206,12 +1249,24 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
     const mo = qa('.bd-mo:not(.bd-on)')[0];
     mo.click(); await sleep(30);
     assert.ok(q('.bd-bs.bd-main .bd-mods').textContent.includes(mo.querySelector('b').textContent), 'a modifier is picked');
-    click('.bd-views button', 'Paragon'); await sleep(30);
-    assert.ok(qa('.bd-bl').length >= 2 && qa('.bd-pn.bd-on').length > 10, 'paragon: boards and the suggested nodes');
-    $('bdpts').value = 5; $('bdpts').dispatchEvent(new w.Event('input')); await sleep(30);
-    assert.strictEqual(qa('.bd-pn.bd-on').length, 5, 'the slider shows the first points');
+    click('.bd-views button', 'Skills'); await sleep(80);
+    assert.ok(q('.bd-fview.fskills') && txt().includes('Rain of Arrows') && q('.bd-fview .skc'), 'skills: the farm list skill tree for this build, before saving');
+    click('.bd-views button', 'Paragon'); await sleep(80);
+    assert.ok(q('.bd-fview.fparagon') && qa('.bd-fview .plook .lk').some((x) => x.textContent === 'Icons'), 'paragon: the farm list view – icons or minimal');
+    click('.bd-views button', 'Build'); await sleep(60);
+    if (q('#bdside .bd-back')) { q('#bdside .bd-back').click(); await sleep(60); }
+    assert.ok(qa('.bd-ch').length >= 2 && qa('.bd-gem').length >= 2 && qa('.bd-gem.bd-rune').length, 'talisman and sockets – runes for a runeword – before saving');
+    const tile = qa('.bd-gs').find((x) => x.querySelector('.bd-n') && x.querySelector('.bd-n').textContent);
+    tile.dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 10, clientY: 10 })); await sleep(20);
+    assert.ok(q('.bd-tip .ctt') && q('.bd-tip .ctt .nm').textContent === tile.querySelector('.bd-n').textContent, 'a tile on hover: its card');
+    tile.dispatchEvent(new w.MouseEvent('mouseleave')); await sleep(10);
     click('.bd-views button', 'Goals'); await sleep(20);
-    assert.ok(qa('.bd-card').length >= 5, 'goals');
+    const goalRows = qa('.bd-goals .bd-grow-row').slice(1);
+    assert.ok(goalRows.length >= 5 && goalRows.every((r) => /\d/.test(r.querySelector('.bd-num').textContent)), 'goals: your build stat by stat');
+    assert.ok(goalRows.some((r) => /\d/.test(r.querySelectorAll('.bd-num')[1].textContent)), 'next to the level of the top builds');
+    assert.ok(q('.bd-loop') && /Preparation/.test(q('.bd-loop').textContent) && qa('.bd-loop li').length >= 3, 'goals: how the build works – the loop, piece by piece');
+    assert.ok(qa('.bd-checks > div').length >= 2 && qa('.bd-checks > div').every((r) => /\d+%? \/ \d+/.test(r.textContent)), 'its breakpoints, have against need');
+    assert.ok(qa('.bd-wants .bd-grow-row').length >= 3, 'what this build wants most now');
     click('.bd-views button', 'Build'); await sleep(40);
     click('.bd-head .tbtn', 'Save as build'); await sleep(80);
     assert.ok(builderSaved && builderSaved.pieces && builderSaved.pieces.Helm && builderSaved.mods, 'saved with the picks and modifiers');

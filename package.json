@@ -10,7 +10,8 @@
     "dist": "electron-builder --win portable",
     "test": "node test/run.js",
     "test:ui": "node test/renderer-smoke.js",
-    "test:search": "node test/search-test.js"
+    "test:search": "node test/search-test.js",
+    "web": "node web/server.js"
   },
   "dependencies": {},
   "devDependencies": {

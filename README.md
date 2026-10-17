@@ -17,8 +17,7 @@ A narrow icon rail (48 px) that can be expanded to show labels, and switched bet
 | Icon | Section | What it does |
 |---|---|---|
 | 🔍 | **Search** | One box for everything: items, boss loot, crafting recipes, activities |
-| 📋 | **Builds** | Your builds: gear with stats, where each piece drops, skill tree, paragon — see below |
-| ✎ | **Builder** | Pick a class and a skill: the proven builds for it explained, or build it yourself — see below |
+| 📋 | **Builds** | *My builds*: your farm list – cheat sheet, gear, where each piece drops, skills, paragon. *Find a build*: pick a class and a skill, every site's guides for it explained, or build it yourself — see below |
 | 🗺 | **Map tool** | The maxroll map tool, embedded — see below |
 | ⚑ | **Activities** | Six maxroll guides: Secret Cow Level, Dark Citadel, Artificer's Tower, Echoing Hatred, Gathering Legions, World Events |
 | 🛍 | **diablo.trade** | Your listings with your own login — the chat is one click away there; unread messages show a red badge |
@@ -230,6 +229,9 @@ ones list the Horadric Cube recipe and the gambling options.
 
 ## Builds / farm list
 
+Builds is one place with two halves, switched in its head: **My builds** (the farm list, below) and
+**Find a build** (class → skill → every guide for it, see *Builder*).
+
 `Ctrl+Shift+B` (changeable under *Settings → Hotkeys*) opens it. Like every panel it does not pin
 itself — **Pin** is always your own click; pinned builds stay fully visible while you play
 (*Settings → Behaviour → No fade out on builds*).
@@ -237,8 +239,24 @@ itself — **Pin** is always your own click; pinned builds stay fully visible wh
 On top: the build (a click opens the build menu in three parts — *Builds* with how many there are,
 *This build* to name it and pick the class, *More* for *+ New farm list*, *Copy build code*,
 *Export all to file …*, duplicate, delete), the link to its source (opens the
-original page in your browser), how much of it is farmed, and *Import*. Below: **Gear · Skills ·
-Paragon**.
+original page in your browser), how much of it is farmed, and *Import*. Below: **Cheat sheet · Gear ·
+Skills · Paragon · Compare**.
+
+**Cheat sheet** — the build on one page, before the gear: the **breakpoints** the guide's author
+names as big numbers (300 Maximum Energy, ≤ 20 s cooldown, 23 ranks …), **Set up once** (the class
+mechanic — Specialization, Soul Shard and Fragment, Enchantments, Oath, Weapon Technique, Spirit
+Boons — the mercenary, the reinforcement with its skill and what sets it off, the talisman), **How to
+play it** (the author's rotation), **Why it works** and the swaps the guide names. Hover a line for
+the author's own words. Breakpoints, rotation and why come from the recipes d4builder reads out of
+the authors' notes (Chinese notes too — the recipes are English), bundled as
+`lib/data/recipes.json` (`node tools/sync-recipes.js` takes over new ones from `../d4builder`); the
+mechanic and the mercenaries from the build's own data when it is imported. A build of your own
+shows what the guides for its main skill say.
+
+**Crafting marks** — one symbol per step, the same on every card, explained under it:
+✦ greater affix · ★ masterwork (reroll the capstone until it lands here) · ⚒ temper (Blacksmith,
+**one per item** — a second one a site saved, or a skill augment's "+100 All Stats" placeholder, is
+left out; augments go by their name: "Flurry hits twice – skill augment") · ↻ enchant · ◈ transfigure.
 
 **Gear** has three views; the one you used last stays.
 
@@ -323,15 +341,13 @@ with the wheel and move by dragging; ⤢ fits everything again.
   names, the roll ranges and the skills d2core lacks (the Warlock's commands) come from the data
   the site draws its own tooltips from. Seal and charm stats are saved without their rolls; like
   the site, they show the best roll (a quarter more when greater). Glyph levels are not saved.
-- **Compare** — the fourth tab next to Gear · Skills · Paragon reads as a move *from* the open
-  build *to* another one — by default another variant of the same guide (Starter → Endgame),
-  otherwise one of the same class. Each gear slot that changes is one line, old → new in its
-  rarity colour, with where the new piece drops (or "you have it"); same items with other rolls
-  and the unchanged slots fold out underneath. Skills, seal & charms, paragon boards and glyphs
-  show their swaps the same way, with what stays in one quiet line. Each part is a slim card whose
-  head says how much changes ("3 changes", or "same" in green). At the end, in a highlighted card:
-  what is left to farm for the other build — ticked in neither — grouped by where it comes from. *Open this
-  build* switches to it.
+- **Compare** — a move *from* the open build *to* another one — by default another variant of
+  the same guide (Starter → Endgame), otherwise one of the same class. Three numbers on top: how
+  many pieces change, how many of them you have, how much is left to farm (a click lists it by
+  where it drops). Then one line per slot that changes: old → new in its rarity colour and where
+  the new piece drops, or "you have it". Skills, paragon, glyphs and talisman are one chip each
+  ("Dash → Shadow Step", "same"); the slots that stay and the same items with other rolls fold out
+  from a chip. *Switch to it* opens the other build.
 - **Several builds** — new, duplicate, rename, delete (build menu). They are saved in
   **`builds.json`** in the data folder, so they travel with it like the map progress. *Copy build
   code* gives one build as a short code (`D4B1:…`) for a chat or the other PC, *Export all to
@@ -354,24 +370,33 @@ their own build. A `builds.json` from before takes every aspect ticked anywhere 
 
 ## Builder
 
-For players who follow guides and want to make a build of their own. Pick a **class**, then the
-**skill** that should do the damage (skill icons; S / A marks a skill a current maxroll endgame
-guide is built around). The build opens on one sheet: skill bar on top, the gear as the game shows
+*Builds → Find a build.* For players who follow guides and want to make a build of their own. Pick a **class**, then the
+**skill** that should do the damage: the skills with guides come first — S-Tier, A-Tier … by
+maxroll's tier list, then the ones with guides only on the other sites — each with how many guides
+there are, the rest after them by kind. The build opens on one sheet: skill bar on top, the gear as the game shows
 it, what the picked piece does on the right.
 
 **Where the build comes from** — a row of cards above the sheet:
 
-- **Proven builds** first: maxroll's tier list, d2core's most liked builds of the season and
-  infinitybuilds' most liked (Mekuna, Rob …), one site after the other. Each opens explained —
-  *Why this build works*: where the damage comes from, crits (or why a damage-over-time skill
+- **Proven builds** first: maxroll's tier list, d2core's most liked builds of the season,
+  infinitybuilds' most liked (Mekuna, Rob …) and the d4builds guides d4builder has read, one site
+  after the other — each card with the author's breakpoints at a glance. Each opens with **What the
+  author says** (breakpoints, set up once, how to play it, why it works — as on the cheat sheet), then
+  explained by the damage model — *What the damage model sees*: where the damage comes from, crits (or why a damage-over-time skill
   ignores them), where Vulnerable comes from, what keeps it alive, speed (Enigma's Teleport),
   Leoric's Crown and the soul splinters it boosts, what the build relies on, and what the model
   cannot count. Every piece shows its share (what the build loses without it), its stats and
   sockets in that build, and *6/8* — in how many of the top builds it appears.
 - **What the top builds agree on** — the most used piece per slot, the skills, sockets and
   charm sets they share.
-- **Build it yourself** — the model picks every slot (one mythic at most, an aspect once) by what
-  it adds; *Make it my own* on a proven build starts from that one. Click a slot (*Change*) or
+- **Build it yourself** — starts from what the top builds use per slot; the model fills only the
+  slots they leave open (one mythic at most, an aspect once). The model reads item texts and cannot
+  see everything a build relies on (procs, set and runeword interplay), so its own pick for every
+  slot is there too, marked *experimental* — and is what a skill without proven builds starts
+  with. A unique's fixed stats replace the rolls of its slot, they never count on top; and every
+  piece is measured at the level the proven builds of the skill reach (crit, attack speed, ranks,
+  damage reduction …) – 25% attack speed is a lot at none and little near the cap. *Make it my
+  own* on a proven build starts from that one. Click a slot (*Change*) or
   search: every option says what it adds on top of everything else you wear (+% damage, toughness,
   speed). *Build for* Pit push / Speed farm / Bosses weighs damage, toughness and speed.
   *Conditional boosts* are bonuses that only work while something is true (Berserking, an Elite,
@@ -379,11 +404,17 @@ it, what the picked piece does on the right.
   add — switch it on and the gear is picked again. Each skill on the bar shows its modifiers; a
   click lists the three variants and both upgrade pairs with what they add.
 
-*Paragon* shows the suggested boards, glyphs and the order of nodes per board (a slider walks
-through the points). *Goals* lists the numbers to aim for with why. **Save as build** puts it
-into the farm list — the gear with the rolls to look for, the skill bar and modifiers (lit in the
-skill tree), the paragon boards joined at their gates, the charm set — or a proven build exactly
-as imported.
+*Skills* and *Paragon* show the build's skill tree and boards (see **Paragon** below). *Goals* is
+about this build, not builds in general: **How this build works**
+– the skill's loop piece by piece and its breakpoints, what the build has against what it needs
+(see *Mechanics* below); **What this build wants most now** – one more of every stat it can roll,
+valued on the build as it stands; then the build next to the top builds, stat by stat (crit
+chance, attack speed, cooldown reduction, skill ranks, damage reduction, movement speed – both
+from the gear), with the slots a stat that falls short rolls on. **Save as build** puts it
+into the farm list — the gear with the rolls to look for (★ masterwork, ⚒ tempers), sockets and
+runes, the skill bar and modifiers (lit in the skill tree, the main skill at its last rank, the key
+passive), the paragon boards turned and joined at their gates, the talisman — or a proven build
+exactly as imported.
 
 **How the numbers are made** (`lib/dmgmodel.js`, `lib/optimizer.js`):
 
@@ -391,15 +422,114 @@ as imported.
 damage = weapon × skill % × main stat × (1 + [+] pool) × (1 + damage multipliers) × every [x]
          × crit (on crits) × Vulnerable (on Vulnerable enemies) × damage over time
 crit   = (A + crit damage [+]) / A × 1.5 × (1 + crit damage multiplier), A = 1 + [+] pool
+lucky hit effect = skill's Lucky Hit Chance × (1 + Lucky Hit Chance from gear) × the effect's chance
+speed  = 1 + attack speed (cap 100%) + cast speed (cap 100%)
 ```
 
 from d4guides' *Damage Calculation* (patch 3.2.2, the model gives its worked example to the
-point) and maxroll's *In-Depth Damage Guide*; toughness is life over the damage reduction sources
-multiplied (maxroll's defence guide). Item, aspect, splinter and gem texts are read into effects
+point) and maxroll's *In-Depth Damage Guide*. Toughness as maxroll's defence guide (Season 11+)
+works it out: per damage type, life over Armor (against all damage), that type's Resistance and
+every other damage reduction, multiplied, averaged over the six types – Armor and Resistance are
+ratings, `R / (R × 10/9 + C)` with C = 5678 / 1136 at level 70, no caps any more; Strength adds 2
+Armor a point, Intelligence 0.4 Resistance; dodge (`1 − Π(1 − dodge)` + 0.6% per 100 Dexterity)
+comes on top. Item, aspect, splinter and gem texts are read into effects
 — value, [x] or [+], who the sentence is about (your skill, a group it is in, or a side effect
 like Arrow Storms), the condition it needs, drawbacks. Procs ("unleash a Rank 20 Chain
 Lightning", Crushing Blow) are shown, not guessed as a number. The souls a Splinter of the Black
 Soulstone counts are a slider.
+
+**Mechanics** – what makes a strong build more than its numbers. Top builds hang on a few
+patterns (read out of maxroll's guides and the notes of d2core's most liked Season 15 builds),
+and the model reads them out of every text, for every class:
+
+| pattern | read from | example |
+|---|---|---|
+| a cast spends the whole pool for x%[x] per point | "Consumes all of your Energy … per Energy Consumed" | Beastfall Boots |
+| spending takes seconds off a cooldown | "Spend 75 Energy to reduce your Ultimate Skill's Cooldown by 5 seconds" | Preparation (Rogue specialization) |
+| a cast gives the pool back, per rank | "generates 11 Energy per Skill Rank" | Aspect of Aftermath |
+| damage per point of the pool held | "0.50%[x] … per point of Fury you have" | Ramaladni's Magnum Opus, Seed of Horazon |
+| a bigger pool | "+20 Maximum Resource", "Primary Resource is increased by 100%" | Melted Heart of Selig |
+| a buff after each cast, counted by its uptime | "Casting an Ultimate Skill increases your damage by 55%[x] for 8 seconds" | Vehement Brawler's Aspect |
+| a skill that lasts – up while its cooldown is not longer | game data: "follows you for 8 seconds" | Cataclysm |
+| the skill becomes one of another group | "Blazing Scream is now an Archfiend Skill" | Elegy, Indira's Memory, The Third Blade |
+| no Cooldown Reduction | "This ritual does not benefit from Cooldown Reduction" | Apocalypse |
+| casting one skill takes seconds off others | "Casting an Ultimate Skill reduces the Cooldowns of your other Skills by 10 seconds", "… and vice versa", Lucky Hit "Reduce the active Cooldowns of your Trap Skills by 30%" | Aspect of Apogeic Furor, Synergy, the Orange Herald, Misericorde |
+| the resource budget | "+4 Fury Regeneration", "15% Resource Generation", "7% Cost Reduction", Lucky Hit restores, "7% Fury Drains per second", "free to cast" | Ramaladni's drain, Rod of Kepeleke |
+| more hits a cast | "the Lesser Demon skulls deal the same damage as the main skull" – counted as at least one more full hit | Elegy |
+
+`cycle()` plays the main skill through a dozen casts – what each spends, what that takes off the
+cooldown, what comes back – and gives the **breakpoints**: Rain of Arrows with those three needs
+300 Energy and ~60% Cooldown Reduction to clear its 50 s cooldown and enough ranks for Aftermath to
+refill the pool (maxroll's guide: 300 Energy, 61%); below that it is a step, not a slope.
+
+**Cooldown chains** (`chainTimes`): every skill on the bar with a cooldown, cast when it is ready,
+with the seconds the other casts take off it – skill *i* comes back every `T_i = base_i / (1 + Σ_j r_ji / T_j)`
+(in `T_i` seconds skill *j* is cast `T_i / T_j` times, each taking `r_ji` off), played to a fixed
+point; the main skill counts as a source too. The buffs the bar keeps up (Berserking, Unstoppable,
+Fortify, Barrier, Vulnerable, crowd control, Frozen – read with their seconds from the skill text)
+count **by their uptime**: a bonus "while Fortified" from an aura up half the time counts half, and
+Cooldown Reduction or a chain that keeps it up all the time raises it – the goals show each such
+skill's breakpoint ("Cooldown Reduction to keep Sigil of Chaos up").
+
+**Resource budget** (`sustain`): a spender cast non-stop costs `cost × casts a second × (1 − Cost
+Reduction)` plus drains; in come regeneration (gear, buffs, and the base value the player reads off
+the character sheet – the game data has none, it is a field in the goals) and Lucky Hit restores,
+raised by Resource Generation. Short of it, the generator on the bar fills the gap and the spender
+is cast `m = (generator + income) / (spend + generator)` of the time. Its breakpoint: income ≥ spend.
+
+The builder works with all of it: a loop only pays off whole, so its pieces are also tried as a
+package, every specialization or key passive a loop hangs on is tried, a piece that gives the
+skill a tag has the whole build read again with that tag. The **breakpoint chase** puts the stat
+that closes an open breakpoint (Maximum Resource, Cooldown Reduction, ranks, regeneration, Resource
+Generation, Cost Reduction, restores) on slot after slot in place of the roll that costs least, and
+tries the pieces that move it (a Lucky Hit restore aspect, a cooldown chain) – the whole build
+decides whether that beats what it had. A cast takes one second at no speed – assumed, the game
+data has no animation lengths.
+
+**Stats and tempers** are picked by the model for the build as it stands, not from a list: three
+affixes per legendary, one temper (shown with its category – Offensive,
+Defensive, Utility, Mobility, Resource, Weapons – and manual) on any piece, uniques keep their own
+stats. With every other piece in place, a slot gets what this build lacks – Maximum Resource where
+a loop spends the pool, the skill's own cooldown temper, crit damage where it crits; a temper for
+another skill group ("Frost Critical Strike Chance") is nothing to a skill outside it. ★ marks the
+affix the masterwork capstone (+50% to one affix) is worth most on – reroll until it lands there;
+⚒ marks a temper. "+100 All Stats" in the data is no temper: d2core and maxroll both carry it as
+the text of the skill augments ("Flurry hits twice") whose real text neither has – left out.
+Swapping a piece picks them again. Every tile shows its card on hover (as in the farm list).
+
+**Sockets** – per slot what adds the most: gems by their weapon, armour or jewellery power, soul
+splinters in jewellery only (or a helm that counts as jewellery, Leoric's Crown, at 1.5×), a
+runeword's own runes, and **rune pairs** in two-socket armour: a condition rune gains Offering when
+the build does its thing (Tam: a non-channeled Core cast, Yul: a skill with a cooldown, Zan: an
+Ultimate, Poc: 5% of the pool spent, Cir, Igni, Ort, Tal – how often comes from the model's casts,
+chains and budget), an effect rune spends it (Ohm, Vex, Gar, Sol, Qua – effect × how often it can
+fire, by its cooldown). Conditions that hang on how you play (Evade, potions, taking no damage) and
+effects the model cannot count (procs, Gold Find) are left out.
+
+**Class choices** – the player's own picks besides skills and gear, from the game data, each the
+one that adds most on the build: Sorcerer enchantments (two – the slots "Legacy of the Magi" opens;
+"Chain Lightning forms automatically after spending 100 Mana" is a free cast per 100 spent),
+Druid spirit boons (one per spirit and one more), Paladin oath, Barbarian weapon expertise (the
+technique slot, rank 10), Warlock shard, Rogue specialization. They count in every number.
+
+**Paragon** – worked out on the build, board by board: every gate tried as the way in (that is the
+board's rotation) and every other as the way out to the next board, which hangs on there (up or to
+a side). On each board: the legendary node and the glyph socket first, then the glyph's threshold
+("40 Intelligence within range") as one package of the nearest nodes of that attribute inside its
+radius (Manhattan distance, as d2core's planner counts it), then whatever adds most per point – a
+node's own value plus what its attribute points give the glyph – keeping the way to the gate out
+free. A board is taken for its legendary node first; one whose legendary does nothing for the
+build only when nothing better is left. 220 points, glyphs at rank 100 (radius 5, legendary bonus).
+The Skills and Paragon views are the farm list's own (icons or minimal), drawn on what *Save as
+build* would keep – before anything is saved.
+
+**Talisman** – a Mythic seal's 6 charm slots filled by the model: a set by its 2/3/5 bonuses,
+Unique Charms (the power of their unique item, 147 in Season 15), a Mythic Charm. Three ways side
+by side: a Mythic seal (one Unique Charm, two with the Hellfire Torch), the Seal of the Golden
+Epiphany ("Can equip up to 3 Unique Charms"), and the **seal swap** – charms put in under the
+Golden Epiphany, then that seal swapped for the Seal of the Diamond Mind ("Reduces the number of
+Charms needed for Set bonuses by 1"), the Unique Charms stay. The swap is a Season 15 trick
+reported by players and may be fixed any time; the build counts the plain Mythic seal.
 
 Data: maxroll's game data (skills, modifiers, sets, tiers), d2core's item files (uniques with
 their fixed stats and runewords, aspects, soul splinters, gems, affixes per slot, tempers,
@@ -544,7 +674,7 @@ in German, to find it quickly.
 | `clicker-test.js` | macros: bindings, speed limits, key lists, off by default, what the helper is told |
 | `maxbuild-test.js` | maxroll import: links, guide page, planner variant → build, dual wield |
 | `infinitybuilds-test.js` | infinitybuilds import: links and variants, English names, stat values like the site's tooltips, command skills, paragon, charms |
-| `builder-test.js` | builder: the damage formula (d4guides' example), reading item texts (multipliers, whose skill, conditions, splinters, souls), the optimizer, proven build lists and their consensus |
+| `builder-test.js` | builder: the damage formula (d4guides' example), reading item texts (multipliers, whose skill, conditions, splinters, souls), the optimizer, proven build lists and their consensus, mechanics (loops and breakpoints, uptime, the pool, tags, tempers), the resource budget, cooldown chains, buffs by their uptime, stats picked for the build |
 | `sitebuilds-test.js` | d4builds + d2core import: links, variants, slots, aspects by game id, Chinese titles |
 | `farm-test.js` | farm list: slots, sources, aspect tooltips, merged variants; builds: save, ticks, code, import |
 | `compare-test.js` | comparing two builds: partner variant, gear, skills, charms, paragon, what is left to farm |

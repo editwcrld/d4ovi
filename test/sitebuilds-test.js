@@ -58,7 +58,9 @@ console.log('ok  names matched to the catalog, slots, dual wield, build names');
 assert.deepStrictEqual(d4b.parseUrl('https://d4builds.gg/builds/9b97893d-ff28-403d-9b80-e30a22cf3163/?var=1'),
   { id: '9b97893d-ff28-403d-9b80-e30a22cf3163', variant: 1 });
 assert.deepStrictEqual(d4b.parseUrl('d4builds.gg/builds/9B97893D-FF28-403D-9B80-E30A22CF3163'), { id: '9b97893d-ff28-403d-9b80-e30a22cf3163', variant: 0 });
-assert.strictEqual(d4b.parseUrl('https://d4builds.gg/builds/abc'), null);
+// a guide's own link names the build by its page; the id comes from the page data
+assert.deepStrictEqual(d4b.parseUrl('https://d4builds.gg/builds/rain-of-arrows-rogue-endgame/?var=2'), { slug: 'rain-of-arrows-rogue-endgame', variant: 2 });
+assert.strictEqual(d4b.parseUrl('https://d4builds.gg/meta-builds/'), null);
 assert.deepStrictEqual(d4b.plain({ mapValue: { fields: { a: { stringValue: 'x' }, n: { integerValue: '3' }, z: { nullValue: null },
   l: { arrayValue: { values: [{ booleanValue: true }, { stringValue: 'y' }] } } } } }), { a: 'x', n: 3, z: null, l: [true, 'y'] });
 
@@ -225,7 +227,19 @@ const fakeNet = (routes) => ({ fetch: async (url, opts) => {
     [['Paragon_Rogue_00', 0, 0, 0, '', 0, [[14, 10]]], ['Paragon_Rogue_01', 0, -1, 1, 'ParagonGlyph_059', 150, [[10, 19]]]], 'd2core boards in order, deleted ones out');
   const d4 = d4b.itemExtras({ newStats: { Helm: ['Cooldown Reduction', null, 'Maximum Resource'] }, greaterAffixes: { Helm: [1, null, null] },
     temperingStats: { Helm: ['Maximum Life (Worldly Endurance - Defensive)'] }, newGems: { Helm: ['Emerald', null] } }, 'Helm');
-  assert.deepStrictEqual(d4, { stats: [{ t: 'Cooldown Reduction', g: 1 }, { t: 'Maximum Resource' }, { t: 'Maximum Life', tmp: 1 }], sockets: ['Emerald'] }, 'd4builds: names, greater, tempering, gems');
+  assert.deepStrictEqual(d4.stats, [{ t: 'Cooldown Reduction', g: 1 }, { t: 'Maximum Resource' }, { t: 'Maximum Life', tmp: 1, how: 'Defensive · Worldly Endurance' }], 'd4builds: names, greater, tempering with its manual');
+  assert.deepStrictEqual(d4.sockets, ['Emerald'], 'gems');
+  // a unique: the gaps in the row are its own affixes – main stat, then its fixed ones; greater and
+  // masterwork by position, the temper after the affixes (Cowl of the Nameless on d4builds.gg)
+  const cowl = d4b.itemExtras({ newStats: { Helm: [null, null, 'Cooldown Reduction', 'Maximum Resource'] }, greaterAffixes: { Helm: [null, null, 1, 1, null] },
+    masterworking: { Helm: [0, 0, 1, 0, 0] }, temperingStats: { Helm: ['Maximum Life (Worldly Endurance - Defensive)'] } }, 'Helm');
+  assert.deepStrictEqual(d4b.stats(cowl.pos, ['Dexterity', '+2 to Imbuement Skills']), [{ t: 'Dexterity' }, { t: '+2 to Imbuement Skills' },
+    { t: 'Cooldown Reduction', g: 1, mw: 1 }, { t: 'Maximum Resource', g: 1 }, { t: 'Maximum Life', tmp: 1, how: 'Defensive · Worldly Endurance' }], 'd4builds: a unique\'s own affixes fill the gaps, ★ where the masterwork goes');
+  // a runeword: five own stats, the temper after them (Enigma: masterwork on the 4th, greater on 3rd and 4th)
+  const enigma = d4b.itemExtras({ newStats: { 'Chest Armor': [null, null, null, null] }, greaterAffixes: { 'Chest Armor': [null, null, 1, 1, null, null] },
+    masterworking: { 'Chest Armor': [0, 0, 0, 1, 0] }, temperingStats: { 'Chest Armor': ['Maximum Life (Worldly Endurance - Defensive)'] } }, 'Chest Armor');
+  assert.deepStrictEqual(d4b.stats(enigma.pos, ['+2 to All Skills', '+45% Movement Speed', '12.0% Damage Reduction', '40.0% Maximum Life', '+779 Armor']).map((x) => (x.g ? '✦' : '') + (x.mw ? '★' : '') + (x.tmp ? '⚒' : '') + x.t),
+    ['+2 to All Skills', '+45% Movement Speed', '✦12.0% Damage Reduction', '✦★40.0% Maximum Life', '+779 Armor', '⚒Maximum Life'], 'd4builds: a runeword\'s five stats and its temper');
   const dp = d4b.paragonOf({ paragon: { selectedTiles: ['startingboard_r2c11', 'exploitweakness_r1c1'],
     boards: [{ name: 'Starting Board', x: 0, y: 0, rotation: 0 }, { name: 'Exploit Weakness', x: 0, y: 1, rotation: 270, glyph: 'Versatility', glyphLevel: 100 }, { name: 'Unknown Board', x: 1, y: 1 }] } }, 'Rogue', DB);
   assert.deepStrictEqual(dp.boards.map((x) => [x.k, x.x, x.y, x.rot, x.glyph || '']), [['Paragon_Rogue_00', 0, 0, 0, ''], ['Paragon_Rogue_07', 0, -1, 3, 'ParagonGlyph_052']],

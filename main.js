@@ -17,6 +17,7 @@ const farm = require('./lib/farm');
 const builds = require('./lib/builds');
 const maxbuild = require('./lib/maxbuild');
 const buildimport = require('./lib/buildimport');
+const guideinfo = require('./lib/guideinfo');
 const zhdict = require('./lib/zhdict');
 const d2db = require('./lib/d2coredb');
 const builder = require('./lib/builder');
@@ -517,12 +518,23 @@ ipcMain.handle('farm:get', () => farm.catalog(loot, craft));
 ipcMain.handle('farm:tooltip', (_e, type, id) => farm.tooltip(net, String(type || ''), String(id || '')));
 ipcMain.handle('farm:css', () => farm.tooltipCss());
 ipcMain.handle('builds:get', () => builds.load());
+// the game data the builder keeps: names of class mechanics and mercenaries, the uniques' own affixes
+const builderData = () => builder.current() || builder.load(net, () => d2db.currentBuild(net), dlog);
 // A build link (maxroll guide / planner, d4builds.gg, infinitybuilds.gg, d2core.com) -> its variants, ready to be added as builds
 ipcMain.handle('builds:link', async (_e, url) => {
-  try { return await buildimport.load(net, String(url || ''), farm.catalog(loot, craft), dlog); }
+  try { return await buildimport.load(net, String(url || ''), farm.catalog(loot, craft), dlog, builderData); }
   catch (e) { dlog('build import failed:', e.message); return { error: e.message }; }
 });
 ipcMain.handle('builds:save', (_e, d) => builds.save(d));
+// What the guide's authors say about a build – breakpoints, rotation, why it works (lib/guideinfo.js):
+// its own guide by its link, else the guides of its main skill
+ipcMain.handle('builds:sheet', (_e, q) => {
+  const o = q || {};
+  const own = o.url ? guideinfo.sheetFor(String(o.url)) : null;
+  if (own) return Object.assign(own, { own: true });
+  const other = guideinfo.sheetsForSkill(String(o.cls || ''), String(o.skill || ''))[0];
+  return other ? Object.assign(other, { own: false }) : null;
+});
 // Skill tree and paragon boards for the build views – d2core's database, fetched on first use
 ipcMain.handle('builds:tree', async (_e, cls) => {
   try { return d2db.treeFor(await d2db.load(net, dlog), String(cls || '')); } catch (e) { return { error: e.message }; }
@@ -552,6 +564,7 @@ ipcMain.handle('builder:catalog', () => builderApi.catalog());
 ipcMain.handle('builder:plan', (_e, cls, key, opts) => builderApi.plan(String(cls || ''), String(key || ''), opts || {}));
 ipcMain.handle('builder:proven', (_e, cls, key) => builderApi.proven(String(cls || ''), String(key || '')));
 ipcMain.handle('builder:save', (_e, cls, key, picks) => builderApi.save(String(cls || ''), String(key || ''), picks || {}));
+ipcMain.handle('builder:preview', (_e, cls, key, picks) => builderApi.preview(String(cls || ''), String(key || ''), picks || {}));
 ipcMain.handle('builds:export', async () => {
   const r = await withDialog(() => dialog.showSaveDialog(overlay, {
     defaultPath: path.join(app.getPath('documents'), 'd4-builds.json'),

@@ -227,7 +227,8 @@ function openSection(name, url, heading) {
   if (name === 'page' && !same) pageFrom = prevSection;
 
   $('panel').hidden = !section;
-  document.querySelectorAll('#rail .ri[data-section]').forEach((b) => b.classList.toggle('on', b.dataset.section === section));
+  // the builder lives under Builds – one icon for both
+  document.querySelectorAll('#rail .ri[data-section]').forEach((b) => b.classList.toggle('on', b.dataset.section === section || (section === 'builder' && b.dataset.section === 'farm')));
 
   const embedded = !!EMBEDDED[section];
   $('viewSlot').hidden = !embedded;
@@ -339,6 +340,18 @@ function render() {
   renderSection();
   const host = !$('top').hidden ? $('top') : section === 'farm' ? $('main').querySelector('.fbar') : section === 'builder' ? $('main').querySelector('.bd-head') : section === 'settings' || section === 'notes' ? $('main').querySelector('.sethead') : null;
   if (host) { host.appendChild(tools); tools.classList.add('docked'); }
+  if (host && (section === 'farm' || section === 'builder')) host.insertBefore(buildsSwitch(), host.firstChild);
+}
+/** Builds is one place: your farm list, and finding a build (class, skill, every site's guides). */
+function buildsSwitch() {
+  const s = el('div', 'seg bswitch');
+  [['farm', 'My builds', 'Your farm list'], ['builder', 'Find a build', 'Pick a class and a skill – every guide for it, or build it yourself']].forEach(([k, label, title]) => {
+    const b = el('button', section === k ? 'on' : '', label);
+    b.title = title;
+    b.onclick = () => { if (section !== k) openSection(k); };
+    s.appendChild(b);
+  });
+  return s;
 }
 function renderSection() {
   const main = $('main'), side = $('side');
@@ -379,6 +392,7 @@ const builderCtx = {
   },
   note: (t, kind) => showNote(t, kind, 3500),
   openFarm: () => openSection('farm'),
+  openPage: (url) => openSection('page', url),   // the skill tree's d4builds.gg fallback
 };
 
 // What the farm list (farm.js) may use from here
@@ -1403,6 +1417,8 @@ function keyChips(kind, keys, onAdd, onRemove) {
     took = e.button === 0;                           // only the left button clicks afterwards
     take({ 0: 'Mouse1', 2: 'Mouse2', 1: 'Mouse3', 3: 'Mouse4', 4: 'Mouse5' }[e.button]);
   };
+  // the click of a left button taken comes right after its mouseup – only that one is swallowed
+  add.onmouseup = () => { if (took) setTimeout(() => { took = false; }, 0); };
   add.oncontextmenu = (e) => { if (rec) e.preventDefault(); };
   add.onkeydown = (e) => {
     if (!rec) return;

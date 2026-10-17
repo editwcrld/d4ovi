@@ -9,7 +9,7 @@ const SLOT_KEYS = ['Helm', 'Chest Armor', 'Gloves', 'Pants', 'Boots', 'Amulet', 
 const LABEL = { 'Chest Armor': 'Chest', Ring1: 'Ring', Ring2: 'Ring 2' };
 
 /** What sits in a slot: the item, or its aspects. */
-const parts = (s) => (!s ? [] : s.item ? [s.item] : (s.aspects || []).slice());
+const parts = (s) => (!s ? [] : s.item ? [s.item].concat(s.tf ? [s.tf] : []) : (s.aspects || []).slice());
 const stats = (s) => ((s && s.stats) || []).map((x) => x.t);
 /** Items of a list that are not in the other one (each counted, so "Ruby ×2" vs "Ruby ×1" shows). */
 function minus(a, b) {
@@ -116,6 +116,9 @@ const boardName = (k) => (names && names.boards && names.boards[k] && names.boar
 const glyphName = (k) => (names && names.glyphs && names.glyphs[k] && names.glyphs[k].name) || String(k).replace(/^ParagonGlyph_/, 'Glyph ');
 
 /**
+ * Three numbers, then one line per slot that changes – old → new, and where the new one drops or
+ * that you have it. Skills, paragon and talisman as one short chip each; whatever stays the same
+ * folds away. No sentences to read.
  * @param {HTMLElement} box
  * @param {object} a       the open build
  * @param {object} ctx     { el, builds, codex, rerender(), choose(id), look(name) -> {rarity, where}, api }
@@ -136,150 +139,141 @@ function render(box, a, ctx) {
 
   // ---- from this build to that one
   const head = el('div', 'cmp-head');
-  const from = el('div', 'cmp-from');
-  from.appendChild(el('span', 'k', 'From'));
-  from.appendChild(el('b', null, a.name));
-  head.appendChild(from);
+  head.appendChild(el('b', 'cmp-from', a.name));
   head.insertAdjacentHTML('beforeend', '<span class="cmp-arrow">' + ARROW + '</span>');
-  const to = el('label', 'cmp-to');
-  to.appendChild(el('span', 'k', 'To'));
   const sel = el('select');
+  sel.title = 'The build to compare with';
   others.forEach((x) => { const o = el('option', null, x.name); o.value = x.id; if (x.id === b.id) o.selected = true; sel.appendChild(o); });
   sel.onchange = () => { withId = sel.value; open = {}; ctx.rerender(); };
-  to.appendChild(sel);
-  head.appendChild(to);
+  head.appendChild(sel);
   head.appendChild(el('span', 'sp'));
-  const go = el('button', 'ab', 'Open this build');
-  go.title = 'Switch to “' + b.name + '”';
+  const go = el('button', 'ab pri', 'Switch to it');
+  go.title = 'Open “' + b.name + '” in the farm list';
   go.onclick = () => ctx.choose(b.id);
   head.appendChild(go);
   box.appendChild(head);
 
-  const body = el('div', 'cmp-body');
-  box.appendChild(body);
   const page = el('div', 'cmp-page');
-  body.appendChild(page);
+  box.appendChild(page);
 
-  // one calm line: what moves, and how much is left
-  const swaps = (sp) => Math.max(sp.onlyA.length, sp.onlyB.length);
-  const facts = [[d.changed, 'gear slot', 'gear slots'], [swaps(d.skills), 'skill', 'skills'], [swaps(d.charms), 'charm', 'charms'], [swaps(d.boards), 'paragon board', 'paragon boards']]
-    .filter(([n]) => n).map(([n, one, many]) => n + ' ' + (n === 1 ? one : many));
-  const sum = el('div', 'cmp-sum');
-  sum.appendChild(el('span', null, facts.length ? 'Changes: ' + facts.join(' · ') : 'The two builds are the same.'));
-  sum.appendChild(el('b', d.need.length ? 'left' : 'left none', d.need.length ? d.need.length + ' left to farm' : 'Nothing left to farm'));
-  page.appendChild(sum);
-
-  // ---- gear: every change as "old → new", and where the new one drops
+  // ---- three numbers
   const changed = d.slots.filter((s) => s.state !== 'same');
+  const owned = (s) => s.partsB.length && s.partsB.every((n) => d.done.has(n));
+  const tiles = el('div', 'cmp-tiles');
+  const tile = (n, label, cls, key) => {
+    const t = el(key ? 'button' : 'div', 'cmp-tile ' + cls + (key && open[key] ? ' on' : ''));
+    t.appendChild(el('b', null, String(n)));
+    t.appendChild(el('span', null, label));
+    if (key) t.onclick = () => { open[key] = !open[key]; ctx.rerender(); };
+    tiles.appendChild(t);
+  };
+  tile(changed.length, changed.length === 1 ? 'piece changes' : 'pieces change', '');
+  tile(changed.filter(owned).length, 'of them you have', 'have');
+  tile(d.need.length, 'left to farm' + (d.need.length ? (open.need ? ' ▴' : ' ▾') : ''), d.need.length ? 'need' : 'have', d.need.length ? 'need' : null);
+  page.appendChild(tiles);
+  if (open.need && d.need.length) page.appendChild(needList(el, d, look));
+
+  // ---- one line per slot that changes
+  if (changed.length) {
+    const t = el('div', 'cmp-table');
+    const hr = el('div', 'cmp-r cmp-th');
+    ['Slot', 'Now', '', 'Then', 'Where'].forEach((x) => hr.appendChild(el('span', null, x)));
+    t.appendChild(hr);
+    changed.forEach((s) => {
+      const r = el('div', 'cmp-r');
+      r.appendChild(el('span', 'slot', s.label));
+      r.appendChild(names_(el, s.partsA, look, 'old'));
+      r.insertAdjacentHTML('beforeend', '<span class="arr">' + ARROW + '</span>');
+      r.appendChild(names_(el, s.partsB, look, 'new'));
+      r.appendChild(whereOf(el, s.partsB, look, d.done));
+      t.appendChild(r);
+      if (s.socketsA.length || s.socketsB.length) t.appendChild(sockLine(el, s));
+    });
+    page.appendChild(t);
+  } else page.appendChild(el('div', 'cmp-none', 'The gear is the same.'));
+
+  // ---- the rest as chips: skills, paragon, glyphs, talisman; what stays folds away
+  const chips = el('div', 'cmp-chips');
+  const chip = (label, sp, nice) => {
+    const ps = pairs(sp);
+    const c = el('span', 'cmp-chip' + (ps.length ? '' : ' same'));
+    c.appendChild(el('b', null, label));
+    const txt = !ps.length ? 'same'
+      : ps.length === 1 ? ps.map(([x, y]) => (x && y ? nice(x) + ' → ' + nice(y) : y ? '+ ' + nice(y) : '− ' + nice(x)))[0]
+        : ps.length + ' swaps';
+    c.appendChild(el('span', null, txt));
+    c.title = ps.map(([x, y]) => (x ? nice(x) : '—') + ' → ' + (y ? nice(y) : '—')).join('\n') || 'The same in both builds';
+    chips.appendChild(c);
+  };
+  chip('Skills', d.skills, (x) => x);
+  chip('Paragon', d.boards, boardName);
+  chip('Glyphs', d.glyphs, glyphName);
+  chip('Talisman', d.charms, (x) => x);
   const rolls = d.slots.filter((s) => s.state === 'same' && (s.statsOnlyA.length || s.statsOnlyB.length || s.socketsA.length || s.socketsB.length));
   const same = d.slots.filter((s) => s.state === 'same');
-  const gear = section(page, el, 'Gear', changed.length ? changed.length + ' of ' + d.slots.length + ' slots change' : 'no slot changes',
-    { icon: 'armor', badge: changed.length ? changed.length + ' change' + (changed.length === 1 ? '' : 's') : 'same', badgeCls: changed.length ? 'warn' : 'ok' });
-  changed.forEach((s) => {
-    const blk = el('div', 'cmp-blk');
-    const row = el('div', 'cmp-row');
-    row.appendChild(el('span', 'slot', s.label));
-    row.appendChild(names_(el, s.partsA, look, 'old'));
-    row.insertAdjacentHTML('beforeend', '<span class="arr">' + ARROW + '</span>');
-    row.appendChild(names_(el, s.partsB, look, 'new'));
-    row.appendChild(whereOf(el, s.partsB, look, d.done));
-    blk.appendChild(row);
-    if (s.socketsA.length || s.socketsB.length) blk.appendChild(sockLine(el, s));
-    gear.appendChild(blk);
-  });
-  if (rolls.length) {
-    const t = fold(gear, el, 'rolls', 'Same item, other rolls', rolls.length, ctx);
-    if (open.rolls) {
-      rolls.forEach((s) => {
-        const r = el('div', 'cmp-roll');
-        r.appendChild(el('span', 'slot', s.label));
-        const c = el('div', 'what');
-        c.appendChild(names_(el, s.partsB, look, 'new'));
-        s.statsOnlyA.forEach((x) => c.appendChild(el('div', 'st out', x)));
-        s.statsOnlyB.forEach((x) => c.appendChild(el('div', 'st in', x)));
-        if (s.socketsA.length || s.socketsB.length) c.appendChild(sockLine(el, s));
-        r.appendChild(c);
-        gear.appendChild(r);
-      });
-    }
-    t.title = 'Rolls and sockets that differ on an item both builds use';
-  }
-  if (same.length) {
-    const t = fold(gear, el, 'same', 'Unchanged', same.length, ctx);
-    if (open.same) {
-      const g = el('div', 'cmp-same');
-      same.forEach((s) => {
-        const c = el('span', 'chip');
-        c.appendChild(el('i', null, s.label));
-        c.appendChild(names_(el, s.partsB, look, 'new'));
-        g.appendChild(c);
-      });
-      gear.appendChild(g);
-    }
-    t.title = 'Slots that hold the same thing in both builds';
-  }
+  if (rolls.length) foldChip(chips, el, 'rolls', rolls.length + ' with other rolls', ctx);
+  if (same.length) foldChip(chips, el, 'same', same.length + (same.length === 1 ? ' slot stays' : ' slots stay') + ' the same', ctx);
+  page.appendChild(chips);
 
-  // ---- skills, charms, paragon: swaps as "old → new", the rest in one quiet line
-  swapSection(page, el, 'Skills', d.skills, (x) => x, 'skills');
-  swapSection(page, el, 'Seal & charms', d.charms, (x) => (x === d.seal ? x + ' (seal)' : x), 'charm');
-  swapSection(page, el, 'Paragon boards', d.boards, boardName, 'paragon');
-  swapSection(page, el, 'Glyphs', d.glyphs, glyphName, 'glyph');
-
-  // ---- what is left to farm for the other build, by where it comes from
-  if (d.need.length) {
-    const sec = section(page, el, 'Left to farm for “' + b.name + '”', 'Ticked in neither build — by where it comes from',
-      { icon: 'target', badge: d.need.length + ' left', badgeCls: 'warn', cls: 'accent' });
-    const groups = new Map();
-    const put = (g, node) => { if (!groups.has(g)) groups.set(g, []); groups.get(g).push(node); };
-    d.need.forEach((k) => {
-      if (k.startsWith('s:')) {
-        const n = k.slice(2), c = d.sockets[n] || 1;
-        put('Gems, runes & splinters', el('span', 'nm gem', n + (c > 1 ? ' ×' + c : '')));
-      } else if (k.startsWith('c:')) {
-        put('Seal & charms', el('span', 'nm charm', k.slice(2)));
-      } else {
-        const l = look(k);
-        put(l.where || 'Random drop', el('span', 'nm ' + (RCLS[l.rarity] || ''), k));
-      }
+  if (open.rolls && rolls.length) {
+    const box2 = el('div', 'cmp-fold-box');
+    rolls.forEach((s) => {
+      const r = el('div', 'cmp-roll');
+      r.appendChild(el('span', 'slot', s.label));
+      const c = el('div', 'what');
+      c.appendChild(names_(el, s.partsB, look, 'new'));
+      s.statsOnlyA.forEach((x) => c.appendChild(el('div', 'st out', '− ' + x)));
+      s.statsOnlyB.forEach((x) => c.appendChild(el('div', 'st in', '+ ' + x)));
+      if (s.socketsA.length || s.socketsB.length) c.appendChild(sockLine(el, s));
+      r.appendChild(c);
+      box2.appendChild(r);
     });
-    // bosses and dungeons first, the general places after them
-    const late = /^(gems|seal|salvage|random|any )/i;
-    [...groups.keys()].sort((x, y) => late.test(x) - late.test(y)).forEach((g) => {
-      const r = el('div', 'cmp-need');
-      r.appendChild(el('span', 'cmp-src', g));
-      const list = el('div', 'list');
-      groups.get(g).forEach((n) => list.appendChild(n));
-      r.appendChild(list);
-      sec.appendChild(r);
+    page.appendChild(box2);
+  }
+  if (open.same && same.length) {
+    const g = el('div', 'cmp-same');
+    same.forEach((s) => {
+      const c = el('span', 'chip');
+      c.appendChild(el('i', null, s.label));
+      c.appendChild(names_(el, s.partsB, look, 'new'));
+      g.appendChild(c);
     });
+    page.appendChild(g);
   }
 }
 
-/** A section as a slim card (renderer/cards.js) – icon, title, a line, a badge with the count. */
-function section(page, el, title, sub, o = {}) {
-  if (root.SCard) {
-    const c = root.SCard.card(el, { title, sub, icon: o.icon, badge: o.badge, badgeCls: o.badgeCls, cls: 'slim cmp-sec' + (o.cls ? ' ' + o.cls : '') });
-    page.appendChild(c.card);
-    return c.body;
-  }
-  const s = el('div', 'cmp-sec');
-  const h = el('div', 'cmp-h');
-  h.appendChild(el('h3', null, title));
-  if (sub) h.appendChild(el('span', null, sub));
-  s.appendChild(h);
-  page.appendChild(s);
-  return s;
-}
-/** A part of a section that folds out on a click ("Unchanged · 8"). */
-function fold(into, el, key, label, n, ctx) {
-  const t = el('button', 'cmp-fold' + (open[key] ? ' on' : ''));
-  t.appendChild(el('span', 'chev', open[key] ? '▾' : '▸'));
-  t.appendChild(el('span', null, label));
-  t.appendChild(el('b', null, String(n)));
+/** A chip that folds a list out under the chips ("8 slots stay the same ▾"). */
+function foldChip(into, el, key, label, ctx) {
+  const t = el('button', 'cmp-chip cmp-fold' + (open[key] ? ' on' : ''));
+  t.appendChild(el('span', null, label + (open[key] ? ' ▴' : ' ▾')));
   t.onclick = () => { open[key] = !open[key]; ctx.rerender(); };
   into.appendChild(t);
   return t;
 }
+/** What is left to farm for the other build, by where it comes from – bosses and dungeons first. */
+function needList(el, d, look) {
+  const box = el('div', 'cmp-needs');
+  const groups = new Map();
+  const put = (g, node) => { if (!groups.has(g)) groups.set(g, []); groups.get(g).push(node); };
+  d.need.forEach((k) => {
+    if (k.startsWith('s:')) {
+      const n = k.slice(2), c = d.sockets[n] || 1;
+      put('Gems, runes & splinters', el('span', 'nm gem', n + (c > 1 ? ' ×' + c : '')));
+    } else if (k.startsWith('c:')) put('Seal & charms', el('span', 'nm charm', k.slice(2)));
+    else { const l = look(k); put(l.where || 'Random drop', el('span', 'nm ' + (RCLS[l.rarity] || ''), k)); }
+  });
+  const late = /^(gems|seal|salvage|random|any )/i;
+  [...groups.keys()].sort((x, y) => late.test(x) - late.test(y)).forEach((g) => {
+    const r = el('div', 'cmp-need');
+    r.appendChild(el('span', 'cmp-src', g));
+    const list = el('div', 'list');
+    groups.get(g).forEach((n) => list.appendChild(n));
+    r.appendChild(list);
+    box.appendChild(r);
+  });
+  return box;
+}
+
 /** Item / aspect names in their rarity colour; nothing there reads "empty". */
 function names_(el, list, look, side) {
   const w = el('span', 'nms ' + side);
@@ -307,32 +301,6 @@ function sockLine(el, s) {
   if (s.socketsB.length) l.appendChild(el('span', 'in', s.socketsB.join(', ')));
   return l;
 }
-function swapSection(page, el, title, sp, nice, icon) {
-  const ps = pairs(sp);
-  if (!ps.length && !sp.both.length) return;
-  const n = (f) => ps.filter(f).length;
-  const what = [[n(([x, y]) => x && y), 'swapped'], [n(([x]) => !x), 'new'], [n(([, y]) => !y), 'removed']]
-    .filter(([k]) => k).map(([k, w]) => k + ' ' + w).join(' · ');
-  const moves = ps.length;
-  const sec = section(page, el, title, what || 'the same in both',
-    { icon, badge: moves ? moves + ' change' + (moves === 1 ? '' : 's') : 'same', badgeCls: moves ? 'warn' : 'ok' });
-  // same columns as the gear, so every arrow sits under the one above
-  ps.forEach(([x, y]) => {
-    const blk = el('div', 'cmp-blk');
-    const row = el('div', 'cmp-row');
-    // one side empty: an addition ("— → X  new") or a removal ("X → —  removed")
-    const one = (v, side) => { const s = el('span', 'nms ' + side); s.appendChild(v ? el('span', 'nm', nice(v)) : el('span', 'none', '—')); return s; };
-    row.appendChild(el('span', 'slot'));
-    row.appendChild(one(x, 'old'));
-    row.insertAdjacentHTML('beforeend', '<span class="arr">' + ARROW + '</span>');
-    row.appendChild(one(y, 'new'));
-    row.appendChild(x && y ? el('span', 'cmp-src') : el('span', 'cmp-src tag ' + (y ? 'add' : 'del'), y ? 'new' : 'removed'));
-    blk.appendChild(row);
-    sec.appendChild(blk);
-  });
-  if (sp.both.length) sec.appendChild(el('div', 'cmp-kept', 'Kept: ' + sp.both.map(nice).join(' · ')));
-}
-
 /** Board and glyph names come from d2core's database – asked once, then drawn again. */
 let asked = '';
 function wantNames(a, b, ctx) {

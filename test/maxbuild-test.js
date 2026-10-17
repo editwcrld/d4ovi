@@ -61,6 +61,18 @@ assert.deepStrictEqual(b.slots, {
 assert.deepStrictEqual(b.missing, ['Boots_Unique_Sorc_999'], 'an unknown item is reported, not guessed');
 console.log('ok  planner variant -> build');
 
+// a unique with an aspect transfigured onto it stays the unique – the aspect goes along as ◈
+{
+  const t = mb.toBuild({ name: 'T', items: { 6: 0 } }, [{ id: 'Amulet_Unique_Rogue_100', aspects: [{ nid: 2575334 }] }],
+    { nameOf: (id) => (id === 'Amulet_Unique_Rogue_100' ? 'Word of Hakan' : ''), aspectName: (n) => ASPECTS[n] || '' }, 'T', 'Rogue');
+  assert.deepStrictEqual(t.slots, { Amulet: { item: 'Word of Hakan', tf: 'Aspect of Biting Cold' } }, 'unique + transfigured aspect');
+  // the masterwork capstone's affix is the one marked "upgrade": 1
+  const db = { affixId: { 1: 'S04_CDR', 2: 'S04_MaxRes' }, affix: { S04_CDR: '[{VALUE}*100|1%|] Cooldown Reduction', S04_MaxRes: '+[{VALUE}|~|] Maximum Resource' } };
+  const st = require('../lib/d2coredb').statsFromIds(db, [{ nid: 1, values: [0.14], upgrade: 1 }, { nid: 2, values: [30], greater: true, upgrade: 0 }]);
+  assert.deepStrictEqual(st.map((x) => [x.g || 0, x.mw || 0]), [[0, 1], [1, 0]], 'maxroll: ★ on the affix with upgrade 1');
+  console.log('ok  unique + transfigured aspect, masterwork');
+}
+
 // dual wield: a second one-handed weapon lands in the off-hand, a third in Weapon 2 – each with its kind
 const dw = mb.toBuild({ name: 'DW', items: { 7: 0, 8: 1, 9: 2 } },
   [{ id: '1HAxe_Unique_Barb_001' }, { id: '1HSword_Unique_Barb_002' }, { id: '2HMace_Unique_Barb_003' }],

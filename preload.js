@@ -26,10 +26,12 @@ contextBridge.exposeInMainWorld('d4api', {
   buildTree: (cls) => ipcRenderer.invoke('builds:tree', cls),
   buildParagon: (keys) => ipcRenderer.invoke('builds:paragon', keys),
   openBuildSource: (url) => ipcRenderer.invoke('builds:open-source', url),
+  guideSheet: (q) => ipcRenderer.invoke('builds:sheet', q),
   builderCatalog: () => ipcRenderer.invoke('builder:catalog'),
   builderPlan: (cls, key, opts) => ipcRenderer.invoke('builder:plan', cls, key, opts),
   builderProven: (cls, key) => ipcRenderer.invoke('builder:proven', cls, key),
   builderSave: (cls, key, picks) => ipcRenderer.invoke('builder:save', cls, key, picks),
+  builderPreview: (cls, key, picks) => ipcRenderer.invoke('builder:preview', cls, key, picks),
 
   // actions
   openTrade: (name) => ipcRenderer.invoke('trade:open', name),

@@ -39,7 +39,7 @@ const api = ipc.create({ net, log: () => {}, catalog: () => farm.catalog(loot, c
     // the Warlock's commands (soul shards) are not in the skill tree – no icon there, the rest has one
     assert.ok(p.bar.length >= 4 && p.bar.every((b) => b.icon || /^Command /.test(b.name)), c.cls + ': skill bar with icons ' + p.bar.map((b) => b.name + ':' + b.icon).join());
     assert.ok(p.paragon && p.paragon.boards.length >= 3, c.cls + ': paragon boards');
-    console.log('ok  ' + c.cls.padEnd(11) + ' ' + s.name.padEnd(20) + Object.values(r.placed).map((x) => x.name).slice(0, 4).join(', ') + ' …');
+    console.log('ok  ' + c.cls.padEnd(11) + ' ' + s.name.padEnd(20) + Object.values(r.placed).filter((x) => x.kind !== 'blocked').map((x) => x.name).slice(0, 4).join(', ') + ' …');
   }
   // proven builds for Rain of Arrows: found, imported, explained
   const t1 = Date.now();
