@@ -7,8 +7,8 @@ const api = window.d4api;
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-let section = 'farm';
-try { if (localStorage.getItem('d4web.section') === 'builder') section = 'builder'; } catch (_) {}
+let section = 'builder';
+try { if (localStorage.getItem('d4web.section') === 'farm') section = 'farm'; } catch (_) {}
 let note = null, noteTimer = null;
 
 function showNote(text, kind, ms) {
@@ -115,6 +115,13 @@ function syncDialog() {
 
 document.querySelectorAll('#wtabs button').forEach((b) => { b.onclick = () => { if (section !== b.dataset.s) open(b.dataset.s); }; });
 $('wsync').onclick = syncDialog;
+// the clan name: back to the start – Find a build, the classes
+$('wbrand').onclick = (e) => {
+  e.preventDefault();
+  const st = window.BuilderView._state();
+  Object.assign(st, { step: 'class', slot: null, skill: null, q: '' });
+  open('builder');
+};
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { const s = document.querySelector('.wshade'); if (s) s.remove(); } });
 window.addEventListener('resize', fit);
 fit();

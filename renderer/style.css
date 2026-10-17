@@ -1064,6 +1064,7 @@ input.clock.bad{border-color:var(--red);color:var(--red-soft)}
 .bd-views{display:flex;gap:2px;padding:3px;background:var(--sunk);border:1px solid var(--line);border-radius:10px}
 .bd-views button{height:30px;padding:0 12px;border:0;border-radius:7px;background:none;color:var(--dim);font-weight:600;font-size:13px}
 .bd-views button.bd-on{background:#2a2219;color:var(--accent-fg)}
+.bd-spin{width:13px;height:13px;border-radius:50%;border:2px solid rgba(26,18,8,.35);border-top-color:#1a1208;animation:spin .8s linear infinite;flex:0 0 auto}
 .bd-vpick{display:inline-flex;flex-wrap:wrap;margin:0 0 10px}
 .bd-bar{display:flex;gap:14px;flex-wrap:wrap;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--sunk);margin-bottom:16px}
 .bd-bs{display:flex;flex-direction:column;align-items:center;gap:5px;width:84px;text-align:center}

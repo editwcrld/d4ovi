@@ -247,8 +247,10 @@ function render(main, c) {
     const v = E('div', 'views');
     [['build', 'Build'], ['skills', 'Skills'], ['paragon', 'Paragon'], ['goals', 'Goals']].forEach(([k, l]) => { const b = E('button', S.view === k ? 'on' : '', l); b.onclick = () => go({ view: k }); v.appendChild(b); });
     head.appendChild(v);
-    const save = E('button', 'tbtn pri', 'Save as build');
+    const save = E('button', 'tbtn pri', S.saving ? 'Saving …' : 'Save as build');
     save.title = 'Into the farm list – every piece with where it drops, the skills and the paragon';
+    // one save at a time: greyed out with a spinner until the answer is back
+    if (S.saving) { save.disabled = true; save.prepend(E('i', 'spin')); }
     save.onclick = () => saveBuild(p);
     head.appendChild(save);
   }
@@ -261,6 +263,12 @@ function render(main, c) {
 }
 
 async function saveBuild(p) {
+  if (S.saving) return;
+  S.saving = true;
+  rerender();
+  try { await saveNow(p); } finally { S.saving = false; rerender(); }
+}
+async function saveNow(p) {
   const st = STATE[S.key];
   // the same picks the Skills / Paragon / Talisman preview was made from – and the rolls the sheet
   // shows per slot, so the farm list gets exactly what was on screen

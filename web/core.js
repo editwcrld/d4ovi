@@ -84,6 +84,9 @@ async function full(cls, key) {
     const c = await store.cacheGet(cacheKey(cls, key)).catch((e) => { log('cache read failed:', e.message); return null; });
     if (c && c.plan && c.state && c.state.out) {
       builderApi.adopt(cls, key, c.state);            // saving a proven build and the own build need it here
+      // the own build's plan, worked out while the page is read – "Save as build" and the
+      // Skills / Paragon preview then answer at once
+      setTimeout(() => builderApi.plan(cls, key, {}).catch(() => {}), 50);
       const out = { plan: c.plan, proven: c.state.out };
       pages.set(id, { at: c.at || Date.now(), out });
       // older than a night: shown as it is, renewed in the background
