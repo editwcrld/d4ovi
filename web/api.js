@@ -58,6 +58,7 @@ window.d4api = {
   },
   guideSheet: (q) => call('guideSheet', q),
   builderCatalog: () => call('builderCatalog'),
+  builderFull: (cls, key) => call('builderFull', cls, key),
   builderPlan: (cls, key, opts) => call('builderPlan', cls, key, opts),
   builderProven: (cls, key) => call('builderProven', cls, key),
   builderSave: (cls, key, picks) => call('builderSave', cls, key, picks),

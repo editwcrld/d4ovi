@@ -33,3 +33,24 @@ revoke all on function public.get_builds(uuid) from public;
 revoke all on function public.save_builds(uuid, jsonb) from public;
 grant execute on function public.get_builds(uuid) to anon;
 grant execute on function public.save_builds(uuid, jsonb) to anon;
+
+-- ---------------------------------------------------------------------------------------------
+-- The worked-out builder pages (proven builds of every site + the own build, per skill).
+-- Everyone may read them (get_cache); only the server and the nightly job write them, with the
+-- secret key, which passes row level security – the publishable key cannot.
+
+create table if not exists public.web_cache (
+  key text primary key,
+  data jsonb not null,
+  at timestamptz not null default now()
+);
+alter table public.web_cache enable row level security;
+revoke all on public.web_cache from anon, authenticated;
+
+create or replace function public.get_cache(p_key text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select data from public.web_cache where key = p_key
+$$;
+
+revoke all on function public.get_cache(text) from public;
+grant execute on function public.get_cache(text) to anon;

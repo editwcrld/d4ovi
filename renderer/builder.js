@@ -98,6 +98,17 @@ async function loadCatalog() {
 }
 async function loadPlan(key) {
   const st = STATE[key] || (STATE[key] = { on: null, forced: {}, goal: 'push', mods: {}, souls: 100 });
+  // the website asks for both at once and shows the page when the proven builds and the own one are there
+  if (api.builderFull) {
+    const r = await api.builderFull(S.cls, key);
+    const p = r && r.plan;
+    if (!p || p.error) { PLANS[key] = { error: (p && p.error) || (r && r.error) || 'No plan for this skill.' }; rerender(); return; }
+    PLANS[key] = Object.assign(PLANS[key] || {}, p, { provenLoaded: true });
+    if (!st.on) st.on = Object.assign({}, p.on);
+    adoptProven(key, r.proven);
+    rerender();
+    return;
+  }
   const p = await api.builderPlan(S.cls, key, {});
   if (!p || p.error) { PLANS[key] = { error: (p && p.error) || 'No plan for this skill.' }; rerender(); return; }
   PLANS[key] = Object.assign(PLANS[key] || {}, p);
@@ -107,18 +118,30 @@ async function loadPlan(key) {
   const pr = await api.builderProven(S.cls, key);
   const plan = PLANS[key];
   plan.provenLoaded = true;
+  if (pr && !pr.error && pr.reference) {
+    // measured again at the level the proven builds reach (lib/builder.js, reference)
+    const again = await api.builderPlan(S.cls, key, {});
+    if (again && !again.error) Object.assign(plan, { engine: again.engine, reference: again.reference, talisman: again.talisman, gear: again.gear, bar: again.bar, paragon: again.paragon, loop: again.loop, loopPassive: again.loopPassive, facts: again.facts, tag: again.tag, charms: again.charms });
+  }
+  adoptProven(key, pr);
+  rerender();
+}
+/** The proven builds into the plan: the pieces' use counts, the own build seeded from what they agree on. */
+function adoptProven(key, pr) {
+  const plan = PLANS[key], st = STATE[key];
   if (pr && !pr.error) {
     plan.proven = pr.proven; plan.consensus = pr.consensus;
-    // measured again at the level the proven builds reach (lib/builder.js, reference)
-    if (pr.reference) {
-      const again = await api.builderPlan(S.cls, key, {});
-      if (again && !again.error) Object.assign(plan, { engine: again.engine, reference: again.reference, talisman: again.talisman, gear: again.gear, bar: again.bar, paragon: again.paragon, loop: again.loop, loopPassive: again.loopPassive, facts: again.facts, tag: again.tag, charms: again.charms });
-    }
     for (const c of plan.engine.cands) c.used = pr.usage[c.name] || 0;
     seedFromConsensus(plan, st);
     if (S.key === key && S.src === 'own' && !S.touched && pr.proven.length) S.src = 0;
   } else plan.provenError = (pr && pr.error) || '';
-  rerender();
+}
+/** A proven build in the variant picked (starter, endgame, pit push …) – the one its site opens on at first. */
+function variantOf(b) {
+  const st = STATE[S.key] || {};
+  const i = st.vpick && st.vpick[b.url] != null ? st.vpick[b.url] : b.pick || 0;
+  const v = (b.variants || []).find((x) => x.i === i);
+  return v ? { i, name: v.name, explain: v.explain, sheet: v.sheet, setup: v.setup } : { i: b.pick || 0, name: '', explain: b.explain, sheet: b.sheet, setup: b.setup };
 }
 
 /**
@@ -333,10 +356,11 @@ function stepPlan(body) {
     const c = E('button', 'src' + (S.src === i ? ' on' : ''));
     const top = E('span', 'st');
     top.appendChild(E('span', 'site ' + (SITE[b.site] || ''), SITE[b.site] || b.site));
-    top.appendChild(E('span', b.tier ? 'tier ' + b.tier : 'likes', b.tier ? b.tier + '-Tier' : '♥ ' + b.likes));
+    top.appendChild(E('span', b.tier ? 'tier ' + b.tier : 'likes', b.tier ? b.tier + '-Tier' : b.likes ? '♥ ' + b.likes : 'guide'));
     c.appendChild(top);
     c.appendChild(E('b', null, b.title.replace(/\s+/g, ' ').slice(0, 70)));
-    c.appendChild(E('span', 'au', (b.author ? b.author + ' · ' : '') + String(b.variant || '').split('–').pop().trim().slice(0, 30)));
+    const nv = (b.variants || []).length;
+    c.appendChild(E('span', 'au', (b.author ? b.author + ' · ' : '') + (nv > 1 ? nv + ' variants' : String(b.variant || '').split('–').pop().trim().slice(0, 30))));
     // the author's breakpoints at a glance (lib/guideinfo.js)
     // the lines for every variant; a guide that only has some per variant (d2core: early / late) – its last one's
     const all = (b.sheet && b.sheet.thresholds) || [];
@@ -383,7 +407,19 @@ const KIND = {
 
 // ---------------- a proven build, explained ----------------
 function provenView(body, p, b) {
-  const x = b.explain;
+  const cur = variantOf(b);
+  const x = cur.explain;
+  b = Object.assign({}, b, { sheet: cur.sheet, setup: cur.setup });
+  if ((b.variants || []).length > 1) {
+    const vs = E('div', 'views vpick');
+    b.variants.forEach((v) => {
+      const k = E('button', v.i === cur.i ? 'on' : '', v.name.slice(0, 40));
+      k.title = 'Variant of this guide';
+      k.onclick = () => { const st = STATE[S.key]; st.vpick = Object.assign({}, st.vpick, { [b.url]: v.i }); go({ slot: null }); };
+      vs.appendChild(k);
+    });
+    body.appendChild(vs);
+  }
   const bar = E('div', 'bar');
   x.bar.forEach((s) => {
     const k = E('div', 'bs' + (s.key === p.skill.key ? ' main' : ''));
@@ -991,7 +1027,7 @@ function slotView(side, p, st, slot) {
 // skill tree, the paragon boards, the talisman and the sockets show before anything is saved
 const PREV = {};
 function picksOf(p, st) {
-  if (typeof S.src === 'number' && p.proven && p.proven[S.src]) return { url: p.proven[S.src].url };
+  if (typeof S.src === 'number' && p.proven && p.proven[S.src]) return { url: p.proven[S.src].url, variant: variantOf(p.proven[S.src]).i };
   if (!st.result) compute(S.key);
   const on = Object.keys(st.on || {}).some((k) => (p.on || {})[k] !== st.on[k]) ? st.on : undefined;
   return { pieces: Object.fromEntries(Object.entries(st.result.placed).filter(([, c]) => c && c.name).map(([sl, c]) => [sl, c.name])), mods: st.mods, on };

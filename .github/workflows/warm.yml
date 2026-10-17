@@ -1,0 +1,23 @@
+# Every night: works out every skill's page of the website (web/warm.js) into Supabase, so it
+# opens at once – the server on Render is too small to do it while someone waits.
+name: Warm builder pages
+
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node web/warm.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SECRET: ${{ secrets.SUPABASE_SECRET }}

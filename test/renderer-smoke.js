@@ -88,6 +88,7 @@ const handlers = {};
 const on = (n) => (cb) => { handlers[n] = cb; };
 w.d4api = new Proxy({}, { get: (_, k) => {
   if (k.startsWith('on')) return on(k);
+  if (k === 'builderFull') return undefined;          // the website's call – the overlay asks for plan and proven builds apart
   return (...a) => {
     calls.push(k);
     if (k === 'getSettings') return Promise.resolve(settings);
