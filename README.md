@@ -35,13 +35,16 @@ panel can be dragged by its header row as well as by the ⠿ handle.
 Three more hotkeys can be assigned (show/hide, open map tool, open builds — `Ctrl+Shift+B` by default).
 
 Boss loot and crafting have no icon of their own — typing `boss loot` or `crafting` brings up the
-same thing, so the bar stays short. `boss loot` (or `boss drops`) shows every boss as a tile —
-where it is, torment tier, key — and the loot pools below; pick one to see what it drops
-(*← All bosses* goes back). An item a boss drops carries that on its own card (*Drops from*: the
-boss, where it is, what you need), so it gets no separate boss card. A new search always starts
-on *All*, whatever chip was picked before. A boss card leads with where the boss is (lair name below),
-then the torment tier and the key it needs, then the drops in their rarity colour; the lair
-screenshot from the guide opens on request (*Show lair & map*).
+same thing, so the bar stays short. `boss loot` (or `boss drops`) shows every boss at once, the
+loot pools below them: portrait, where it is (lair name below), torment tier and key, then its
+uniques as tiles — picture, name in its rarity colour, slot. Hovering a tile shows the in-game
+tooltip, a click looks the item up. The class bar on top (all eight classes with their icons, and
+**All**) starts on your active build's class and shows its drops plus the ones for every class
+("5 for Rogue · 25 in all"). An item a boss drops carries that on its own card (*Drops from*:
+the boss with its portrait, where it is, what you need, and *Everything … drops →*), so it gets
+no separate boss card. A new search always starts on *All*, whatever chip was picked before. The
+lair screenshot from the guide opens on request (*Show lair & map*). The portraits, item and class
+pictures come from d4builds.gg (sunderarmor.com); one that is missing falls back to ours.
 
 ## When nothing is open
 
@@ -193,8 +196,9 @@ overlay's process id and ends by itself if the overlay is gone.
 ## Search
 
 Type a name and you get the item with its icon, rarity, type, required level and power, plus
-which boss drops it and which recipes use it. Each card can go straight to **diablo.trade**
-(the search field is filled in for you) or open the full tooltip page in the **database**.
+which boss drops it and which recipes use it. The card shows what the item does as the game's
+tooltip does (power, effects, flavour); three small icons favourite it, copy its name or search it
+on **diablo.trade** (the search field is filled in for you).
 The results are a list on the left — tile, name in its rarity colour, what it is and where it
 comes from (the boss, the loot pool) — and the picked one in full on the right, the first one
 until you pick another; ↑ ↓ walk the list. A narrow panel shows the list, then the picked one

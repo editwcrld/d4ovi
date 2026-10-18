@@ -545,8 +545,6 @@ svg.para g.board, svg.tree .sk, svg.tree .md{cursor:pointer}
 svg.para.drag g.board, svg.tree.drag .sk, svg.tree.drag .md{cursor:grabbing}
 
 /* ---------------- boss / loot pool cards: where, what you need, what drops ---------------- */
-.card.boss .ch{margin-bottom:10px}
-.card.boss .ch .meta{font:600 10px var(--ui);letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
 .where{display:flex;gap:10px;align-items:flex-start;background:#1a1c20;border:1px solid var(--line2);border-radius:9px;padding:8px 11px;margin-bottom:8px}
 .where .pin{color:var(--accent);font-size:19px;line-height:1.1}
 .where b{display:block;font:600 15px/1.35 var(--ui);color:var(--fg)}
@@ -555,42 +553,67 @@ svg.para.drag g.board, svg.tree.drag .sk, svg.tree.drag .md{cursor:grabbing}
 .fact{font-size:12px;padding:2px 9px;border-radius:10px;border:1px solid var(--line2);color:var(--dim)}
 .fact.tier{color:var(--red-soft);border-color:rgba(255,155,135,.3)}
 .fact.key{color:var(--unique);border-color:rgba(217,180,99,.3)}
-.drops > .k{font:600 9.5px var(--ui);letter-spacing:.09em;text-transform:uppercase;color:var(--faint);margin:2px 0 2px}
-.drops .drop{padding:5px 0}
-.drops .di{width:26px;height:26px;flex:0 0 auto;border-radius:6px;background:var(--sunk);border:1px solid var(--line);overflow:hidden;display:flex;align-items:center;justify-content:center}
-.drops .di:empty::after{content:'◆';color:var(--faint);font-size:10px}
-.drops .di img{width:100%;height:100%;object-fit:contain}
-.drops .nm{font-weight:600}
 .maptg{margin-top:8px;background:none;border:0;padding:2px 0;color:var(--faint);font:12px var(--ui);cursor:pointer}
 .maptg:hover{color:var(--accent)}
-/* an item's own card: who drops it and where */
-.from{margin:10px 0 4px}
-.from > .k{font:600 9.5px var(--ui);letter-spacing:.09em;text-transform:uppercase;color:var(--faint);margin-bottom:5px}
-.from .src{border:1px solid var(--line);border-radius:9px;padding:8px 10px 6px;margin-bottom:6px;background:var(--sunk)}
+/* an item's own card: the game's tooltip text, then who drops it and where */
+.icard .ic.big{width:72px;height:72px;border-radius:12px;background:radial-gradient(circle at 50% 40%,rgba(217,180,99,.22) 0%,var(--sunk) 75%);border-color:rgba(217,180,99,.4)}
+.icard .ic.big.r-mythic{background:radial-gradient(circle at 50% 40%,rgba(197,139,255,.28) 0%,var(--sunk) 75%);border-color:rgba(197,139,255,.45)}
+.icard .ic.big .ipic{width:100%;height:100%}
+.ab.icon.star.on{color:var(--unique);border-color:rgba(217,180,99,.45)}
+.itt{background:#0f0d0b;border:1px solid #3a2e1c;border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.itt .pw{margin-bottom:0;color:#e9d6b0}
+.itt .eff{margin-top:6px}
+.itt .flav{margin-top:10px;font-size:13.5px;line-height:1.45;color:#8f8574;font-style:italic;white-space:pre-line}
+.from{margin:12px 0 4px}
+.from .src{border:1px solid var(--line);border-radius:12px;padding:10px 12px 8px;margin-bottom:8px;background:var(--surf)}
 .from .src:last-child{margin-bottom:0}
-.from .sh{display:flex;align-items:baseline;gap:8px;margin-bottom:6px;min-width:0}
-.from .sh .gl{color:var(--faint);font-size:13px}
-.from .sh b{font:600 14.5px var(--ui)}
-.from .sh em{margin-left:auto;color:var(--faint);font-size:12px;font-style:normal;white-space:nowrap}
-.from .where{margin-bottom:6px;padding:6px 10px}
-.from .where b{font-size:14px}
-.from .facts{margin-bottom:4px}
-.from .maptg{margin-top:2px}
-.drops .nm{cursor:pointer}
-.drops .nm:hover{text-decoration:underline;text-underline-offset:3px}
+.from .bhead{padding:0;background:none;border:0}
+.from .bpic{width:48px;height:48px}
+.from .bt h3{font-size:16px}
+.ball{display:inline-block;margin:8px 0 0 60px;font-size:13px;color:var(--accent-fg);cursor:pointer}
+.ball:hover{color:var(--accent)}
+.from .maptg{margin-left:60px}
+
+/* boss loot: the class bar, then every boss with its uniques as tiles */
+.clsbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 12px}
+.cls{display:flex;align-items:center;gap:6px;height:34px;padding:0 11px;border-radius:9px;border:1px solid var(--line2);background:var(--btn);color:var(--dim);font:600 13.5px var(--ui);cursor:pointer}
+.cls img{width:21px;height:21px;object-fit:contain;filter:grayscale(1) brightness(.75);margin-left:-4px}
+.cls:hover{color:var(--fg);border-color:var(--line3)}
+.cls.on{background:#2a2219;border-color:var(--accent-line);color:var(--accent-fg)}
+.cls.on img{filter:none}
+.clsbar .meta{font-size:12.5px;color:var(--faint);margin-left:4px}
+.bsec{background:var(--surf);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px}
+.bsec:last-child{margin-bottom:0}
+.bhead{display:flex;gap:14px;align-items:center;padding:12px 14px;background:linear-gradient(90deg,#1e1714 0%,var(--surf) 60%);border-bottom:1px solid var(--line)}
+.bsec.pool .bhead{background:var(--surf)}
+.bpic{width:60px;height:60px;flex:0 0 auto;border-radius:10px;border:1px solid var(--line3);overflow:hidden;display:grid;place-items:center;background:var(--sunk);color:var(--faint);font-size:22px}
+.bpic img{width:100%;height:100%;object-fit:cover}
+.bt{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.bt h3{margin:0;font:700 19px/1.15 var(--head);color:var(--fg)}
+.bwhere{font-size:13.5px;color:var(--dim);line-height:1.35}
+.bwhere b{font-weight:500;color:var(--dim)}
+.bwhere b::before{content:'⌖ ';color:var(--accent)}
+.bwhere span{display:block;font-size:12.5px;color:var(--faint)}
+.bt .facts{margin:2px 0 0}
+.bcount{flex:0 0 auto;text-align:right;font-size:12.5px;color:var(--faint);max-width:120px;line-height:1.3}
+.bcount b{display:block;font:700 19px var(--head);color:var(--fg)}
+.bnote{flex:0 0 auto;font-style:normal;font-size:12.5px;color:var(--faint)}
+.igrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;padding:12px 14px 14px}
+.igrid > .meta{color:var(--faint);font-size:13px}
+.bsec > .maptg{margin:-4px 14px 12px}
+.bsec > .shot{margin:0 14px 14px}
+.itile{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:10px;background:var(--bg);border:1px solid var(--line);cursor:pointer;min-width:0;text-decoration:none}
+.itile:hover{background:var(--raise);border-color:#6b5326}
+.itile.r-mythic:hover{border-color:rgba(197,139,255,.5)}
+.ipic{width:46px;height:46px;flex:0 0 auto;border-radius:8px;display:grid;place-items:center;overflow:hidden;color:var(--faint);font-size:14px}
+.itile .ipic{background:radial-gradient(circle at 50% 40%,rgba(217,180,99,.2) 0%,var(--sunk) 75%);border:1px solid var(--line2)}
+.itile.r-mythic .ipic{background:radial-gradient(circle at 50% 40%,rgba(197,139,255,.26) 0%,var(--sunk) 75%)}
+.ipic img{max-width:88%;max-height:88%;object-fit:contain}
+.itx{min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.inm{font:600 14.5px var(--ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ity{font-size:12.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#side .res .rt .ipic{width:100%;height:100%;border:0}
 /* "boss loot": the bosses as tiles */
-.bhint{margin:0 0 10px;font-size:13px}
-.bgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:7px}
-.btile{display:block;text-align:left;background:var(--surf);border:1px solid var(--line);border-radius:10px;padding:9px 11px;color:var(--fg);cursor:pointer;font:inherit;min-width:0}
-.btile:hover{border-color:var(--accent);background:var(--raise)}
-.btile .tn{display:flex;gap:7px;align-items:baseline;min-width:0}
-.btile .tn .gl{color:var(--faint);font-size:12px}
-.btile .tn b{font:600 14px var(--ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.btile .tw{font-size:12px;color:var(--accent);margin-top:3px;line-height:1.3}
-.btile .tm{font-size:11.5px;color:var(--faint);margin-top:3px}
-.btile.pool .tn b{color:var(--dim)}
-.bgh{font:600 9.5px var(--ui);letter-spacing:.09em;text-transform:uppercase;color:var(--faint);margin:12px 0 6px}
-.bgh:first-child{margin-top:0}
 /* room for the floating pin and close */
 .sethead{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 18px;border-bottom:1px solid var(--line);flex:0 0 auto}
 .sethead h2{margin:0;font:700 20px var(--head);flex:1}
@@ -653,11 +676,6 @@ svg.para.drag g.board, svg.tree.drag .sk, svg.tree.drag .md{cursor:grabbing}
 #cols.narrow.detail #main{display:block}
 #main .back{margin-bottom:10px}
 /* boss drops by class */
-.clsbar{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:2px 0 8px}
-.cls{height:28px;padding:0 11px;border-radius:14px;border:1px solid var(--line2);background:transparent;color:var(--dim);font:600 13px var(--ui)}
-.cls:hover{color:var(--fg);border-color:var(--line3)}
-.cls.on{background:#2a2219;border-color:var(--accent);color:var(--accent-fg)}
-.clsbar .meta{font-size:12px;color:var(--faint);margin-left:4px}
 /* pill <-> bar: the content blinks out for a moment while the window changes size, then fades in */
 #rail>*{transition:opacity .22s ease}
 #rail.morph>*{opacity:0 !important;transition:none}

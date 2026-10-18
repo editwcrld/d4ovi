@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('d4api', {
   getActivities: () => ipcRenderer.invoke('activities:get'),
   getRunewords: () => ipcRenderer.invoke('runewords:get'),
   searchItems: (q) => ipcRenderer.invoke('items:search', q),
+  itemIcons: (names) => ipcRenderer.invoke('items:icons', names),
   refreshData: () => ipcRenderer.invoke('data:refresh'),
   getFarm: () => ipcRenderer.invoke('farm:get'),
   farmTooltip: (type, id) => ipcRenderer.invoke('farm:tooltip', type, id),

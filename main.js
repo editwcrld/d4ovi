@@ -320,6 +320,8 @@ function setKeyboard(who, on) {
     if (!overlay.isVisible()) overlay.show();
     overlay.focus();
     if (keyboard.view) views.focus(); else overlay.webContents.focus();
+    // Windows may refuse to hand the focus over (foreground lock) – then typing cannot work; say so
+    setTimeout(() => { if (overlay && !overlay.isDestroyed() && (keyboard.ui || keyboard.view) && !overlay.isFocused()) dlog('keyboard: Windows did not give the overlay the focus'); }, 300);
   } else if (overlay.isFocusable()) {
     if (overlay.isFocused()) overlay.blur();            // back to the window below – the game
     overlay.setFocusable(false);
@@ -463,6 +465,16 @@ ipcMain.handle('data:refresh', () => refreshAll(true));
 
 // Search across both sources: maxroll supplies power/level/description (local, instant),
 // d4guides supplies icon, rarity, category and the detail page.
+// maxroll's picture for each name (the boss loot falls back to it) – { name: url }
+ipcMain.handle('items:icons', (_e, names) => {
+  const out = {};
+  (Array.isArray(names) ? names : []).slice(0, 2000).forEach((n) => {
+    // a boss trophy is "Duriel: Shard of Agony" on the loot sheet, "Shard of Agony" in the game data
+    const it = items.get(n) || items.get(String(n).split(':').slice(1).join(':').trim());
+    if (it && it.icon) out[n] = it.icon;
+  });
+  return out;
+});
 ipcMain.handle('items:search', async (_e, q) => {
   const { term, kinds } = S.parseQuery(String(q || ''));
   const out = [], seen = new Set();
@@ -474,7 +486,7 @@ ipcMain.handle('items:search', async (_e, q) => {
   // One entry for the overlay: game data + d4guides extras + (for mythics) how to obtain it.
   const decorate = (it, g) => {
     const e = Object.assign({}, it, g ? {
-      icon: g.icon, url: g.url,
+      icon: g.icon || it.icon, url: g.url,
       fields: useful(g.fields, !!it.power),
       rarity: it.rarity || g.rarity || pickRarity(g),
     } : {});

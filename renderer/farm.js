@@ -1177,6 +1177,20 @@ window.FarmView = {
     return { name: b.name, total: p.total, missing: p.total - p.got };
   },
   onChange: null,                                     // set by app.js: a tick or a build changed
+  // ---- for the search and boss loot: the same catalog and the same in-game tooltip
+  /** Loads the catalog once (it may not have been opened yet). */
+  ensure: (a) => { if (!api) api = a; return cat ? Promise.resolve() : load(); },
+  /** A unique or mythic by name – { id, rarity, slot, type, cls, icon } – null until loaded or unknown. */
+  item: (name) => {
+    if (!cat) return null;
+    const n = window.SearchLib.norm(name);
+    return cat.items.find((x) => x.n === n) || null;
+  },
+  /** The in-game tooltip on hover, for an item by name. */
+  tip: (node, name) => {
+    const it = window.FarmView.item(name);
+    if (it && it.id) wireTip(node, 'item', it.id);
+  },
   view: () => view,
   /** Gear / Skills / Paragon – what the build opens on next. */
   setView: (v) => { if (['guide', 'gear', 'skills', 'paragon'].includes(v)) { view = v; pickOpen = false; hideTip(); } },

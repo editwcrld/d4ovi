@@ -19,6 +19,12 @@ const loot = { fetchedAt: Date.now(), sections: [{
   info: ['Requires Torment 1 or higher.', 'Activity Recommended: Complete Helltide', 'Boss Lair Key: 1x Lair Key', 'Element Type: Lightning', 'Cosmetic Reward: Demonbinder Mount Armor'],
   location: 'The Hall of the Penitent is located South of Ked Bardu in the Dry Steppes',
   images: ['https://example.invalid/lair.png'], drops: [{ cls: 'Barbarian', name: 'Rage of Harrogath', note: '' }, { cls: '', name: 'Annihilus', note: 'Rare drop' }, { cls: 'Rogue', name: 'Grasp of Shadow', note: '' }],
+}, {
+  // only lair keys under the bosses' names – left out, it got in the way of the boss's own drops
+  name: 'Uniques from Boss Trophies', isBoss: false, drops: [{ cls: 'All classes', name: 'Grigoire: Living Steel', note: '' }],
+}, {
+  // maxroll's list of the Iconic Mythics, headed just "Mythics"
+  name: 'Mythics', isBoss: false, images: ['https://example.invalid/x.png'], drops: [{ cls: 'All classes', name: '‍Harlequin Crest', note: 'All' }],
 }] };
 const craft = { fetchedAt: Date.now(), tables: [{
   group: 'Classic Runewords', sub: 'Equipment',
@@ -40,6 +46,8 @@ const itemHits = [{
   name: 'Annihilus Charm', type: 'Talisman · Charm', rarity: 'Unique', level: 0,
   power: '', effects: [], desc: '', set: '', icon: '', url: '', fields: [],
 }];
+// a boss trophy carries the boss's name – searching the boss must still show the boss
+const trophy = { name: 'Grigoire: Living Steel', type: 'Lair boss key', rarity: '', level: 0, power: '', effects: [], desc: 'A trophy.', set: '', icon: '', url: '', fields: [] };
 const farmCat = {
   slots: ['Helm', 'Chest Armor', 'Gloves', 'Pants', 'Boots', 'Amulet', 'Ring', 'Weapon', 'Off-Hand'],
   details: 1,
@@ -97,7 +105,7 @@ w.d4api = new Proxy({}, { get: (_, k) => {
     if (k === 'getCraft') return Promise.resolve(craft);
     if (k === 'getActivities') return Promise.resolve(activities);
     if (k === 'getRunewords') return Promise.resolve(runewords);
-    if (k === 'searchItems') return Promise.resolve(/anni/i.test(a[0] || '') ? itemHits : []);
+    if (k === 'searchItems') return Promise.resolve(/anni/i.test(a[0] || '') ? itemHits : /grigoire/i.test(a[0] || '') ? [trophy] : []);
     if (k === 'saveSettings') { settings = { ...settings, ...a[0] }; return Promise.resolve({ settings, errors: [] }); }
     if (k === 'pickBackupDir') return Promise.resolve('D:\\OneDrive\\D4');
     if (k === 'runBackup') { backupMade = Date.now(); return Promise.resolve({ ok: true, dir: 'x', at: backupMade }); }
@@ -203,6 +211,14 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.strictEqual(settings.favorites.length, 1, 'favourite stored');
   assert.strictEqual(settings.favorites[0].name, 'Annihilus');
   console.log('ok  favourite saved');
+  // a note goes away on its own – and takes nothing else with it (no redraw: a key being recorded
+  // or the cursor in a field stays where it is)
+  w.document.querySelector('[aria-label="Copy name"]').click(); await sleep(20);
+  assert.ok(copied === 'Annihilus' && w.document.querySelector('#main > .note'), 'copied, and it says so');
+  const card0 = w.document.querySelector('#main .card');
+  await sleep(2600);
+  assert.ok(!w.document.querySelector('#main > .note') && w.document.querySelector('#main .card') === card0, 'the note is gone, the page was not drawn again');
+  console.log('ok  a note leaves the page as it is');
 
   // every search lands in "Recent" once the typing stops – and the list can be cleared
   await sleep(1500);
@@ -223,7 +239,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   // every hit in the list on the left, the first one in full on the right
   const results = () => [...w.document.querySelectorAll('#side .res:not(.trade)')];
   assert.strictEqual(results().length, 2, 'both item hits listed');
-  assert.ok(results()[0].querySelector('.rn').classList.contains('r-unique') && results()[0].querySelector('.rs').textContent.includes('Unique'), 'name in its colour, what it is');
+  assert.ok(results()[0].querySelector('.rn').classList.contains('r-unique') && results()[0].querySelector('.rs').textContent === 'Talisman · Seal · Grigoire', 'name in its colour, what it is and who drops it');
   assert.strictEqual(w.document.querySelectorAll('#main .card').length, 1, 'the picked one in full');
   assert.strictEqual(w.document.querySelector('#main .card h4').textContent, 'Annihilus', 'the first hit until another is picked');
   assert.ok(!txt().includes('more'), 'no truncation hint');
@@ -251,35 +267,48 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.strictEqual(rail('bossloot'), null, 'boss loot has no rail icon any more');
   assert.strictEqual(rail('crafting'), null, 'crafting has no rail icon any more');
   await type('boss loot');
-  assert.ok(w.document.querySelector('.btile') && txt().includes('Grigoire') && !w.document.querySelector('.card.boss'), 'the bosses as tiles to pick from');
-  assert.ok(w.document.querySelector('.btile .tw').textContent.includes('Ked Bardu'), 'with where they are');
+  // every boss right away, each with its uniques as tiles – no picking first
+  const bs = () => w.document.querySelector('.bsec');
+  assert.ok(bs() && txt().includes('Grigoire') && w.document.querySelector('.clsbar'), 'the bosses with their drops, the class bar on top');
   assert.ok(!w.document.querySelector('.card'), 'items stay out of the boss area');
-  w.document.querySelector('.btile').click(); await sleep(20);
-  assert.ok(txt().includes('Rage of Harrogath') && w.document.querySelectorAll('.card.boss').length === 1, 'a picked boss shows what it drops');
-  const bc = w.document.querySelector('.card.boss');
-  assert.ok(bc.querySelector('.where b').textContent === 'South of Ked Bardu in the Dry Steppes' && bc.querySelector('.where div span').textContent === 'Lair: The Hall of the Penitent', 'where the boss is comes first');
-  assert.deepStrictEqual([...bc.querySelectorAll('.fact')].map((x) => x.textContent).join('|'), 'Torment 1+|1x Lair Key', 'only torment and key');
-  assert.ok(!bc.textContent.includes('Cosmetic') && !bc.textContent.includes('Element') && !bc.textContent.includes('Activity'), 'the rest is left out');
-  assert.ok(bc.querySelector('.drops .nm.r-unique').textContent === 'Rage of Harrogath', 'the drop, in its colour');
-  assert.ok(bc.querySelector('.clsbar') && bc.querySelector('.cls.on').textContent === 'All', 'drops by class, all to start with');
-  [...bc.querySelectorAll('.cls')].find((x) => x.textContent === 'Rogue').click(); await sleep(20);
-  const bc2 = w.document.querySelector('.card.boss');
-  assert.ok(bc2.textContent.includes('Grasp of Shadow') && !bc2.textContent.includes('Rage of Harrogath') && bc2.textContent.includes('Annihilus'), 'one class: its drops and the ones for every class');
-  [...bc2.querySelectorAll('.cls')].find((x) => x.textContent === 'All').click(); await sleep(20);
-  assert.ok(w.document.querySelector('.card.boss .shot').hidden && !w.document.querySelector('.card.boss .shot img'), 'the lair picture only on request');
-  w.document.querySelector('.card.boss .maptg').click();
-  assert.ok(!w.document.querySelector('.card.boss .shot').hidden && w.document.querySelector('.card.boss .shot img'), 'and shown on click');
-  [...w.document.querySelectorAll('#main .ab')].find((x) => x.textContent.includes('All bosses')).click(); await sleep(20);
-  assert.ok(w.document.querySelector('.btile'), 'back to all bosses');
+  assert.ok(bs().querySelector('.bpic img').src.endsWith('/Bosses/1/boss_grigoire.png'), 'the boss portrait (d4builds)');
+  assert.ok(bs().querySelector('.bwhere b').textContent === 'South of Ked Bardu in the Dry Steppes' && bs().querySelector('.bwhere span').textContent === 'Lair: The Hall of the Penitent', 'where the boss is');
+  assert.deepStrictEqual([...bs().querySelectorAll('.fact')].map((x) => x.textContent).join('|'), 'Torment 1+|1x Lair Key', 'only torment and key');
+  assert.ok(!bs().textContent.includes('Cosmetic') && !bs().textContent.includes('Element') && !bs().textContent.includes('Activity'), 'the rest is left out');
+  const tile = (n) => bs().querySelector('.itile[data-item="' + n + '"]');
+  assert.ok(tile('Rage of Harrogath') && tile('Rage of Harrogath').querySelector('.inm.r-unique'), 'a drop as a tile, in its colour');
+  assert.ok(tile('Rage of Harrogath').querySelector('.ipic img').src.endsWith('/Uniques/2/rage_of_harrogath.png'), 'with its picture');
+  assert.strictEqual(w.document.querySelector('.cls.on').dataset.cls, 'All', 'all classes to start with, the build has none');
+  assert.strictEqual(w.document.querySelectorAll('.cls img').length, 8, 'eight classes with their icons, and All');
+  w.document.querySelector('.cls[data-cls="Rogue"]').click(); await sleep(20);
+  assert.ok(tile('Grasp of Shadow') && !tile('Rage of Harrogath') && tile('Annihilus'), 'one class: its drops and the ones for every class');
+  assert.ok(bs().querySelector('.bcount').textContent.includes('for Rogue · 3 in all'), 'how many of how many');
+  w.document.querySelector('.cls[data-cls="All"]').click(); await sleep(20);
+  assert.ok(bs().querySelector('.shot').hidden && !bs().querySelector('.shot img'), 'the lair picture only on request');
+  bs().querySelector('.maptg').click();
+  assert.ok(!bs().querySelector('.shot').hidden && bs().querySelector('.shot img'), 'and shown on click');
+  tile('Annihilus').click(); await sleep(40);
+  assert.strictEqual($('q').value, 'Annihilus', 'a tile looks the item up');
   // an item that a boss drops: the boss is on the item's card, not a card of its own
   await type('annihilus');
   const ic = [...w.document.querySelectorAll('.card')].find((x) => x.querySelector('h4') && x.querySelector('h4').textContent === 'Annihilus');
-  assert.ok(ic && ic.querySelector('.from .src b').textContent.startsWith('Grigoire') && ic.querySelector('.from .where b').textContent.includes('Ked Bardu'), 'item card: dropped by, and where');
-  assert.ok(!w.document.querySelector('.card.boss'), 'no separate boss card for it');
+  assert.ok(ic && ic.querySelector('.from .bt h3').textContent.startsWith('Grigoire') && ic.querySelector('.from .bwhere b').textContent.includes('Ked Bardu'), 'item card: dropped by, and where');
+  assert.ok(!ic.textContent.includes('Database') && ic.querySelector('[aria-label="Search on diablo.trade"]'), 'small icons instead of the big buttons');
+  ic.querySelector('.ball').click(); await sleep(200);
+  assert.ok($('q').value === 'Grigoire' && w.document.querySelector('#main .bsec .itile'), 'everything the boss drops, one click away');
+  const first = w.document.querySelector('#side .res:not(.trade)');
+  assert.ok(first.classList.contains('on') && first.querySelector('.rn').textContent.startsWith('Grigoire,'), 'the boss on top and picked – its trophy below');
+  assert.ok($('side').textContent.includes('Grigoire: Living Steel'), 'the trophy is still listed');
+  assert.ok(!$('side').textContent.includes('Boss Trophies') && !txt().includes('Boss Trophies'), 'the trophy pool is left out');
+  await type('mythics');
+  const ip = w.document.querySelector('#main .bsec.pool');
+  assert.ok(ip && ip.querySelector('.bt h3').textContent === 'Iconic Mythics', 'maxroll\'s "Mythics" are the Iconic Mythics');
+  assert.ok(!ip.querySelector('.maptg') && ip.querySelector('.ity').textContent === 'all classes', 'no lair for a loot pool, no "All" next to "all classes"');
   // a chip picked earlier does not stick to the next search
+  await type('annihilus');
   [...w.document.querySelectorAll('#chips .chip')].find((c) => c.textContent.startsWith('Items')).click(); await sleep(20);
   await type('boss loot');
-  assert.ok(w.document.querySelector('.btile') && w.document.querySelector('#chips .chip.on').textContent.startsWith('All'), 'a new search starts on All');
+  assert.ok(w.document.querySelector('.bsec') && w.document.querySelector('#chips .chip.on').textContent.startsWith('All'), 'a new search starts on All');
   console.log('ok  "boss loot" lists every boss');
 
   await type('duriel');
@@ -661,13 +690,25 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   k0 = kb();
   rail('search').click(); await sleep(30);
   assert.ok(kb() > k0, 'the search takes it, to type into');
+  // focused only once the search bar shows – a hidden field cannot take the focus (from settings,
+  // builds or the closed pill the bar is hidden until render() shows it)
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  rail('settings').click(); await sleep(30);
+  const realFocus = $('q').focus;
+  let shownWhenFocused = null;
+  $('q').focus = function () { shownWhenFocused = !$('top').hidden && !$('panel').hidden; return realFocus.call(this); };
+  rail('search').click(); await sleep(30);
+  $('q').focus = realFocus;
+  assert.strictEqual(shownWhenFocused, true, 'the search field is focused when it can be: shown');
+  $('q').blur(); w.dispatchEvent(new w.Event('focus')); await sleep(10);
+  assert.strictEqual(w.document.activeElement, $('q'), 'once the window has the focus the search field gets it again – one click is enough');
   w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
   console.log('ok  keyboard only while typing');
 
   // a guide opened from the results: spinner while it loads, Back, typing goes back to the results
   rail('search').click(); await sleep(20);
-  $('q').value = 'annihilus'; $('q').dispatchEvent(new w.Event('input')); await sleep(150);
-  [...w.document.querySelectorAll('.card .ab')].find((x) => x.textContent === 'Database').click(); await sleep(30);
+  $('q').value = 'crafting'; $('q').dispatchEvent(new w.Event('input')); await sleep(150);
+  w.document.querySelector('#main a[title="Open in database"]').click(); await sleep(30);
   handlers.onViewLoading(true);
   assert.ok($('viewSlot').classList.contains('loading'), 'spinner while the page loads');
   handlers.onViewLoading(false);
@@ -1285,4 +1326,9 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.strictEqual(errors.length, 0, 'no runtime errors: ' + errors.join(' | '));
   console.log('ok  no runtime errors · api used: ' + [...new Set(calls)].join(', '));
   process.exit(0);
-})().catch((e) => { console.error('FAIL', e && e.message ? e.message : e); process.exit(1); });
+})().catch((e) => {
+  console.error('FAIL', e && e.message ? e.message : e);
+  // a crash (not a failed check): where it happened
+  if (e && e.stack && !(e instanceof assert.AssertionError)) console.error(e.stack.split('\n').slice(1, 4).join('\n'));
+  process.exit(1);
+});

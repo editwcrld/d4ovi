@@ -136,6 +136,8 @@
   };
   // these keywords only pick the result area, they describe no item
   const SECTION_ONLY = ['boss', 'recipe', 'activity'];
+  // the words that may go with "iconic" and still mean the whole list
+  const ICONIC_AREA = ['iconic', 'mythic', 'unique', 'item'];
 
   /** "ber rune" -> { term: 'ber', kinds: ['rune'] } */
   function parseQuery(query) {
@@ -151,6 +153,8 @@
       // "rune" or "gem" on the other hand is a word to search for, so it stays the term.
       const only = Array.from(new Set(kinds));
       if (only.length && only.every((k) => SECTION_ONLY.indexOf(k) >= 0)) return { term: '', kinds: only };
+      // "iconic" (or "iconic mythic", "iconic uniques") names a list too: maxroll's Iconic Mythics
+      if (only.indexOf('iconic') >= 0 && only.every((k) => ICONIC_AREA.indexOf(k) >= 0)) return { term: '', kinds: only };
       return { term: tokens.join(' '), kinds: [] };
     }
     return { term: rest.join(' '), kinds: Array.from(new Set(kinds)) };

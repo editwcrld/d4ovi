@@ -23,6 +23,12 @@ let settings = null;
 // what this build has (lib/features.js) – without an answer: no macros
 let features = { macros: false, clickSpam: false, lock: false };
 let loot = { sections: [], fetchedAt: 0 };
+// maxroll's "Uniques from Boss Trophies" lists the lair keys under the bosses' names – no loot, it
+// only got in the way of a boss's own drops (searching "The Butcher" showed it first)
+const TROPHY_POOL = /boss trophies/i;
+// maxroll heads its list of the Iconic Mythics just "Mythics" – they are only the iconic ones
+const useLoot = (l) => (l ? Object.assign({}, l, { sections: (l.sections || []).filter((s) => !TROPHY_POOL.test(s.name || ''))
+  .map((s) => (/^mythics?$/i.test(String(s.name || '').trim()) ? Object.assign({}, s, { name: 'Iconic Mythics' }) : s)) }) : null);
 let craft = { tables: [], fetchedAt: 0 };
 let activities = [];
 let wb = { at: 0, secs: null, text: '' };
@@ -272,10 +278,11 @@ function openSection(name, url, heading) {
     [0, 60, 150, 350, 700].forEach((ms) => setTimeout(syncView, ms));
   } else api.viewHide();
 
-  if (section === 'search') { typeIn($('q')); $('q').select(); }
   showCoach();
   armIdle();
   render();
+  // only now: render() shows the search bar – a field still hidden cannot take the focus
+  if (section === 'search') { typeIn($('q')); $('q').select(); }
 }
 function closeAll() {
   if (section) { lastSection = section; lastUrl = section === 'page' ? pageUrl : null; }
@@ -320,13 +327,22 @@ function setGhost(on) {
 const WANTS_KEYS = 'input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]), textarea, [contenteditable=""], [contenteditable="true"], .hk, [data-keys]';
 const wantsKeys = (t) => !!(t && t.closest && t.closest(WANTS_KEYS));
 /** Into a field from code (the search opening, a key to record): the keyboard first. */
-function typeIn(e) { clearTimeout(keysBack); api.keyboard(true); e.focus(); }
+function typeIn(e) { clearTimeout(keysBack); keysFor = e; api.keyboard(true); e.focus(); }
 let keysBack = null;
+// The window gets the focus a moment after it was asked for (main.js) – until then a field cannot
+// really take it, so the one asked for is focused again once the window has it. Without this the
+// search needed a second click before it could be typed into.
+let keysFor = null;
 function watchKeyboard() {
   document.addEventListener('mousedown', (e) => {
     setGhost(false);                                 // faded and clicked: it is used again
-    if (wantsKeys(e.target)) { clearTimeout(keysBack); api.keyboard(true); }
+    if (wantsKeys(e.target)) { clearTimeout(keysBack); keysFor = e.target.closest(WANTS_KEYS); api.keyboard(true); }
   }, true);
+  window.addEventListener('focus', () => {
+    const f = keysFor;
+    keysFor = null;
+    if (f && f.isConnected && document.activeElement !== f) f.focus();
+  });
   // a moment later: a click from one field into the next (or a field focused from code) keeps it
   document.addEventListener('focusout', () => {
     clearTimeout(keysBack);
@@ -338,7 +354,9 @@ function showCoach() { $('coach').hidden = !section || !!(settings && settings.c
 function showNote(text, kind, ms) {
   note = { text, kind: kind || 'info' };
   clearTimeout(noteTimer);
-  if (ms !== 0) noteTimer = setTimeout(() => { note = null; render(); }, ms || 6000);
+  // gone again: only the note itself – redrawing the page would throw away what is going on in it
+  // (a key being recorded, the cursor in a field)
+  if (ms !== 0) noteTimer = setTimeout(() => { note = null; document.querySelectorAll('#main > .note').forEach((n) => n.remove()); reportSize(); }, ms || 6000);
   if (!section) { section = 'search'; $('panel').hidden = false; document.querySelector('#rail .ri[data-section=search]').classList.add('on'); }
   render();
 }
@@ -525,18 +543,19 @@ function renderSearch(main, side) {
   // picked one in full on the right (the first one until you pick another)
   const inChip = (k) => chip === 'all' || chip === k;
   const R = [];
-  if (inChip('items')) {
-    itemHits.forEach((it) => {
-      const from = dropSources(it.name).slice().sort(bossFirst)[0];
-      R.push({ key: 'i:' + it.name, group: 'Items', icon: it.icon, glyph: '◆', name: it.name,
-        rcls: it.rarity ? 'r-' + it.rarity.split(' ')[0].toLowerCase() : '',
-        sub: [it.rarity, it.type].filter(Boolean).join(' · '), src: from ? from.sec.name : '', card: () => itemCard(it) });
-    });
-  }
-  if (inChip('boss')) {
-    bosses.forEach((b) => R.push({ key: 'b:' + b.sec.name, group: b.sec.isBoss ? 'Bosses' : 'Loot pools', glyph: b.sec.isBoss ? '☠' : '◆',
-      name: b.sec.name, rcls: '', sub: (b.sec.drops || []).length + ' drops', src: b.sec.location ? placeOf(b.sec).where : '', card: () => bossCard(b) }));
-  }
+  const itemRows = !inChip('items') ? [] : itemHits.map((it) => {
+    const from = dropSources(it.name).slice().sort(bossFirst)[0];
+    return { key: 'i:' + it.name, group: 'Items', icon: it.icon, item: it.name, glyph: '◆', name: it.name,
+      rcls: 'r-' + rarityOf(it.name, it),
+      sub: [it.type, from ? from.sec.name.split(',')[0] : ''].filter(Boolean).join(' · '), card: () => itemCard(it) };
+  });
+  const bossRows = !inChip('boss') ? [] : bosses.slice().sort(bossFirst).map((b) => ({ key: 'b:' + b.sec.name, group: b.sec.isBoss ? 'Bosses' : 'Loot pools', glyph: b.sec.isBoss ? '☠' : '◆',
+    name: b.sec.name, rcls: '', pic: b.sec.isBoss ? bossPic(b.sec.name) : '',
+    sub: [(b.sec.drops || []).length + ' drops', b.sec.location ? placeOf(b.sec).where : ''].filter(Boolean).join(' · '), card: () => bossLoot([b]) }));
+  // a boss searched by its name ("duriel", "Everything Duriel drops") comes first, and is shown –
+  // not its trophy ("Duriel: Shard of Agony"), which only carries the name
+  const bossNamed = !!term && bosses.some((b) => b.sec.isBoss && S.norm(b.sec.name).startsWith(S.norm(term)));
+  R.push(...(bossNamed ? bossRows.concat(itemRows) : itemRows.concat(bossRows)));
   if (inChip('crafting')) {
     rws.forEach((r) => R.push({ key: 'r:' + r.name, group: 'Runewords', icon: r.icon, glyph: '⬡', name: r.name, rcls: 'r-rune',
       sub: 'Runeword', src: ((r.fields && r.fields[0] && r.fields[0].value) || ''), card: () => itemCard(r) }));
@@ -589,8 +608,7 @@ function renderSearch(main, side) {
   }
   if (!cur) {
     // "boss loot": the bosses to pick from, then what the picked one drops
-    main.appendChild(el('div', 'meta bhint', 'Pick a boss to see what it drops'));
-    main.appendChild(bossGrid(bosses, (b) => { pick = 'b:' + b.sec.name; detailOpen = true; render(); $('main').scrollTop = 0; }));
+    main.appendChild(bossLoot(bosses));
     return;
   }
   if (bossArea && cur.key.startsWith('b:')) {
@@ -618,7 +636,8 @@ function narrowDetail(main, backLabel) {
 function resultRow(r, on) {
   const a = el('a', 'res' + (on ? ' on' : ''));
   const t = el('span', 'rt');
-  if (isUrl(r.icon)) t.appendChild(remoteImg(r.icon, () => { t.textContent = r.glyph; }));
+  if (r.item) t.appendChild(itemPic(r.item, r.icon));
+  else if (isUrl(r.pic || r.icon)) t.appendChild(remoteImg(r.pic || r.icon, () => { t.textContent = r.glyph; }));
   else t.textContent = r.glyph;
   a.appendChild(t);
   const tx = el('span', 'rx');
@@ -656,48 +675,87 @@ function subHead(title, icon, n) {
   return h;
 }
 
+// ---- pictures: d4builds.gg keeps one per unique, boss and class under its name (sunderarmor.com)
+const PICS = 'https://sunderarmor.com/DIABLO4/';
+const cleanName = (n) => String(n || '').replace(/‍/g, '').trim();
+/** "Sea Lord's Fine Gloves" -> …/Uniques/2/sea_lord's_fine_gloves.png */
+const uniquePic = (name) => PICS + 'Uniques/2/' + encodeURI(cleanName(name).toLowerCase().replace(/ /g, '_')) + '.png';
+/** "Duriel, King of Maggots" -> boss_duriel, "The Beast in the Ice" -> boss_beast-in-ice, "Echo of Varshan" -> boss_varshan. */
+function bossPic(name) {
+  const n = cleanName(name).split(',')[0].toLowerCase().replace(/^echo of /, '').split(' ').filter((w) => w && w !== 'the').join('-');
+  return n ? PICS + 'Bosses/1/boss_' + encodeURI(n) + '.png' : '';
+}
+const classPic = (cls) => PICS + 'Classes/2/' + cls.toLowerCase() + '.png';
+const CLASSES = ['Barbarian', 'Druid', 'Necromancer', 'Paladin', 'Rogue', 'Sorcerer', 'Spiritborn', 'Warlock'];
+// maxroll's picture per name, for the drops the others have none for (main.js items:icons)
+let mxIcons = {};
+function loadIcons() {
+  const names = [...new Set((loot.sections || []).flatMap((s) => (s.drops || []).map((d) => cleanName(d.name))))];
+  if (!names.length || !api.itemIcons) return;
+  api.itemIcons(names).then((m) => { mxIcons = m || {}; if (section === 'search') render(); }).catch(() => {});
+}
+/** An item's picture: d4builds', else d4guides' (the catalog), else maxroll's, else a glyph. */
+function itemPic(name, fallback) {
+  const box = el('span', 'ipic');
+  const cat = window.FarmView && window.FarmView.item(name);
+  const urls = [...new Set([uniquePic(name), fallback, cat && cat.icon, mxIcons[cleanName(name)]].filter(isUrl))];
+  const next = (i) => {
+    if (i >= urls.length) { box.textContent = '◆'; return; }
+    box.appendChild(remoteImg(urls[i], () => next(i + 1)));
+  };
+  next(0);
+  return box;
+}
+/** "mythic" | "unique" | … – from the item, the catalog, or the loot sheet's note. */
+function rarityOf(name, it, note) {
+  const r = (it && it.rarity) || ((window.FarmView && window.FarmView.item(name)) || {}).rarity || '';
+  if (/mythic/i.test(r) || (!r && /mythic/i.test(note || ''))) return 'mythic';      // "Iconic Mythic Unique" too
+  return r ? r.split(' ')[0].toLowerCase() : 'unique';
+}
+/** An icon-only button. */
+function iconBtn(title, path, onClick, cls) {
+  const b = el('button', 'ab icon' + (cls ? ' ' + cls : ''));
+  b.title = title;
+  b.setAttribute('aria-label', title);
+  b.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + path + '"/></svg>';
+  b.onclick = onClick;
+  return b;
+}
+const ICON_STAR = 'M12 3.6l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.8l5.9-.9z';
+const ICON_COPY = 'M9 9h11v11H9zM5.5 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v.5';
+const ICON_TRADE = 'M4 8.5h16l-1.5 11h-13zM8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5';
+
 function itemCard(it) {
-  const c = el('div', 'card');
+  const c = el('div', 'card icard');
+  const rar = rarityOf(it.name, it);
   const head = el('div', 'ch');
-  const ic = el('div', 'ic');
-  if (it.icon) ic.appendChild(remoteImg(it.icon, () => { ic.textContent = '◆'; }));
-  else ic.textContent = '◆';
+  const ic = el('div', 'ic big r-' + rar);
+  ic.appendChild(itemPic(it.name, it.icon));
   head.appendChild(ic);
 
   const titles = el('div');
-  const h = el('h4', null, it.name);
-  if (it.rarity) h.classList.add('r-' + it.rarity.split(' ')[0].toLowerCase());
-  titles.appendChild(h);
-  const meta = [it.rarity, it.type, it.level ? 'level ' + it.level + '+' : '', it.set ? 'Set: ' + it.set : ''].filter(Boolean);
+  titles.appendChild(el('h4', 'r-' + rar, it.name));
+  const cat = window.FarmView && window.FarmView.item(it.name);
+  const cls = cat && cat.cls && cat.cls !== 'All' ? cat.cls : '';
+  const meta = [it.rarity, it.type, cls, it.level ? 'level ' + it.level + '+' : '', it.set ? 'Set: ' + it.set : ''].filter(Boolean);
   if (meta.length) titles.appendChild(el('div', 'meta', meta.join(' · ')));
   head.appendChild(titles);
 
   const right = el('div', 'right');
-  const star = el('button', 'ab icon star' + (isFav(it.name) ? ' on' : ''));
-  star.title = 'Favourite';
-  star.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 3.6l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.8l5.9-.9z"/></svg>';
-  star.onclick = () => toggleFav(it);
-  right.appendChild(star);
-
-  const copy = el('button', 'ab icon');
-  copy.title = 'Copy name';
-  copy.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M5.5 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v.5"/></svg>';
-  copy.onclick = () => { api.copyText(it.name); showNote('“' + it.name + '” copied.', 'ok', 2500); };
-  right.appendChild(copy);
-
-  const trade = el('button', 'ab', 'diablo.trade');
-  trade.onclick = () => openTrade(it.name);
-  right.appendChild(trade);
-
-  if (it.url) {
-    const db = el('button', 'ab', 'Database');
-    db.onclick = () => openSection('page', it.url);
-    right.appendChild(db);
-  }
+  right.appendChild(iconBtn('Favourite', ICON_STAR, () => toggleFav(it), 'star' + (isFav(it.name) ? ' on' : '')));
+  right.appendChild(iconBtn('Copy name', ICON_COPY, () => { api.copyText(it.name); showNote('“' + it.name + '” copied.', 'ok', 2500); }));
+  right.appendChild(iconBtn('Search on diablo.trade', ICON_TRADE, () => openTrade(it.name)));
   head.appendChild(right);
   c.appendChild(head);
 
-  if (it.power) c.appendChild(el('div', 'pw', it.power));
+  // what it does, as the game's tooltip shows it
+  if (it.power || (it.effects || []).length || it.flavor) {
+    const tt = el('div', 'itt');
+    if (it.power) tt.appendChild(el('div', 'pw', it.power));
+    (it.effects || []).forEach((e) => tt.appendChild(el('div', 'eff', '• ' + e)));
+    if (it.flavor) tt.appendChild(el('div', 'flav', it.flavor));
+    c.appendChild(tt);
+  }
   if (it.obtain) {
     const g = el('div', 'get');
     g.appendChild(subHead('How to get it', 'target'));
@@ -706,7 +764,6 @@ function itemCard(it) {
     c.appendChild(g);
   }
   dropsFrom(it.name, c);
-  (it.effects || []).forEach((e) => c.appendChild(el('div', 'eff', '• ' + e)));
   const fields = it.fields || [];
   if (fields.length) {
     const g = el('div', 'grid');
@@ -744,25 +801,6 @@ function bossFacts(info) {
   return out;
 }
 
-/** Where the boss is, what you need to get in – shared by the boss card and an item's "Drops from". */
-function placeInfo(sec, into) {
-  if (sec.location) {
-    const p = placeOf(sec);
-    const w = el('div', 'where');
-    w.appendChild(el('span', 'pin', '⌖'));
-    const tx = el('div');
-    tx.appendChild(el('b', null, p.where));
-    if (p.lair) tx.appendChild(el('span', null, 'Lair: ' + p.lair));
-    w.appendChild(tx);
-    into.appendChild(w);
-  }
-  const facts = bossFacts(sec.info);
-  if (facts.length) {
-    const fx = el('div', 'facts');
-    facts.forEach(([v, k]) => fx.appendChild(el('span', 'fact ' + k, v)));
-    into.appendChild(fx);
-  }
-}
 /** The lair screenshot from the guide: on request, it is big. */
 function lairMap(sec, into) {
   if (!sec.images || !sec.images[0]) return;
@@ -805,100 +843,105 @@ function dropsFrom(name, into) {
   box.appendChild(subHead('Drops from', 'boss', src.length));
   src.forEach(({ sec, drop }) => {
     const r = el('div', 'src');
-    const h = el('div', 'sh');
-    h.appendChild(el('span', 'gl', sec.isBoss ? '☠' : '◆'));
-    h.appendChild(el('b', null, sec.name));
-    const note = [drop.cls, drop.note].filter(Boolean).join(' · ');
-    if (note) h.appendChild(el('em', null, note));
-    r.appendChild(h);
-    placeInfo(sec, r);
+    r.appendChild(bossHead(sec, [drop.cls, cleanName(drop.note)].filter((x) => x && !/^(all|multiple) classes$/i.test(x)).join(' · ')));
+    const all = el('a', 'ball', 'Everything ' + sec.name.split(',')[0] + ' drops →');
+    all.onclick = () => { $('q').value = sec.name.split(',')[0]; onQuery(); };
+    r.appendChild(all);
     lairMap(sec, r);
     box.appendChild(r);
   });
   into.appendChild(box);
 }
 
-function bossCard(r) {
-  const sec = r.sec, c = el('div', 'card boss');
-  const head = el('div', 'ch');
-  head.appendChild(el('div', 'ic', sec.isBoss ? '☠' : '◆'));
+/** A boss (or loot pool): portrait, name, where, torment and key – and on the right what is given. */
+function bossHead(sec, right) {
+  const h = el('div', 'bhead');
+  const pic = el('span', 'bpic');
+  const url = sec.isBoss ? bossPic(sec.name) : '';
+  const glyph = () => { pic.textContent = sec.isBoss ? '☠' : '◆'; };
+  if (url) pic.appendChild(remoteImg(url, glyph)); else glyph();
+  h.appendChild(pic);
   const t = el('div', 'bt');
-  t.appendChild(el('h4', null, sec.name));
-  t.appendChild(el('div', 'meta', sec.isBoss ? 'Boss' : 'Loot pool'));
-  head.appendChild(t);
-  c.appendChild(head);
-  // where first – that is what you came for
-  placeInfo(sec, c);
-
-  if (r.items.length) {
-    const dl = el('div', 'drops');
-    const all = r.items.length === (sec.drops || []).length;
-    // the whole drop list: by class – yours (from the active build) picked first
-    const classes = all ? [...new Set(r.items.map((it) => it.cls).filter((x) => x && !/^all/i.test(x)))].sort() : [];
-    let items = r.items;
-    if (classes.length > 1) {
-      const mine = activeClass();
-      const want = bossCls || (classes.includes(mine) ? mine : 'All');
-      const bar = el('div', 'clsbar');
-      ['All'].concat(classes).forEach((c) => {
-        const b2 = el('button', 'cls' + (c === want ? ' on' : ''), c);
-        b2.onclick = () => { bossCls = c; render(); };
-        bar.appendChild(b2);
-      });
-      if (!bossCls && want === mine) bar.appendChild(el('span', 'meta', 'your build’s class'));
-      dl.appendChild(bar);
-      if (want !== 'All') items = r.items.filter((it) => !it.cls || it.cls === want || /^all/i.test(it.cls));
-    }
-    dl.appendChild(subHead(all ? 'Drops' : 'Drops what you searched', 'item', items.length));
-    items.forEach((it) => {
-      const hit = itemHits.find((x) => x.name === it.name);
-      const rar = hit && hit.rarity ? hit.rarity.split(' ')[0].toLowerCase() : /mythic/i.test(it.note || '') ? 'mythic' : 'unique';
-      const row = el('div', 'drop');
-      const ic = el('span', 'di');
-      if (hit && isUrl(hit.icon)) ic.appendChild(remoteImg(hit.icon));
-      row.appendChild(ic);
-      // a click looks the item up
-      const nm = el('span', 'nm r-' + rar, it.name);
-      nm.title = 'Search for it';
-      nm.onclick = () => { $('q').value = it.name; onQuery(); };
-      row.appendChild(nm);
-      row.appendChild(el('em', null, [it.cls, it.note].filter(Boolean).join(' · ')));
-      const a = el('a', null, '↗'); a.title = 'Search on diablo.trade'; a.onclick = () => openTrade(it.name);
-      row.appendChild(a);
-      dl.appendChild(row);
-    });
-    c.appendChild(dl);
+  t.appendChild(el('h3', null, sec.name));
+  if (sec.location) {
+    const p = placeOf(sec);
+    const w = el('div', 'bwhere');
+    w.appendChild(el('b', null, p.where));
+    if (p.lair) w.appendChild(el('span', null, 'Lair: ' + p.lair));
+    t.appendChild(w);
   }
-  lairMap(sec, c);
-  return c;
+  const facts = bossFacts(sec.info);
+  if (facts.length) {
+    const fx = el('div', 'facts');
+    facts.forEach(([v, k]) => fx.appendChild(el('span', 'fact ' + k, v)));
+    t.appendChild(fx);
+  }
+  h.appendChild(t);
+  if (right instanceof Node) h.appendChild(right);
+  else if (right) h.appendChild(el('em', 'bnote', right));
+  return h;
 }
 
-/** "boss loot": every boss as a tile – pick one to see what it drops. */
-function bossGrid(list, choose) {
-  const wrap = el('div');
-  // the bosses first, the loot pools (season uniques, rune drops …) after them
-  [['Bosses', list.filter((b) => b.sec.isBoss)], ['Loot pools', list.filter((b) => !b.sec.isBoss)]].forEach(([label, part]) => {
-    if (!part.length) return;
-    wrap.appendChild(el('div', 'bgh', label));
-    wrap.appendChild(tiles(part, choose));
+// ---- boss loot: every boss (or the one picked) with its uniques as tiles, filtered by class
+/** The class the drops are shown for: picked here, else the active build's, else all. */
+const lootClass = () => bossCls || (CLASSES.includes(activeClass()) ? activeClass() : 'All');
+/** A drop for this class: its own, or one for every class. */
+const forClass = (d, cls) => cls === 'All' || !d.cls || d.cls === cls || /^(all|multiple)/i.test(d.cls);
+function classBar() {
+  const cur = lootClass();
+  const bar = el('div', 'clsbar');
+  ['All'].concat(CLASSES).forEach((c) => {
+    const b = el('button', 'cls' + (c === cur ? ' on' : ''));
+    b.dataset.cls = c;
+    if (c !== 'All') b.appendChild(remoteImg(classPic(c)));
+    b.appendChild(el('span', null, c));
+    b.onclick = () => { bossCls = c; render(); };
+    bar.appendChild(b);
   });
-  return wrap;
+  if (!bossCls && cur !== 'All') bar.appendChild(el('span', 'meta', 'your build’s class'));
+  return bar;
 }
-function tiles(list, choose) {
-  const g = el('div', 'bgrid');
-  list.forEach((b) => {
-    const t = el('button', 'btile' + (b.sec.isBoss ? '' : ' pool'));
-    const h = el('div', 'tn');
-    h.appendChild(el('span', 'gl', b.sec.isBoss ? '☠' : '◆'));
-    h.appendChild(el('b', null, b.sec.name));
-    t.appendChild(h);
-    if (b.sec.location) t.appendChild(el('div', 'tw', placeOf(b.sec).where));
-    const facts = bossFacts(b.sec.info).map((x) => x[0]);
-    t.appendChild(el('div', 'tm', [(b.sec.drops || []).length + ' drops'].concat(facts).join(' · ')));
-    t.onclick = () => choose(b);
-    g.appendChild(t);
-  });
-  return g;
+/** One unique: picture, name in its colour, slot – the in-game tooltip on hover, a click looks it up. */
+function itemTile(d) {
+  const name = cleanName(d.name);
+  const cat = window.FarmView && window.FarmView.item(name);
+  const rar = rarityOf(name, null, d.note);
+  const t = el('a', 'itile r-' + rar);
+  t.dataset.item = name;
+  t.appendChild(itemPic(name, cat && cat.icon));
+  const tx = el('span', 'itx');
+  tx.appendChild(el('span', 'inm r-' + rar, name));
+  // "(Druid, Sorc)" is worth showing, "All" next to "all classes" is not
+  const note = cleanName(d.note).replace(/^\((.*)\)$/, '$1').replace(/^all( classes)?$/i, '');
+  const sub = [cat && cat.slot, /^(all|multiple)/i.test(d.cls || '') ? 'all classes' : '', note].filter(Boolean).join(' · ');
+  if (sub) tx.appendChild(el('span', 'ity', sub));
+  t.appendChild(tx);
+  t.onclick = () => { if (window.FarmView) window.FarmView.hideTip(); $('q').value = name; onQuery(); };
+  if (window.FarmView) window.FarmView.tip(t, name);
+  return t;
+}
+/** A boss with what it drops for the class – the count says how many of how many. */
+function bossSection(sec, drops) {
+  const cls = lootClass();
+  const shown = drops.filter((d) => forClass(d, cls));
+  const s = el('section', 'bsec' + (sec.isBoss ? '' : ' pool'));
+  const n = el('div', 'bcount');
+  n.appendChild(el('b', null, String(shown.length)));
+  n.appendChild(el('span', null, shown.length === drops.length ? 'drops' : 'for ' + cls + ' · ' + drops.length + ' in all'));
+  s.appendChild(bossHead(sec, n));
+  const g = el('div', 'igrid');
+  shown.forEach((d) => g.appendChild(itemTile(d)));
+  if (!shown.length) g.appendChild(el('div', 'meta', drops.length ? 'Nothing for ' + cls + ' here.' : 'No drop list for it.'));
+  s.appendChild(g);
+  if (sec.isBoss) lairMap(sec, s);                 // a loot pool has no lair
+  return s;
+}
+/** "boss loot", or a boss picked: the class bar, then the bosses, the loot pools after them. */
+function bossLoot(list) {
+  const wrap = el('div', 'bloot');
+  wrap.appendChild(classBar());
+  list.slice().sort(bossFirst).forEach((b) => wrap.appendChild(bossSection(b.sec, b.items)));
+  return wrap;
 }
 
 function craftCard(m) {
@@ -1762,9 +1805,12 @@ function wireResize() {
 async function init() {
   settings = await api.getSettings();
   try { features = Object.assign({}, features, await api.getFeatures()); } catch (_) { /* an older main: no macros */ }
-  loot = (await api.getLoot()) || loot;
+  loot = useLoot(await api.getLoot()) || loot;
   craft = (await api.getCraft()) || craft;
   activities = (await api.getActivities()) || [];
+  // the uniques' catalog: slot, rarity and the in-game tooltip for boss loot and the search
+  loadIcons();
+  window.FarmView.ensure(api).then(() => { if (section === 'search') render(); }).catch(() => {});
   runewords = (await api.getRunewords()) || [];
   applyLayout();
 
@@ -1813,12 +1859,12 @@ async function init() {
   $('rail').addEventListener('pointerenter', () => peek(true));
   $('rail').addEventListener('pointerleave', () => peek(false));
 
-  api.onLoot((l) => { loot = l || loot; render(); });
+  api.onLoot((l) => { loot = useLoot(l) || loot; loadIcons(); render(); });
   api.onCraft((c) => { craft = c || craft; render(); });
   api.onActivities((a) => { activities = a || activities; render(); });
   api.onFarmReady(() => { if (window.FarmView) window.FarmView.reload(); });
   if (window.FarmView) window.FarmView.onChange = updateMissing;
-  api.onItemsReady(async () => { itemQuery = null; runewords = (await api.getRunewords()) || runewords; updateItems($('q').value.trim()); });
+  api.onItemsReady(async () => { itemQuery = null; loadIcons(); runewords = (await api.getRunewords()) || runewords; updateItems($('q').value.trim()); });
   api.onWorldBoss((d) => { wb = d; renderTimers(); });
   // what the app reports by itself (data loaded, login saved, backup …) goes to the footer only –
   // it never opens the panel while you play
