@@ -3,16 +3,7 @@
 const api = window.d4api;          // (not "api" on window: that would clash with the bridge name)
 const S = window.SearchLib;
 const $ = (id) => document.getElementById(id);
-const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-/** A picture from another site (sent without a referrer); onFail runs when it does not load. */
-function remoteImg(src, onFail) {
-  const im = el('img');
-  im.referrerPolicy = 'no-referrer';
-  im.onerror = () => { im.remove(); if (onFail) onFail(); };
-  im.src = src;
-  return im;
-}
-const isUrl = (u) => /^https?:/.test(u || '');
+const { el } = UI;
 /** Sort order: bosses before loot pools. */
 const bossFirst = (x, y) => (y.sec.isBoss ? 1 : 0) - (x.sec.isBoss ? 1 : 0);
 
@@ -36,7 +27,7 @@ let wb = { at: 0, secs: null, text: '' };
 let section = null;                // null = closed; otherwise one of the rail sections
 let pageUrl = null;                // page opened from a card ("Database" button)
 let itemHits = [], itemQuery = null;
-let pick = null;                   // entry selected in the sidebar (filters the main view)
+let pick = null;                   // the result picked in the list (shown in full beside it)
 let chip = 'all';                  // active filter chip
 let runewords = [];
 let note = null, noteTimer = null, debounce = null;
@@ -54,20 +45,29 @@ let dataInfo = '';                 // "8433 items · …" – shown in Settings 
 let resultKeys = [], shownKey = null;   // the result list in order – arrow keys walk it
 let bossCls = null;                // the class the boss drops are shown for (null: the active build's)
 let lastSection = null, lastUrl = null;   // what was open last – the timer opens it again
-let detailOpen = false;            // narrow panel: the picked result fills it (with a way back)
-/** The class of the build that is open in Builds – boss drops start on it. */
-function activeClass() {
-  const st = window.FarmView && window.FarmView._state && window.FarmView._state();
-  const b = st && st.data && st.data.builds.find((x) => x.id === st.data.active);
-  return b && b.cls && b.cls !== 'All' ? b.cls : 'All';
-}
-
 // ---------------------------------------------------------------- size reporting
+// Closed, the window is the strip – its size is measured here. Open, the main process knows the
+// panel's size by itself (820 × 600, the size picked or dragged).
 function reportSize() {
   const open = !$('panel').hidden;
-  const big = !!EMBEDDED[section] || section === 'farm' || section === 'builder';   // embedded pages, the farm list and the builder get more room
-  api.resize(Math.ceil($('rail').getBoundingClientRect().width), Math.ceil($('shell').getBoundingClientRect().height), open, big);
+  // the sections are sliding out: the window already has their width (peek) – no smaller one now
+  if (!open && $('app').classList.contains('peek')) return;
+  const r = $('rail').getBoundingClientRect();
+  api.resize(Math.ceil(r.width), Math.ceil(r.height), open);
   setTimeout(syncView, 30);
+}
+/** The bar as a strip (closed) or the panel's spine (open) – opening, the panel grows out of it. */
+function setOpen(on) {
+  const was = $('app').classList.contains('open');
+  $('app').classList.remove('peek');
+  $('app').classList.toggle('open', !!on);
+  $('panel').hidden = !on;
+  if (on && !was) {
+    $('app').classList.add('grow');
+    clearTimeout(setOpen.t);
+    setOpen.t = setTimeout(() => $('app').classList.remove('grow'), 320);
+  }
+  renderTimers();
 }
 function syncView() {
   if (!EMBEDDED[section]) return;
@@ -76,9 +76,8 @@ function syncView() {
 }
 
 // ---------------------------------------------------------------- idle
-// Nothing open and nothing touched for a while: the bar shrinks to the essentials
-// (timer · search · diablo.trade · quit · drag handle) and fades to the set opacity.
-// The timer keeps its full strength, and an alert blinks on its own element only.
+// Nothing open: the bar is the strip and fades to the set opacity. The timers keep their full
+// strength when asked to, and an alert blinks on its own element only.
 function armIdle() {
   clearTimeout(idleTimer);
   if (section) return;
@@ -94,25 +93,38 @@ function setIdle(on) {
   $('app').classList.toggle('idle', on);
   if (!on) $('app').classList.remove('peek');
   api.setIdle(on);
-  renderTimers();                                    // the pill has room for the long form
+  renderTimers();
   setTimeout(reportSize, 40);
   setTimeout(reportSize, 280);                       // again once the shrink has run
 }
-function wake() { setIdle(false); armIdle(); }
-// Hovering only takes the fade off: the pill keeps its shape and its place, so it can be
-// dragged. Opening it is a deliberate click on an icon (or the search hotkey).
-function peek(on) { $('app').classList.toggle('peek', !!on && idle); }
+// The closed bar shows the timers and lock only. The mouse over it takes the fade off and slides
+// the sections out (those switched on for it): the window takes their width first – keeping its
+// place – then they slide in; leaving, they slide back and the window follows once they are in.
+let peekT = null;
+function peek(on) {
+  clearTimeout(peekT);
+  if (!on || !idle || $('app').classList.contains('open')) {
+    if (!$('app').classList.contains('peek')) return;
+    $('app').classList.remove('peek');
+    peekT = setTimeout(reportSize, 360);
+    return;
+  }
+  if ($('app').classList.contains('peek')) return;
+  const s = $('secs'), y = $('sys'), r = $('rail').getBoundingClientRect();
+  s.style.setProperty('--w', s.scrollWidth + 'px');
+  y.style.setProperty('--w', y.scrollWidth + 'px');
+  api.resize(Math.ceil(r.width + s.scrollWidth + y.scrollWidth + 12), Math.ceil(r.height), false, true);
+  $('app').classList.add('peek');
+}
 
 // ---------------------------------------------------------------- timers
 // Three timers sit in the bar and the pill: the world boss (read from diablo.trade), the
 // Helltide (from the clock) and one of your own (started by a click).
 const pad2 = (v) => String(Math.floor(v)).padStart(2, '0');
-const fmtLong = (s) => pad2(s / 3600) + 'h ' + pad2((s % 3600) / 60) + 'min ' + pad2(s % 60) + 'sec';
-const fmtShort = (s) => pad2(s / 3600) + ':' + pad2((s % 3600) / 60);
 const fmtMin = (s) => pad2(s / 60) + 'min ' + pad2(s % 60) + 'sec';
 const fmtMs = (s) => pad2(s / 60) + ':' + pad2(s % 60);
-/** Room for the long form: the pill, the bar with labels, or the horizontal bar. */
-const timersWide = () => idle || $('rail').classList.contains('wide') || $('shell').classList.contains('horizontal');
+/** Room for the long labels: the strip has it, the spine only for short ones. */
+const timersWide = () => !$('app').classList.contains('open');
 
 function renderTimers() {
   const wide = timersWide();
@@ -128,17 +140,18 @@ const spawnOf = () => (wb.secs == null ? 0 : Math.round((wb.at + wb.secs * 1000)
 function renderWb(wide) {
   const box = $('wb'), e = $('wbTime');
   box.hidden = settings && settings.wbTimer === false;
-  box.querySelector('b').textContent = wide ? 'World Boss' : 'WB';
-  if (wb.secs == null) { e.textContent = wide ? '--h --min --sec' : '--:--'; box.classList.remove('soon', 'blink'); return; }
+  box.querySelector('b').textContent = wide ? 'World boss' : 'Boss';
+  if (wb.secs == null) { e.textContent = '--:--'; box.classList.remove('soon', 'blink'); return; }
   const left = Math.max(0, wb.secs - (Date.now() - wb.at) / 1000);
-  e.textContent = wide ? fmtLong(left) : fmtShort(left);
+  e.textContent = fmtClock(Math.round(left));
+  box.title = 'World boss' + (wb.text ? ' — ' + wb.text : '') + ' — in ' + fmtClock(Math.round(left));
   const warn = Number(settings && settings.wbWarnMin);
   const window_ = (isNaN(warn) ? 5 : warn) * 60;
   const soon = left < window_;
   box.classList.toggle('soon', soon);
   box.classList.toggle('blink', soon && !(settings && settings.wbBlink === false) && wbAck !== spawnOf());
-  // the closer it gets, the bigger – less in the narrow vertical rail
-  const most = wide ? 0.6 : 0.2;
+  // the closer it gets, the bigger – less in the narrow spine
+  const most = wide ? 0.4 : 0.15;
   const k = soon && window_ > 0 ? 1 + (1 - left / window_) * most : 1;
   box.style.setProperty('--wbk', k.toFixed(2));
 }
@@ -158,8 +171,8 @@ function renderHt(wide) {
   const h = helltide();
   box.classList.toggle('on', h.on);
   box.classList.toggle('ending', h.on && h.left <= HT_ENDING);
-  box.querySelector('b').textContent = wide ? (h.on ? 'Helltide' : 'Helltide in') : (h.on ? 'HT' : 'HT in');
-  $('htTime').textContent = wide ? fmtMin(h.left) : fmtMs(h.left);
+  box.querySelector('b').textContent = wide ? (h.on ? 'Helltide' : 'Helltide in') : (h.on ? 'Helltide' : 'Next HT');
+  $('htTime').textContent = fmtMs(h.left);
   box.title = h.on ? 'Helltide is on — ends in ' + fmtMin(h.left) : 'No Helltide — the next one starts in ' + fmtMin(h.left);
 }
 
@@ -226,7 +239,7 @@ function renderCt(wide) {
   box.classList.toggle('ready', state === 'ready');
   box.classList.toggle('soon', state === 'run' && left <= CT_WARN);
   box.classList.toggle('blink', state === 'run' && left <= CT_WARN);
-  box.querySelector('b').textContent = wide ? ctName() : ctName().slice(0, 5);
+  box.querySelector('b').textContent = wide ? ctName() : ctName().slice(0, 8);
   const shown = state === 'run' ? (up ? total - left : left) : up ? 0 : total;
   $('ctTime').textContent = state === 'ready' ? 'ready' : fmtClock(shown);
   box.title = ctName() + ' — ' + (state === 'run' ? (up ? fmtClock(total - left) + ' of ' + fmtClock(total) + ', ' : '') + 'done in ' + fmtClock(left)
@@ -261,11 +274,11 @@ function openSection(name, url, heading) {
   // opened from closed: never pinned – pinning is always your own click
   if (!section && !same) setPinned(false);
   section = same ? null : name;
-  if (!same) { pick = null; chip = 'all'; detailOpen = false; }
+  if (!same) { pick = null; chip = 'all'; }
   if (url) pageUrl = url;
   if (name === 'page' && !same) pageFrom = prevSection;
 
-  $('panel').hidden = !section;
+  setOpen(!!section);
   // the builder lives under Builds – one icon for both
   document.querySelectorAll('#rail .ri[data-section]').forEach((b) => b.classList.toggle('on', b.dataset.section === section || (section === 'builder' && b.dataset.section === 'farm')));
 
@@ -292,7 +305,7 @@ function closeAll() {
   if (window.FarmView) window.FarmView.hideTip();
   if (window.BuildViews) window.BuildViews.hideTip();
   $('q').value = ''; itemHits = []; itemQuery = '';
-  $('panel').hidden = true;
+  setOpen(false);
   showCoach();
   document.querySelectorAll('#rail .ri[data-section]').forEach((b) => b.classList.remove('on'));
   api.viewHide();
@@ -304,7 +317,7 @@ function closeAll() {
 function setPinned(on) {
   pinned = !!on;
   $('btnPin').classList.toggle('on', pinned);
-  $('btnPin').querySelector('span').textContent = pinned ? 'Pinned' : 'Pin';
+  $('btnPin').title = pinned ? 'Pinned — stays open while you play · click to unpin' : 'Pin — stays open while you play';
 }
 /** A click outside the overlay (into the game): an open panel closes – pinned (or set to stay) it fades instead. */
 function onClickOutside() {
@@ -356,8 +369,8 @@ function showNote(text, kind, ms) {
   clearTimeout(noteTimer);
   // gone again: only the note itself – redrawing the page would throw away what is going on in it
   // (a key being recorded, the cursor in a field)
-  if (ms !== 0) noteTimer = setTimeout(() => { note = null; document.querySelectorAll('#main > .note').forEach((n) => n.remove()); reportSize(); }, ms || 6000);
-  if (!section) { section = 'search'; $('panel').hidden = false; document.querySelector('#rail .ri[data-section=search]').classList.add('on'); }
+  if (ms !== 0) noteTimer = setTimeout(() => { note = null; document.querySelectorAll('#main > .note').forEach((n) => n.remove()); }, ms || 6000);
+  if (!section) { section = 'search'; setOpen(true); document.querySelector('#rail .ri[data-section=search]').classList.add('on'); }
   render();
 }
 
@@ -369,9 +382,12 @@ function footNote(text, kind) {
   e.className = kind || 'info';
   e.title = text;
   e.hidden = false;
+  syncStatus();
   clearTimeout(footTimer);
-  footTimer = setTimeout(() => { e.hidden = true; }, kind === 'error' ? 15000 : 8000);
+  footTimer = setTimeout(() => { e.hidden = true; syncStatus(); }, kind === 'error' ? 15000 : 8000);
 }
+/** The line under the page shows only while it has something to say. */
+function syncStatus() { $('status').hidden = !$('stData').textContent && $('stNote').hidden; }
 
 // ---------------------------------------------------------------- search data
 async function updateItems(q) {
@@ -401,52 +417,75 @@ function pushRecent(q) {
 }
 
 // ---------------------------------------------------------------- rendering
-// Pin and close sit in the section's own header row (search field, build bar), so they never
-// cover anything; without such a row (settings) they float top right.
+// Every page has the same three parts: the head (#title – or the search field), the tabs (#chips)
+// and the body (#main, with the result list #side for the search). Pin and close sit at the
+// head's right end on every page.
 function render() {
-  const tools = $('ptools');
-  tools.classList.remove('docked');
-  $('panel').appendChild(tools);                     // out of the way before the content is cleared
   renderSection();
-  const host = !$('top').hidden ? $('top') : section === 'farm' ? $('main').querySelector('.fbar') : section === 'builder' ? $('main').querySelector('.bd-head') : section === 'settings' ? $('main').querySelector('.sethead') : null;
-  if (host) { host.appendChild(tools); tools.classList.add('docked'); }
-  if (host && (section === 'farm' || section === 'builder')) host.insertBefore(buildsSwitch(), host.firstChild);
 }
-/** Builds is one place: your farm list, and finding a build (class, skill, every site's guides). */
-function buildsSwitch() {
-  const s = el('div', 'seg bswitch');
-  [['farm', 'My builds', 'Your farm list'], ['builder', 'Find a build', 'Pick a class and a skill – every guide for it, or build it yourself']].forEach(([k, label, title]) => {
-    const b = el('button', section === k ? 'on' : '', label);
+/** The page head: a kicker (small caps, red), the title, and what goes on the right. */
+function pageHead(kicker, title, right) {
+  const t = $('title');
+  t.textContent = '';
+  const b = el('div', 'tblock');
+  if (kicker) b.appendChild(kicker instanceof Node ? kicker : el('div', 'kick', kicker));
+  const h = el('h1', 'ttl', title);
+  h.title = title;
+  b.appendChild(h);
+  t.appendChild(b);
+  if (right && right.length) {
+    const r = el('div', 'tright');
+    right.forEach((x) => r.appendChild(x));
+    t.appendChild(r);
+  }
+}
+/** Builds is one place: your farm list, and finding a build – the switch sits in the kicker. */
+function buildsSwitch(extra) {
+  const k = el('div', 'kick');
+  [['farm', 'My builds', 'Your farm list'], ['builder', 'Find a build', 'Pick a class and a skill – every guide for it, or build it yourself']].forEach(([key, label, title], i) => {
+    if (i) k.appendChild(el('span', 'sep', '·'));
+    const b = el('button', section === key ? 'on' : '', label);
     b.title = title;
-    b.onclick = () => { if (section !== k) openSection(k); };
-    s.appendChild(b);
+    b.onclick = () => { if (section !== key) openSection(key); };
+    k.appendChild(b);
   });
-  return s;
+  if (extra) { k.appendChild(el('span', 'sep', '·')); k.appendChild(el('span', null, extra)); }
+  return k;
 }
 function renderSection() {
   const main = $('main'), side = $('side');
-  const sm = document.querySelector('.setmain');
+  const sm = document.querySelector('#main.settings');
   setScroll.top = sm ? sm.scrollTop : 0;
   main.textContent = ''; side.textContent = '';
-  main.classList.remove('farm', 'settings', 'bd');
-  $('cols').classList.remove('narrow', 'detail');
-  side.classList.toggle('results', section === 'search');
-  $('qClear').hidden = !$('q').value;
-  const ownPage = section === 'settings' || section === 'farm' || section === 'builder';
-  $('top').hidden = !section || ownPage;
-  side.hidden = !section || !!EMBEDDED[section] || ownPage;
+  main.className = '';
+  main.onscroll = null;
+  document.querySelectorAll('#cols > .ishade').forEach((x) => x.remove());
+  $('title').textContent = '';
   $('chips').textContent = '';
+  $('qClear').hidden = !$('q').value;
+  $('top').hidden = section !== 'search';
+  side.hidden = section !== 'search';
+  side.className = section === 'search' ? 'hits' : '';
+  $('cols').classList.toggle('withside', section === 'search');
+  syncStatus();
 
   if (!section) { reportSize(); return; }
   if (note) main.appendChild(el('div', 'note ' + note.kind, note.text));
 
-  if (section === 'settings') { renderSettings(main); reportSize(); return; }
-  if (EMBEDDED[section]) { renderEmbeddedSidebar(); reportSize(); return; }
-
-  if (section === 'farm') { window.FarmView.render(main, farmCtx); reportSize(); return; }
-  if (section === 'builder') { window.BuilderView.render(main, builderCtx); reportSize(); return; }
+  if (section === 'settings') { renderSettings(main); return; }
+  if (EMBEDDED[section]) { renderEmbedded(); return; }
+  if (section === 'farm') {
+    main.classList.add('farm');
+    window.FarmView.render(main, farmCtx);
+    return;
+  }
+  if (section === 'builder') {
+    pageHead(buildsSwitch(), 'Find a build');
+    main.classList.add('bd');
+    window.BuilderView.render(main, builderCtx);
+    return;
+  }
   if (section === 'search') renderSearch(main, side);
-  reportSize();
 }
 
 // What the builder (builder.js) may use from here – it keeps where you scrolled to when it redraws
@@ -463,25 +502,29 @@ const builderCtx = {
   openPage: (url) => openSection('page', url),   // the skill tree's d4builds.gg fallback
 };
 
-// What the farm list (farm.js) may use from here
+// What the farm list (farm.js) may use from here – its head and tabs go into the page's own
 const farmCtx = {
   get api() { return api; },
   el,
+  get head() { return $('title'); },
+  get tabs() { return $('chips'); },
+  kicker: (extra) => buildsSwitch(extra),
   rerender: () => { if (section === 'farm') render(); },
   note: (t, kind) => showNote(t, kind, 3500),
   openPage: (url) => openSection('page', url),   // a build site page inside the overlay
-  status: (t) => { $('stData').textContent = t; },
+  status: (t) => { $('stData').textContent = t; syncStatus(); },
 };
 
-function renderEmbeddedSidebar() {
+const PAGE_TITLE = { maptool: ['Map tool', 'Your marks are saved automatically'], listings: ['diablo.trade', 'Listings — the chat is one click away there'], chat: ['diablo.trade', 'Chat'] };
+function renderEmbedded() {
+  const [title, kick] = PAGE_TITLE[section] || ['Page', ''];
+  const right = [];
   if (section === 'page' && pageFrom && pageFrom !== 'page' && !EMBEDDED[pageFrom]) {
-    const back = el('button', 'chip', '← Back');
+    const back = UI.btn('Back', () => openSection(pageFrom), '', 'left');
     back.title = 'Back to where you opened it';
-    back.onclick = () => openSection(pageFrom);
-    $('chips').appendChild(back);
+    right.push(back);
   }
-  // The embedded page fills the panel; only the map tool adds a small note line.
-  if (section === 'maptool') $('stData').textContent = 'Map tool — your marks are saved automatically';
+  pageHead(kick || (section === 'page' ? 'Opened from the overlay' : ''), section === 'page' ? (pageUrl ? pageUrl.replace(/^https?:\/\/(www\.)?/, '').split(/[/?#]/)[0] : 'Page') : title, right);
 }
 
 // ---- search -------------------------------------------------------------
@@ -504,67 +547,63 @@ function renderSearch(main, side) {
     : [];
   const rws = area && kinds.indexOf('recipe') >= 0 ? runewords : [];
 
-  // Filter chips switch the whole result list; clicking an entry in the sidebar narrows it
-  // down to that one card. Both are cleared by picking "All".
+  // the tabs switch the whole result list; a result picked in the list shows beside it
   const counts = [['all', 'All', itemHits.length + bosses.length + recipes.length + rws.length + acts.length],
-    ['items', 'Items', itemHits.length], ['boss', 'Boss', bosses.length],
+    ['items', 'Items', itemHits.length], ['boss', 'Bosses', bosses.length],
     ['crafting', 'Crafting', recipes.length + rws.length], ['activities', 'Activities', acts.length]];
-  counts.forEach(([id, label, n], i) => {
-    if (i && !n) return;
-    const c = el('span', 'chip' + (chip === id ? ' on' : ''), label);
-    c.appendChild(el('b', null, String(n)));
-    c.onclick = () => { chip = id; if (id !== 'all') pick = null; render(); };
-    $('chips').appendChild(c);
-  });
+  if (q) {
+    $('chips').appendChild(UI.tabs(counts.filter(([, , n], i) => !i || n).map(([id, label, n]) => [id, label, null, false, n]), chip,
+      (id) => { chip = id; if (id !== 'all') pick = null; render(); }));
+  }
 
   if (!q) {
+    const hit = (o) => side.appendChild(Object.assign(UI.line(Object.assign({ tag: 'button' }, o)), {}));
     if (favs().length) {
       side.appendChild(el('h5', null, 'Favourites'));
-      favs().forEach((f) => side.appendChild(sideRow(f.icon, f.name, f.type, () => { $('q').value = f.name; onQuery(); })));
+      favs().forEach((f) => hit({ name: f.name, sub: f.type, rarity: f.type, pic: { name: f.name, url: f.icon }, cls: 'hit', onClick: () => { $('q').value = f.name; onQuery(); } }));
     }
     const rec = (settings && settings.recent) || [];
     if (rec.length) {
-      const h = el('h5', 'withx', 'Recent');
+      const h = el('h5', null, 'Recent');
       const clr = el('button', 'clr', 'Clear');
       clr.title = 'Delete the recent searches';
       clr.onclick = () => save({ recent: [] });
       h.appendChild(clr);
       side.appendChild(h);
-      rec.forEach((r) => side.appendChild(sideRow('↩', r, '', () => { $('q').value = r; onQuery(); })));
+      rec.forEach((r) => hit({ name: r, pic: UI.pic(r, { kind: 'search' }), cls: 'hit', onClick: () => { $('q').value = r; onQuery(); } }));
     }
     if (!favs().length && !rec.length) side.appendChild(el('div', 'empty', 'Type to search'));
     const hint = el('div', 'empty', 'Items, boss loot, crafting recipes and activities — all in one search.');
-    hint.appendChild(el('div', 'meta', 'Try: crafting · boss loot · activities · duriel · ber rune · iconic'));
+    hint.appendChild(el('div', 'meta', 'Try: crafting · boss loot · activities · duriel · ber rune · iconic mythic'));
     main.appendChild(hint);
     return;
   }
 
-  // ---- the results: a list on the left – what it is and where it comes from – and the
-  // picked one in full on the right (the first one until you pick another)
+  // ---- the results: a list – what it is and where it comes from – and the picked one in full
+  // beside it (the first one until you pick another)
   const inChip = (k) => chip === 'all' || chip === k;
   const R = [];
   const itemRows = !inChip('items') ? [] : itemHits.map((it) => {
     const from = dropSources(it.name).slice().sort(bossFirst)[0];
-    return { key: 'i:' + it.name, group: 'Items', icon: it.icon, item: it.name, glyph: '◆', name: it.name,
-      rcls: 'r-' + rarityOf(it.name, it),
+    return { key: 'i:' + it.name, group: 'Items', name: it.name, rarity: rarityOf(it.name, it), pic: { name: it.name, url: it.icon, kind: kindOf(it) },
       sub: [it.type, from ? from.sec.name.split(',')[0] : ''].filter(Boolean).join(' · '), card: () => itemCard(it) };
   });
-  const bossRows = !inChip('boss') ? [] : bosses.slice().sort(bossFirst).map((b) => ({ key: 'b:' + b.sec.name, group: b.sec.isBoss ? 'Bosses' : 'Loot pools', glyph: b.sec.isBoss ? '☠' : '◆',
-    name: b.sec.name, rcls: '', pic: b.sec.isBoss ? bossPic(b.sec.name) : '',
+  const bossRows = !inChip('boss') ? [] : bosses.slice().sort(bossFirst).map((b) => ({ key: 'b:' + b.sec.name, group: b.sec.isBoss ? 'Bosses' : 'Loot pools',
+    name: b.sec.name, rarity: '', pic: { name: b.sec.name, kind: b.sec.isBoss ? 'boss' : 'pool' },
     sub: [(b.sec.drops || []).length + ' drops', b.sec.location ? placeOf(b.sec).where : ''].filter(Boolean).join(' · '), card: () => bossLoot([b]) }));
   // a boss searched by its name ("duriel", "Everything Duriel drops") comes first, and is shown –
   // not its trophy ("Duriel: Shard of Agony"), which only carries the name
   const bossNamed = !!term && bosses.some((b) => b.sec.isBoss && S.norm(b.sec.name).startsWith(S.norm(term)));
   R.push(...(bossNamed ? bossRows.concat(itemRows) : itemRows.concat(bossRows)));
   if (inChip('crafting')) {
-    rws.forEach((r) => R.push({ key: 'r:' + r.name, group: 'Runewords', icon: r.icon, glyph: '⬡', name: r.name, rcls: 'r-rune',
+    rws.forEach((r) => R.push({ key: 'r:' + r.name, group: 'Runewords', name: r.name, rarity: 'Runeword', pic: { name: r.name, url: r.icon, kind: 'rune' },
       sub: 'Runeword', src: ((r.fields && r.fields[0] && r.fields[0].value) || ''), card: () => itemCard(r) }));
-    recipes.forEach((r, i) => R.push({ key: 'c:' + i, group: 'Crafting', glyph: '⚒', name: r.table.group + (r.table.sub ? ' · ' + r.table.sub : ''),
-      rcls: '', sub: r.rows.length + ' recipes', src: '', card: () => craftCard(r) }));
+    recipes.forEach((r, i) => R.push({ key: 'c:' + i, group: 'Crafting', name: r.table.group + (r.table.sub ? ' · ' + r.table.sub : ''), pic: UI.pic('', { kind: 'craft' }),
+      sub: r.rows.length + ' recipes', card: () => craftCard(r) }));
   }
   if (inChip('activities')) {
-    acts.forEach((x) => R.push({ key: 'a:' + x.name, group: 'Activities', glyph: '⚑', name: x.name, rcls: '',
-      sub: 'Activity', src: '', card: () => activityCard(x) }));
+    acts.forEach((x) => R.push({ key: 'a:' + x.name, group: 'Activities', name: x.name, pic: UI.pic('', { kind: 'activity' }),
+      sub: 'Activity', card: () => activityCard(x) }));
   }
   resultKeys = R.map((r) => r.key);
   // "boss loot" without a pick shows the bosses as tiles; everything else shows the first hit
@@ -573,28 +612,18 @@ function renderSearch(main, side) {
   const cur = R.find((r) => r.key === pick) || (bossArea || craftArea || !R.length ? null : R[0]);
   shownKey = cur ? cur.key : null;          // the default stays a default – late item hits come first
 
-  let group = null;
-  const GROUP_ICON = { Items: 'item', Bosses: 'boss', 'Loot pools': 'target', Runewords: 'rune', Crafting: 'craft', Activities: 'activity' };
+  // the results as chips, in order – the tabs above say how many of each kind there are
   R.forEach((r) => {
-    if (r.group !== group) {
-      group = r.group;
-      const h = el('h5', 'grp');
-      h.appendChild(iconTile(GROUP_ICON[group]));
-      h.appendChild(el('span', null, group));
-      h.appendChild(el('span', 'sstate', String(R.filter((x) => x.group === group).length)));
-      side.appendChild(h);
-    }
-    side.appendChild(resultRow(r, r === cur));
+    const row = UI.line({ tag: 'button', name: r.name, rarity: r.rarity, sub: r.sub, pic: r.pic, end: r.src || '', on: r === cur, cls: 'hit',
+      title: r.name + (r.src ? ' — ' + r.src : ''),
+      onClick: () => { pick = r.key; render(); $('main').scrollTop = 0; } });
+    row.dataset.key = r.key;
+    side.appendChild(row);
   });
   if (!area) {
-    const tl = el('a', 'res trade');
-    tl.appendChild(el('span', 'rt', '↗'));
-    tl.appendChild(el('span', 'rn', 'Search “' + q + '” on diablo.trade'));
-    tl.onclick = () => openTrade(q);
+    const tl = UI.line({ tag: 'button', name: 'Search “' + q + '” on diablo.trade', pic: UI.pic('', { kind: 'trade' }), cls: 'hit trade', onClick: () => openTrade(q) });
     side.appendChild(tl);
   }
-
-  narrowDetail(main, '← Results');
 
   if (!R.length) {
     main.appendChild(el('div', 'empty', loot.sections.length ? 'No matches.' : 'Data is still loading …'));
@@ -612,99 +641,20 @@ function renderSearch(main, side) {
     return;
   }
   if (bossArea && cur.key.startsWith('b:')) {
-    const back = el('a', 'ab', '← All bosses');
+    const back = UI.btn('All bosses', () => { pick = null; render(); }, 'ghost', 'left');
     back.style.marginBottom = '10px';
-    back.onclick = () => { pick = null; detailOpen = false; render(); };
     main.appendChild(back);
   }
-  // the whole crafting area: all runewords as one card when nothing is picked yet
   main.appendChild(cur.card());
 }
-const isNarrow = () => $('cols').clientWidth > 0 && $('cols').clientWidth < 720;
-/** A narrow panel shows the list or the picked one, never both squeezed – the picked one with a way back. */
-function narrowDetail(main, backLabel) {
-  const narrow = isNarrow();
-  $('cols').classList.toggle('narrow', narrow);
-  $('cols').classList.toggle('detail', narrow && detailOpen);
-  if (narrow && detailOpen) {
-    const back = el('button', 'ab back', backLabel);
-    back.onclick = () => { detailOpen = false; render(); };
-    main.appendChild(back);
-  }
-}
-/** One result in the list: tile, name in its colour, what it is, where it comes from. */
-function resultRow(r, on) {
-  const a = el('a', 'res' + (on ? ' on' : ''));
-  const t = el('span', 'rt');
-  if (r.item) t.appendChild(itemPic(r.item, r.icon));
-  else if (isUrl(r.pic || r.icon)) t.appendChild(remoteImg(r.pic || r.icon, () => { t.textContent = r.glyph; }));
-  else t.textContent = r.glyph;
-  a.appendChild(t);
-  const tx = el('span', 'rx');
-  tx.appendChild(el('span', 'rn ' + r.rcls, r.name));
-  tx.appendChild(el('span', 'rs', r.sub));
-  a.appendChild(tx);
-  if (r.src) a.appendChild(el('span', 'rf', r.src));
-  a.title = r.name + (r.src ? ' — ' + r.src : '');
-  a.onclick = () => { pick = r.key; detailOpen = true; render(); $('main').scrollTop = 0; };
-  return a;
-}
-function sideRow(icon, label, right, onClick, on) {
-  const a = el('a', on ? 'on' : null);
-  if (isUrl(icon)) a.appendChild(remoteImg(icon));
-  else a.appendChild(el('i', null, icon || '◆'));
-  a.appendChild(el('em', null, label));
-  if (right) a.appendChild(el('b', null, right));
-  if (onClick) a.onclick = onClick;
-  return a;
-}
 
-// ---- cards --------------------------------------------------------------
-/** The small icon tile of the cards (renderer/cards.js). */
-function iconTile(icon) {
-  const ic = el('span', 'sicon');
-  ic.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + (window.SCard.ICONS[icon] || window.SCard.ICONS.info) + '"/></svg>';
-  return ic;
-}
-/** A part of a card under its own small head – the same look as the cards' heads, smaller. */
-function subHead(title, icon, n) {
-  const h = el('div', 'csub');
-  h.appendChild(iconTile(icon));
-  h.appendChild(el('b', null, title));
-  if (n != null) h.appendChild(el('span', 'sstate', String(n)));
-  return h;
-}
-
-// ---- pictures: d4builds.gg keeps one per unique, boss and class under its name (sunderarmor.com)
-const PICS = 'https://sunderarmor.com/DIABLO4/';
+// ---- pictures and rarities ----------------------------------------------
 const cleanName = (n) => String(n || '').replace(/‍/g, '').trim();
-/** "Sea Lord's Fine Gloves" -> …/Uniques/2/sea_lord's_fine_gloves.png */
-const uniquePic = (name) => PICS + 'Uniques/2/' + encodeURI(cleanName(name).toLowerCase().replace(/ /g, '_')) + '.png';
-/** "Duriel, King of Maggots" -> boss_duriel, "The Beast in the Ice" -> boss_beast-in-ice, "Echo of Varshan" -> boss_varshan. */
-function bossPic(name) {
-  const n = cleanName(name).split(',')[0].toLowerCase().replace(/^echo of /, '').split(' ').filter((w) => w && w !== 'the').join('-');
-  return n ? PICS + 'Bosses/1/boss_' + encodeURI(n) + '.png' : '';
-}
-const classPic = (cls) => PICS + 'Classes/2/' + cls.toLowerCase() + '.png';
 const CLASSES = ['Barbarian', 'Druid', 'Necromancer', 'Paladin', 'Rogue', 'Sorcerer', 'Spiritborn', 'Warlock'];
-// maxroll's picture per name, for the drops the others have none for (main.js items:icons)
-let mxIcons = {};
+/** The pictures of every thing by name (lib/icons.js) – asked again when the data changed. */
 function loadIcons() {
-  const names = [...new Set((loot.sections || []).flatMap((s) => (s.drops || []).map((d) => cleanName(d.name))))];
-  if (!names.length || !api.itemIcons) return;
-  api.itemIcons(names).then((m) => { mxIcons = m || {}; if (section === 'search') render(); }).catch(() => {});
-}
-/** An item's picture: d4builds', else d4guides' (the catalog), else maxroll's, else a glyph. */
-function itemPic(name, fallback) {
-  const box = el('span', 'ipic');
-  const cat = window.FarmView && window.FarmView.item(name);
-  const urls = [...new Set([uniquePic(name), fallback, cat && cat.icon, mxIcons[cleanName(name)]].filter(isUrl))];
-  const next = (i) => {
-    if (i >= urls.length) { box.textContent = '◆'; return; }
-    box.appendChild(remoteImg(urls[i], () => next(i + 1)));
-  };
-  next(0);
-  return box;
+  if (!api.icons) return;
+  api.icons().then((m) => { UI.setIcons(m); if (section) render(); }).catch(() => {});
 }
 /** "mythic" | "unique" | … – from the item, the catalog, or the loot sheet's note. */
 function rarityOf(name, it, note) {
@@ -712,61 +662,61 @@ function rarityOf(name, it, note) {
   if (/mythic/i.test(r) || (!r && /mythic/i.test(note || ''))) return 'mythic';      // "Iconic Mythic Unique" too
   return r ? r.split(' ')[0].toLowerCase() : 'unique';
 }
-/** An icon-only button. */
-function iconBtn(title, path, onClick, cls) {
-  const b = el('button', 'ab icon' + (cls ? ' ' + cls : ''));
-  b.title = title;
-  b.setAttribute('aria-label', title);
-  b.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + path + '"/></svg>';
-  b.onclick = onClick;
-  return b;
+/** What kind of thing an item from the search is – it picks where its picture comes from. */
+function kindOf(it) {
+  const t = String((it && it.type) || '').toLowerCase(), r = String((it && it.rarity) || '').toLowerCase();
+  if (/mythic/.test(r)) return 'mythic';
+  if (/unique/.test(r)) return 'unique';
+  if (/charm/.test(t)) return 'charm';
+  if (/seal/.test(t)) return 'seal';
+  if (/gem/.test(t)) return 'gem';
+  if (/rune/.test(t)) return 'rune';
+  if (/aspect/.test(t)) return 'aspect';
+  return 'thing';
 }
-const ICON_STAR = 'M12 3.6l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.8l5.9-.9z';
-const ICON_COPY = 'M9 9h11v11H9zM5.5 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v.5';
-const ICON_TRADE = 'M4 8.5h16l-1.5 11h-13zM8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5';
 
+// ---- an item: its picture, what it does, then who drops it -------------------
 function itemCard(it) {
-  const c = el('div', 'card icard');
+  const c = el('div', 'card');
   const rar = rarityOf(it.name, it);
-  const head = el('div', 'ch');
-  const ic = el('div', 'ic big r-' + rar);
-  ic.appendChild(itemPic(it.name, it.icon));
-  head.appendChild(ic);
-
-  const titles = el('div');
-  titles.appendChild(el('h4', 'r-' + rar, it.name));
+  const top = el('div', 'entry');
+  const art = UI.pic(it.name, { url: it.icon, kind: kindOf(it), cls: 'pic art r-' + rar });
+  top.appendChild(art);
+  const tx = el('div', 'etx');
+  tx.appendChild(el('h2', 'r-' + rar, it.name));
   const cat = window.FarmView && window.FarmView.item(it.name);
   const cls = cat && cat.cls && cat.cls !== 'All' ? cat.cls : '';
   const meta = [it.rarity, it.type, cls, it.level ? 'level ' + it.level + '+' : '', it.set ? 'Set: ' + it.set : ''].filter(Boolean);
-  if (meta.length) titles.appendChild(el('div', 'meta', meta.join(' · ')));
-  head.appendChild(titles);
-
-  const right = el('div', 'right');
-  right.appendChild(iconBtn('Favourite', ICON_STAR, () => toggleFav(it), 'star' + (isFav(it.name) ? ' on' : '')));
-  right.appendChild(iconBtn('Copy name', ICON_COPY, () => { api.copyText(it.name); showNote('“' + it.name + '” copied.', 'ok', 2500); }));
-  right.appendChild(iconBtn('Search on diablo.trade', ICON_TRADE, () => openTrade(it.name)));
-  head.appendChild(right);
-  c.appendChild(head);
-
+  if (meta.length) tx.appendChild(el('div', 'sub', meta.join(' · ')));
   // what it does, as the game's tooltip shows it
-  if (it.power || (it.effects || []).length || it.flavor) {
-    const tt = el('div', 'itt');
-    if (it.power) tt.appendChild(el('div', 'pw', it.power));
-    (it.effects || []).forEach((e) => tt.appendChild(el('div', 'eff', '• ' + e)));
-    if (it.flavor) tt.appendChild(el('div', 'flav', it.flavor));
-    c.appendChild(tt);
+  if (it.power) tx.appendChild(el('div', 'power' + (rar === 'mythic' ? '' : ' u'), it.power));
+  if ((it.effects || []).length) {
+    const ul = el('ul', 'aff');
+    it.effects.forEach((e) => ul.appendChild(el('li', null, e)));
+    tx.appendChild(ul);
   }
+  const acts = el('div', 'acts');
+  acts.appendChild(UI.btn('diablo.trade', () => openTrade(it.name), 'pri', 'trade'));
+  const star = UI.btn(isFav(it.name) ? 'Favourite' : 'Favourite', () => toggleFav(it), 'star' + (isFav(it.name) ? ' on' : ''), 'star');
+  star.title = isFav(it.name) ? 'A favourite – click to take it out' : 'Keep it with the favourites (empty search)';
+  acts.appendChild(star);
+  acts.appendChild(UI.btn('Copy', () => { api.copyText(it.name); showNote('“' + it.name + '” copied.', 'ok', 2500); }, '', 'copy'));
+  tx.appendChild(acts);
+  top.appendChild(tx);
+  c.appendChild(top);
+
   if (it.obtain) {
     const g = el('div', 'get');
-    g.appendChild(subHead('How to get it', 'target'));
+    g.appendChild(el('b', null, 'How to get it'));
     g.appendChild(el('span', null, it.obtain));
     if (it.obtainNote) g.appendChild(el('span', 'sub', it.obtainNote));
     c.appendChild(g);
   }
   dropsFrom(it.name, c);
+  if (it.flavor) c.appendChild(el('p', 'flav', it.flavor));
   const fields = it.fields || [];
   if (fields.length) {
-    const g = el('div', 'grid');
+    const g = el('div', 'fields');
     fields.forEach((f) => {
       const cell = el('div', 'cell');
       if (f.label) cell.appendChild(el('b', null, f.label));
@@ -795,29 +745,31 @@ function bossFacts(info) {
   (info || []).forEach((i) => {
     const t = String(i).trim().replace(/\.$/, '');
     let m;
-    if ((m = t.match(/Torment\s*(\d+)/i)) && /requires/i.test(t)) out.push(['Torment ' + m[1] + '+', 'tier']);
-    else if ((m = t.match(/Lair Key:\s*(.+)$/i))) out.push([m[1], 'key']);
+    if ((m = t.match(/Torment\s*(\d+)/i)) && /requires/i.test(t)) out.push(['Torment ' + m[1] + '+', 'red']);
+    else if ((m = t.match(/Lair Key:\s*(.+)$/i))) out.push([m[1], 'gold']);
   });
   return out;
 }
+const factTags = (sec) => {
+  const f = bossFacts(sec.info);
+  if (!f.length) return null;
+  const t = el('div', 'tags');
+  f.forEach(([v, k]) => t.appendChild(el('span', 'tag ' + k, v)));
+  return t;
+};
 
-/** The lair screenshot from the guide: on request, it is big. */
-function lairMap(sec, into) {
-  if (!sec.images || !sec.images[0]) return;
-  const tg = el('button', 'maptg', 'Show lair & map');
+/** The lair screenshot from the guide: on request, it is big. Only a boss has a lair. */
+function lairMap(sec, into, links) {
+  if (!sec.isBoss || !sec.images || !sec.images[0]) return;
+  const tg = el('button', 'lnk dim', 'Show lair & map');
   const box = el('div', 'shot');
   box.hidden = true;
   tg.onclick = () => {
-    if (!box.firstChild) {
-      const img = remoteImg(sec.images[0], () => { box.remove(); tg.remove(); });
-      img.onload = () => reportSize();
-      box.appendChild(img);
-    }
+    if (!box.firstChild) box.appendChild(UI.img(sec.images[0], () => { box.remove(); tg.remove(); }));
     box.hidden = !box.hidden;
     tg.textContent = box.hidden ? 'Show lair & map' : 'Hide lair & map';
-    reportSize();
   };
-  into.appendChild(tg);
+  (links || into).appendChild(tg);
   into.appendChild(box);
 }
 
@@ -839,66 +791,55 @@ function dropSources(name) {
 function dropsFrom(name, into) {
   const src = dropSources(name).slice().sort(bossFirst);
   if (!src.length) return;
-  const box = el('div', 'from');
-  box.appendChild(subHead('Drops from', 'boss', src.length));
+  const p = UI.plate({ title: 'Drops from', icon: 'lair', badge: src.length, cls: 'from' });
+  const grid = el('div', 'bcards');
   src.forEach(({ sec, drop }) => {
-    const r = el('div', 'src');
-    r.appendChild(bossHead(sec, [drop.cls, cleanName(drop.note)].filter((x) => x && !/^(all|multiple) classes$/i.test(x)).join(' · ')));
-    const all = el('a', 'ball', 'Everything ' + sec.name.split(',')[0] + ' drops →');
+    const card = el('div', 'bcard');
+    card.appendChild(UI.pic(sec.name, { kind: sec.isBoss ? 'boss' : 'pool' }));
+    const tx = el('div', 'btx');
+    tx.appendChild(el('b', null, sec.name));
+    const where = sec.location ? placeOf(sec) : null;
+    const note = [drop.cls, cleanName(drop.note)].filter((x) => x && !/^(all|multiple) classes$/i.test(x)).join(' · ');
+    const line = [where && where.where, where && where.lair ? 'Lair: ' + where.lair : '', note].filter(Boolean).join(' · ');
+    if (line) tx.appendChild(el('span', 'lm', line));
+    const tags = factTags(sec);
+    if (tags) tx.appendChild(tags);
+    const links = el('div', 'links');
+    const all = el('button', 'lnk ball', 'Everything ' + sec.name.split(',')[0] + ' drops →');
     all.onclick = () => { $('q').value = sec.name.split(',')[0]; onQuery(); };
-    r.appendChild(all);
-    lairMap(sec, r);
-    box.appendChild(r);
+    links.appendChild(all);
+    tx.appendChild(links);
+    lairMap(sec, tx, links);
+    card.appendChild(tx);
+    grid.appendChild(card);
   });
-  into.appendChild(box);
-}
-
-/** A boss (or loot pool): portrait, name, where, torment and key – and on the right what is given. */
-function bossHead(sec, right) {
-  const h = el('div', 'bhead');
-  const pic = el('span', 'bpic');
-  const url = sec.isBoss ? bossPic(sec.name) : '';
-  const glyph = () => { pic.textContent = sec.isBoss ? '☠' : '◆'; };
-  if (url) pic.appendChild(remoteImg(url, glyph)); else glyph();
-  h.appendChild(pic);
-  const t = el('div', 'bt');
-  t.appendChild(el('h3', null, sec.name));
-  if (sec.location) {
-    const p = placeOf(sec);
-    const w = el('div', 'bwhere');
-    w.appendChild(el('b', null, p.where));
-    if (p.lair) w.appendChild(el('span', null, 'Lair: ' + p.lair));
-    t.appendChild(w);
-  }
-  const facts = bossFacts(sec.info);
-  if (facts.length) {
-    const fx = el('div', 'facts');
-    facts.forEach(([v, k]) => fx.appendChild(el('span', 'fact ' + k, v)));
-    t.appendChild(fx);
-  }
-  h.appendChild(t);
-  if (right instanceof Node) h.appendChild(right);
-  else if (right) h.appendChild(el('em', 'bnote', right));
-  return h;
+  p.body.appendChild(grid);
+  into.appendChild(p.card);
 }
 
 // ---- boss loot: every boss (or the one picked) with its uniques as tiles, filtered by class
+function activeClass() {
+  const st = window.FarmView && window.FarmView._state && window.FarmView._state();
+  const b = st && st.data && st.data.builds.find((x) => x.id === st.data.active);
+  return b && b.cls && b.cls !== 'All' ? b.cls : 'All';
+}
 /** The class the drops are shown for: picked here, else the active build's, else all. */
 const lootClass = () => bossCls || (CLASSES.includes(activeClass()) ? activeClass() : 'All');
 /** A drop for this class: its own, or one for every class. */
 const forClass = (d, cls) => cls === 'All' || !d.cls || d.cls === cls || /^(all|multiple)/i.test(d.cls);
 function classBar() {
   const cur = lootClass();
-  const bar = el('div', 'clsbar');
+  const bar = el('div', 'clsbar clsrow');
   ['All'].concat(CLASSES).forEach((c) => {
     const b = el('button', 'cls' + (c === cur ? ' on' : ''));
     b.dataset.cls = c;
-    if (c !== 'All') b.appendChild(remoteImg(classPic(c)));
-    b.appendChild(el('span', null, c));
+    b.title = c === 'All' ? 'Every class' : c;
+    if (c === 'All') b.appendChild(el('span', null, 'All'));
+    else b.appendChild(UI.img(UI.classPic(c), () => { b.textContent = c.slice(0, 3); }));
     b.onclick = () => { bossCls = c; render(); };
     bar.appendChild(b);
   });
-  if (!bossCls && cur !== 'All') bar.appendChild(el('span', 'meta', 'your build’s class'));
+  if (!bossCls && cur !== 'All') bar.appendChild(el('span', 'meta', cur + ' · your build’s class'));
   return bar;
 }
 /** One unique: picture, name in its colour, slot – the in-game tooltip on hover, a click looks it up. */
@@ -906,17 +847,15 @@ function itemTile(d) {
   const name = cleanName(d.name);
   const cat = window.FarmView && window.FarmView.item(name);
   const rar = rarityOf(name, null, d.note);
-  const t = el('a', 'itile r-' + rar);
+  const t = el('button', 'tile itile r-' + rar);
   t.dataset.item = name;
-  t.appendChild(itemPic(name, cat && cat.icon));
-  const tx = el('span', 'itx');
-  tx.appendChild(el('span', 'inm r-' + rar, name));
+  t.appendChild(UI.pic(name, { url: cat && cat.icon, kind: rar === 'mythic' ? 'mythic' : 'unique' }));
+  t.appendChild(el('b', 'inm r-' + rar, name));
   // "(Druid, Sorc)" is worth showing, "All" next to "all classes" is not
   const note = cleanName(d.note).replace(/^\((.*)\)$/, '$1').replace(/^all( classes)?$/i, '');
   const sub = [cat && cat.slot, /^(all|multiple)/i.test(d.cls || '') ? 'all classes' : '', note].filter(Boolean).join(' · ');
-  if (sub) tx.appendChild(el('span', 'ity', sub));
-  t.appendChild(tx);
-  t.onclick = () => { if (window.FarmView) window.FarmView.hideTip(); $('q').value = name; onQuery(); };
+  if (sub) t.appendChild(el('small', 'ity', sub));
+  t.onclick = () => { UI.tip.hide(); $('q').value = name; onQuery(); };
   if (window.FarmView) window.FarmView.tip(t, name);
   return t;
 }
@@ -925,15 +864,33 @@ function bossSection(sec, drops) {
   const cls = lootClass();
   const shown = drops.filter((d) => forClass(d, cls));
   const s = el('section', 'bsec' + (sec.isBoss ? '' : ' pool'));
-  const n = el('div', 'bcount');
-  n.appendChild(el('b', null, String(shown.length)));
-  n.appendChild(el('span', null, shown.length === drops.length ? 'drops' : 'for ' + cls + ' · ' + drops.length + ' in all'));
-  s.appendChild(bossHead(sec, n));
-  const g = el('div', 'igrid');
+  const hero = el('div', 'hero');
+  hero.appendChild(UI.pic(sec.name, { kind: sec.isBoss ? 'boss' : 'pool' }));
+  const tx = el('div', 'htx');
+  tx.appendChild(el('h3', null, sec.name));
+  if (sec.location) {
+    const p = placeOf(sec);
+    const w = el('div', 'where');
+    w.appendChild(el('b', null, p.where));
+    if (p.lair) w.appendChild(document.createTextNode(' · Lair: ' + p.lair));
+    tx.appendChild(w);
+  }
+  const tags = factTags(sec);
+  if (tags) tx.appendChild(tags);
+  hero.appendChild(tx);
+  const end = el('div', 'hend');
+  const n = el('div', 'cnt', String(shown.length));
+  n.appendChild(el('small', null, shown.length === drops.length ? 'drops' : 'for ' + cls + ' · ' + drops.length + ' in all'));
+  end.appendChild(n);
+  hero.appendChild(end);
+  s.appendChild(hero);
+  const g = el('div', 'tiles igrid');
   shown.forEach((d) => g.appendChild(itemTile(d)));
   if (!shown.length) g.appendChild(el('div', 'meta', drops.length ? 'Nothing for ' + cls + ' here.' : 'No drop list for it.'));
   s.appendChild(g);
-  if (sec.isBoss) lairMap(sec, s);                 // a loot pool has no lair
+  const lairs = el('div', 'lairs');
+  lairMap(sec, lairs);
+  if (lairs.firstChild) s.appendChild(lairs);
   return s;
 }
 /** "boss loot", or a boss picked: the class bar, then the bosses, the loot pools after them. */
@@ -945,13 +902,8 @@ function bossLoot(list) {
 }
 
 function craftCard(m) {
-  const t = m.table, c = el('div', 'card');
-  const head = el('div', 'ch');
-  head.appendChild(el('div', 'ic', '⚒'));
-  const ti = el('div');
-  ti.appendChild(el('h4', null, t.group + (t.sub ? ' · ' + t.sub : '')));
-  ti.appendChild(el('div', 'meta', m.rows.length + ' recipes'));
-  head.appendChild(ti); c.appendChild(head);
+  const t = m.table;
+  const p = UI.plate({ title: t.group + (t.sub ? ' · ' + t.sub : ''), sub: m.rows.length + ' recipes', icon: 'craft' });
   m.rows.forEach((row) => {
     const r = el('div', 'recipe');
     row.forEach((cell, i) => {
@@ -961,9 +913,9 @@ function craftCard(m) {
       f.appendChild(el('span', null, cell));
       r.appendChild(f);
     });
-    c.appendChild(r);
+    p.body.appendChild(r);
   });
-  return c;
+  return p.card;
 }
 
 /** The parts of a step-by-step guide ("Part 1 – …", "Step 2 …"); other guides have none. */
@@ -973,33 +925,20 @@ const actSteps = (a) => {
 };
 /** An activity: what it is, the parts to tick off (step-by-step guides), and its sections to jump to. */
 function activityCard(a) {
-  const c = el('div', 'card act');
-  const head = el('div', 'ch');
-  const t = el('div');
-  t.appendChild(el('h4', null, a.name));
   const steps = actSteps(a);
   const done = actDone(a);
-  t.appendChild(el('div', 'meta', steps.length ? actProgress(a) + ' of ' + steps.length + ' parts done · maxroll.gg guide' : 'maxroll.gg guide'));
-  head.appendChild(t);
-  const right = el('div', 'right');
-  const open = el('button', 'ab pri', 'Open guide');
-  open.onclick = () => openSection('page', a.url);
-  right.appendChild(open);
-  head.appendChild(right);
-  c.appendChild(head);
+  const p = UI.plate({ title: a.name, sub: steps.length ? actProgress(a) + ' of ' + steps.length + ' parts done · maxroll.gg guide' : 'maxroll.gg guide', icon: 'activity', cls: 'act' });
+  p.side.appendChild(UI.btn('Open guide', () => openSection('page', a.url), 'pri sm'));
+  const c = p.body;
   if (a.desc) c.appendChild(el('div', 'pw', a.desc));
   if (steps.length) {
     c.appendChild(el('div', 'k2', 'Your progress'));
     const list = el('div', 'steps');
     steps.forEach(([st, i]) => {
-      const row = el('label', 'step' + (done.includes(i) ? ' done' : ''));
-      const cb = el('input'); cb.type = 'checkbox'; cb.checked = done.includes(i);
-      cb.onchange = () => setActDone(a, i, cb.checked);
-      row.appendChild(cb);
+      const row = el('div', 'step' + (done.includes(i) ? ' done' : ''));
+      row.appendChild(UI.tick({ on: done.includes(i), title: done.includes(i) ? 'Done – click to undo' : 'Done', onClick: (v) => setActDone(a, i, v) }));
       row.appendChild(el('span', null, st));
-      const go = el('button', 'ico'); go.title = 'Open the guide here';
-      go.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>';
-      go.onclick = (e) => { e.preventDefault(); openSection('page', a.url, st); };
+      const go = UI.iconBtn('Open the guide here', 'right', (e) => { e.preventDefault(); openSection('page', a.url, st); }, 'ghost sm');
       row.appendChild(go);
       list.appendChild(row);
     });
@@ -1012,14 +951,14 @@ function activityCard(a) {
     rest.forEach((st) => {
       const b = el('button', 'jump');
       b.appendChild(el('span', null, st));
-      b.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>');
+      b.appendChild(UI.icon('right'));
       b.title = 'Open the guide at this section';
       b.onclick = () => openSection('page', a.url, st);
       list.appendChild(b);
     });
     c.appendChild(list);
   }
-  return c;
+  return p.card;
 }
 const actKey = (a) => a.slug || a.name;
 const actDone = (a) => ((settings && settings.actDone) || {})[actKey(a)] || [];
@@ -1033,71 +972,74 @@ function setActDone(a, i, on) {
   save({ actDone: all });
 }
 
-// All runewords as one card – every entry opens its page with the exact recipes
+// All runewords as one plate – every entry opens its page with the exact recipes
 function runewordList() {
-  const c = el('div', 'card');
-  const head = el('div', 'ch');
-  head.appendChild(el('div', 'ic', '⚒'));
-  const t = el('div');
-  t.appendChild(el('h4', null, 'Runewords'));
-  t.appendChild(el('div', 'meta', runewords.length + ' runewords · d4guides.gg'));
-  head.appendChild(t);
-  c.appendChild(head);
+  const p = UI.plate({ title: 'Runewords', sub: runewords.length + ' runewords · d4guides.gg', icon: 'rune' });
   runewords.forEach((r) => {
-    const row = el('div', 'drop');
-    row.appendChild(el('i'));
-    row.appendChild(el('span', null, r.name));
-    row.appendChild(el('em', null, (r.fields[0] && r.fields[0].value) || ''));
-    const a2 = el('a', null, '↗'); a2.title = 'Open in database'; a2.onclick = () => openSection('page', r.url);
-    row.appendChild(a2);
-    c.appendChild(row);
+    const open = UI.iconBtn('Open in the database', 'external', () => openSection('page', r.url), 'ghost sm');
+    p.body.appendChild(UI.line({ name: r.name, rarity: 'Runeword', sub: (r.fields[0] && r.fields[0].value) || '', pic: { name: r.name, url: r.icon, kind: 'rune' }, end: open, cls: 'drop' }));
   });
-  return c;
+  return p.card;
 }
 
 // ---------------------------------------------------------------- settings
-// Five areas; in each, rows of the same shape – name and a line of help on the left, one
-// control on the right. Four kinds of control: switch, segments, slider, key field.
+// The areas as the page's tabs; in each, plates with rows of the same shape – name and a line of
+// help on the left, one control on the right. Four kinds of control: switch, segments, slider, key field.
 const SET_TABS = [
-  ['behaviour', 'Behaviour', 'M4 6h10M4 12h16M4 18h7M17 4v4M20 10v4M11 16v4'],
-  ['appearance', 'Appearance', 'M12 4a8 8 0 1 0 0 16c1.5 0 2-1 2-2s-1-1.5-1-2.5 1-1.5 2-1.5h2a3 3 0 0 0 3-3c0-4-3.6-7-8-7z'],
-  ['hotkeys', 'Hotkeys', 'M3 7h18v10H3zM7 11h.01M11 11h.01M15 11h.01M8 14.5h8'],
+  ['behaviour', 'Behaviour'],
+  ['appearance', 'Appearance'],
+  ['hotkeys', 'Hotkeys'],
   // only when the build has them (lib/features.js)
-  ['macros', 'Macros', 'M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.8 2.8M14.9 14.9l2.8 2.8M6.3 17.7l2.8-2.8M14.9 9.1l2.8-2.8', () => features.macros],
-  ['trade', 'diablo.trade', 'M4 8.5h16l-1.5 11h-13zM8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5'],
-  ['data', 'Data', 'M4 6c0-1.5 3.6-2.5 8-2.5s8 1 8 2.5v12c0 1.5-3.6 2.5-8 2.5s-8-1-8-2.5zM4 6c0 1.5 3.6 2.5 8 2.5s8-1 8-2.5M4 12c0 1.5 3.6 2.5 8 2.5s8-1 8-2.5'],
+  ['macros', 'Macros', () => features.macros],
+  ['trade', 'diablo.trade'],
+  ['data', 'Data'],
 ];
 let setScroll = { tab: null, top: 0 };          // filled by render() before the page is cleared
-const setTabs = () => SET_TABS.filter((t) => !t[3] || t[3]());
+const setTabs = () => SET_TABS.filter((t) => !t[2] || t[2]());
 function renderSettings(main) {
   if (!setTabs().some((t) => t[0] === setTab)) setTab = 'behaviour';
-  // switching an option redraws the page – it stays where it was scrolled to (same tab only)
-  const top = setScroll.tab === setTab ? setScroll.top : 0;
-  setScroll.tab = setTab;
+  // switching an option redraws the page – it stays where it was scrolled to
+  const top = setScroll.tab ? setScroll.top : 0;
+  setScroll.tab = 'all';
+  pageHead('Overlay · changes apply right away', 'Settings');
   main.classList.add('settings');
-  const head = el('div', 'sethead');
-  head.appendChild(el('h2', null, 'Settings'));
-  main.appendChild(head);
-  const wrap = el('div', 'setwrap');
-  const nav = el('div', 'setnav');
-  setTabs().forEach(([id, label, icon]) => {
-    const a = el('a', setTab === id ? 'on' : null);
-    a.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + icon + '"/></svg>';
-    a.appendChild(el('span', null, label));
-    a.onclick = () => { setTab = id; setMsgText = ''; render(); };
-    nav.appendChild(a);
-  });
-  nav.appendChild(el('div', 'snote', 'Changes apply right away.'));
-  wrap.appendChild(nav);
-  const body = el('div', 'setmain');
   const inner = el('div', 'setbody');
-  ({ behaviour: setBehaviour, appearance: setAppearance, hotkeys: setHotkeys, macros: setMacros, trade: setTrade, data: setData })[setTab](inner);
+  const FN = { behaviour: setBehaviour, appearance: setAppearance, hotkeys: setHotkeys, macros: setMacros, trade: setTrade, data: setData };
+  const groups = setTabs().map(([id, label]) => {
+    const g = el('section', 'setgroup');
+    g.dataset.group = id;
+    g.appendChild(el('h2', 'sgh', label));
+    FN[id](g);
+    inner.appendChild(g);
+    return [id, label, g];
+  });
   inner.appendChild(el('div', 'msg', setMsgText));
-  body.appendChild(inner);
-  wrap.appendChild(body);
-  main.appendChild(wrap);
-  if (riskAsk) main.appendChild(riskDialog());
-  body.scrollTop = top;
+  main.appendChild(inner);
+  // the chips jump to a group; scrolling lights the one you are in
+  const chips = el('nav', 'anchors');
+  const mark = (id) => chips.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c.dataset.group === id));
+  groups.forEach(([id, label, g]) => {
+    const c = el('button', 'chip', label);
+    c.dataset.group = id;
+    c.onclick = () => {
+      setTab = id; mark(id);
+      main.style.scrollBehavior = 'smooth';                 // a jump glides; a redraw keeps its place at once
+      main.scrollTop = g.offsetTop - 8;
+      setTimeout(() => { main.style.scrollBehavior = ''; }, 700);
+    };
+    chips.appendChild(c);
+  });
+  $('chips').appendChild(chips);
+  main.onscroll = () => {
+    const y = main.scrollTop + 24;
+    const cur = groups.filter(([, , g]) => g.offsetTop <= y).pop() || groups[0];
+    if (cur) { setTab = cur[0]; mark(cur[0]); }
+  };
+  mark(setTab);
+  // the warning sits over the visible part of the page, wherever it is scrolled to
+  document.querySelectorAll('#cols > .ishade').forEach((x) => x.remove());
+  if (riskAsk) $('cols').appendChild(riskDialog());
+  main.scrollTop = top;
 }
 function opt(parent, title, hint, ctl) {
   const o = el('div', 'opt');
@@ -1142,7 +1084,7 @@ function slider(min, max, value, unit, onSet, onLive) {
   r.onchange = () => onSet(Number(r.value));
   return [r, v];
 }
-const btn = (label, fn, cls) => { const b = el('button', 'ab' + (cls ? ' ' + cls : ''), label); b.onclick = fn; return b; };
+const btn = (label, fn, cls) => UI.btn(label, fn, cls);
 
 function setBehaviour(root) {
   let b;
@@ -1152,19 +1094,15 @@ function setBehaviour(root) {
   opt(b, 'No fade out on builds', 'Pinned builds stay fully visible while you play',
     sw(settings.buildsNoFade !== false, (v) => save({ buildsNoFade: v })));
   b = sect(root, 'Bar').body;
-  opt(b, 'Orientation', 'Vertical at the edge, or horizontal on top',
-    seg([['horizontal', 'Horizontal'], ['vertical', 'Vertical']], settings.orientation || 'vertical', (v) => save({ orientation: v }).then(applyLayout)));
   opt(b, 'Show the overlay when', 'Otherwise it stays hidden',
     seg([['focused', 'D4 in front'], ['running', 'D4 running'], ['always', 'Always']], settings.visibility || 'focused', (v) => save({ visibility: v })));
-  opt(b, 'Shrink to the small pill', 'Closed, the bar becomes a small pill — what it shows is set in Appearance › Pill',
-    sw(settings.idleShrink !== false, (v) => save({ idleShrink: v }).then(applyLayout)));
   opt(b, 'What your build still needs', 'A small "to farm" count next to the timers — a click opens the build',
     sw(settings.pillMissing === true, (v) => save({ pillMissing: v }).then(() => { applyLayout(); updateMissing(); })));
-  opt(b, 'Pill opacity', 'How far the closed bar fades — the mouse over it brings it back',
+  opt(b, 'Bar opacity', 'How far the closed bar fades — the mouse over it brings it back',
     slider(10, 100, Math.round((settings.fadeOpacity == null ? 0.35 : settings.fadeOpacity) * 100), ' %',
       (v) => save({ fadeOpacity: v / 100 }), (v) => document.documentElement.style.setProperty('--fade', v / 100)));
   b = sect(root, 'Timers').body;
-  opt(b, 'World boss timer', 'In the bar and the pill',
+  opt(b, 'World boss timer', 'In the bar, closed and open',
     sw(settings.wbTimer !== false, (v) => save({ wbTimer: v }).then(applyLayout)));
   opt(b, 'Warn before the spawn', 'The world boss timer turns red and grows from here on',
     slider(1, 30, settings.wbWarnMin == null ? 5 : settings.wbWarnMin, ' min', (v) => save({ wbWarnMin: v })));
@@ -1184,7 +1122,7 @@ function setBehaviour(root) {
   const cu = opt(b, 'Counting', 'Down from its time, or up from 0:00 to its time',
     seg([['down', 'Down'], ['up', 'Up']], ctUp() ? 'up' : 'down', (v) => save({ ctUp: v === 'up' }).then(renderTimers)));
   [cn, cm, cu].forEach((o) => o.classList.toggle('off', settings.ctTimer === false));
-  opt(b, 'Timers always bright', 'They ignore the pill fade',
+  opt(b, 'Timers always bright', 'They ignore the closed bar\'s fade',
     sw(settings.wbBright !== false, (v) => save({ wbBright: v }).then(applyLayout)));
   b = sect(root, 'Messages').body;
   opt(b, 'Blink on a new message', 'Only the diablo.trade icon blinks, nothing else',
@@ -1193,7 +1131,7 @@ function setBehaviour(root) {
 
 function setAppearance(root) {
   let b;
-  b = sect(root, 'Pill').body;
+  b = sect(root, 'Closed bar').body;
   const pick = el('div', 'seg multi chips');
   pick.id = 'pillPick';
   PILL_ITEMS.forEach(([k, label]) => {
@@ -1202,28 +1140,23 @@ function setAppearance(root) {
     t.onclick = () => save({ pillHide: pillHide().includes(k) ? pillHide().filter((x) => x !== k) : pillHide().concat([k]) }).then(applyLayout);
     pick.appendChild(t);
   });
-  const shows = opt(b, 'What it shows', settings.idleShrink === false
-    ? 'Needs “Shrink to the small pill” (Behaviour › Bar)'
-    : 'A click switches each one on or off — the drag handle always stays, a timer switched off in Behaviour stays off here too',
-    pick);
-  shows.classList.toggle('off', settings.idleShrink === false);
+  opt(b, 'What it shows while closed', 'A click switches each one on or off — the drag handle always stays, a timer switched off in Behaviour stays off here too', pick);
   b = sect(root, 'Size').body;
   opt(b, 'Text size', 'On top of the automatic scaling by screen size',
     seg([[0.9, 'S'], [1, 'M'], [1.15, 'L'], [1.3, 'XL']], Number(settings.textScale) || 1, (v) => save({ textScale: Number(v) })));
-  opt(b, 'Panel size', 'Share of the screen the open panel may use',
-    seg([['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']], settings.windowSize || 'medium', (v) => save({ windowSize: v }).then(reportSize)));
-  const reset = btn('Reset', () => { api.setPanelSize(null); save({ panelSize: null }); setMsg('Panel size back to automatic.'); });
+  opt(b, 'Panel size', 'Medium fits the room left of the game\'s inventory (820 × 600 at 1080p) · Mobile is tall and narrow like a phone (393 × 850)',
+    seg([['small', 'Small'], ['medium', 'Medium'], ['large', 'Large'], ['mobile', 'Mobile']], settings.windowSize || 'medium',
+      (v) => { api.setPanelSize(null); return save({ windowSize: v, panelSize: null }).then(reportSize); }));
+  const reset = btn('Reset', () => { api.setPanelSize(null); save({ panelSize: null }); setMsg('Panel size back to the one picked above.'); });
   reset.id = 'btnResetSize';
   reset.disabled = !settings.panelSize;
   opt(b, 'Your own size', settings.panelSize
     ? settings.panelSize.w + ' × ' + settings.panelSize.h + ' px — drag the bottom right corner to change it'
-    : 'Drag the bottom right corner of the panel; narrow, everything goes to one column', reset);
+    : 'Drag the bottom right corner of the panel – every page fits down to a phone\'s width', reset);
   b = sect(root, 'Look').body;
   opt(b, 'Opacity', 'How much of the game shows through',
     slider(60, 100, Math.round((settings.opacity || 1) * 100), ' %', (v) => save({ opacity: v / 100 }), (v) => api.setOpacity(v / 100)));
-  opt(b, 'Labels in the bar', 'Names next to the icons (vertical bar)',
-    sw(!!settings.railWide, (v) => save({ railWide: v }).then(applyLayout)));
-  opt(b, 'Places', 'The pill and the open bar each remember where you dragged them',
+  opt(b, 'Places', 'The closed bar and the open panel each remember where you dragged them',
     btn('Reset', () => save({ posIdle: null, posOpen: null }).then(() => setMsg('Places reset — drag the bar where you want it.'))));
 }
 
@@ -1301,58 +1234,41 @@ function setMacros(b) {
   b.appendChild(st);
 }
 
-// Every settings section sits on a card of its own: icon, title, a line on what it is about –
-// the macros add whether they are on and their toggle key.
+// Every settings section is a plate: icon, title, a line on what it is about – the macros add
+// whether they are on and their toggle key.
 const SECTIONS = {
-  Panel: ['What the open panel does while you play', 'M4 5h16v14H4zM4 9h16'],
-  Bar: ['The icon rail, where it sits and how it fades', 'M5 4h4v16H5zM13 8h6M13 12h6M13 16h4'],
-  Timers: ['World boss, Helltide and your own timer', 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.5 2.5M9 2h6'],
-  Messages: ['diablo.trade chat', 'M4 5h16v11H9l-5 4z'],
-  Pill: ['The small bar while nothing is open', 'M3 9.5a2.5 2.5 0 0 1 2.5-2.5h13a2.5 2.5 0 0 1 0 5h-13A2.5 2.5 0 0 1 3 9.5zM7 16h10'],
-  Size: ['How big the text and the panel are', 'M4 20L20 4M14 4h6v6M10 20H4v-6'],
-  Look: ['Opacity, labels and where the bar sits', 'M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'],
-  Hotkeys: ['Shortcuts that work while the game is in front', 'M3 7h18v10H3zM7 11h.01M11 11h.01M15 11h.01M8 14.5h8'],
-  Account: ['Your diablo.trade login', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20c.8-3.6 3.8-6 7.5-6s6.7 2.4 7.5 6'],
-  'Item search': ['How a search opens on diablo.trade', 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4'],
-  'If signing in does not work': ['Other ways to get your login in', 'M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'],
-  'Game data': ['Loot, crafting, items — and your own saved data', 'M4 6c0-1.5 3.6-2.5 8-2.5s8 1 8 2.5v12c0 1.5-3.6 2.5-8 2.5s-8-1-8-2.5zM4 6c0 1.5 3.6 2.5 8 2.5s8-1 8-2.5'],
-  Backup: ['A copy of what you made, in a folder of your choice', 'M4 7h16v13H4zM4 7l2-3h12l2 3M12 11v6M9 14l3 3 3-3'],
-  Updates: ['Whether a newer version is out', 'M12 4v11M7 10l5 5 5-5M5 20h14'],
-  Advanced: ['Where the game is and how it is found', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'],
-  Character: [null, 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20c.8-3.6 3.8-6 7.5-6s6.7 2.4 7.5 6'],
-  'Click spam': [null, 'M9 3v3M3.5 8.5l2.1 2.1M3 14h3M12.5 9.5l7.5 3-3.2 1.3 3 3-1.8 1.8-3-3L13.7 18z'],
-  Lock: [null, 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5zM12 15v2'],
+  Panel: ['What the open panel does while you play', 'build'],
+  Bar: ['The bar – closed a strip, open the panel\'s spine', 'list'],
+  'Closed bar': ['Timers and lock – the mouse over it slides out the rest', 'list'],
+  Timers: ['World boss, Helltide and your own timer', 'timer'],
+  Messages: ['diablo.trade chat', 'trade'],
+  Size: ['How big the text and the panel are', 'fit'],
+  Look: ['How much of the game shows through, and where things sit', 'eye'],
+  Hotkeys: ['Shortcuts that work while the game is in front', 'key'],
+  Account: ['Your diablo.trade login', 'person'],
+  'Item search': ['How a search opens on diablo.trade', 'search'],
+  'If signing in does not work': ['Other ways to get your login in', 'warn'],
+  'Game data': ['Loot, crafting, items — and your own saved data', 'folder'],
+  Backup: ['A copy of what you made, in a folder of your choice', 'folder'],
+  Updates: ['Whether a newer version is out', 'refresh'],
+  Advanced: ['Where the game is and how it is found', 'gear'],
+  Character: [null, 'person'],
+  'Click spam': [null, 'target'],
+  Lock: [null, 'lock'],
 };
 function sect(parent, title, hint, id) {
-  const [line, icon] = SECTIONS[title] || [null, 'M5 12h14'];
-  const card = el('section', 'scard');
-  card.dataset.card = id || title;
-  const head = el('div', 'shead');
-  const ic = el('span', 'sicon');
-  ic.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + icon + '"/></svg>';
-  head.appendChild(ic);
-  const t = el('div', 'stitle');
-  t.appendChild(el('h3', null, title));
-  if (hint || line) t.appendChild(el('span', null, hint || line));
-  head.appendChild(t);
-  const side = el('div', 'sside');
-  const tag = el('span', 'sstate');
-  side.appendChild(tag);
-  head.appendChild(side);
-  card.appendChild(head);
-  const body = el('div', 'sbody');
-  card.appendChild(body);
-  parent.appendChild(card);
-  return { card, body, tag, side };
+  const [line, icon] = SECTIONS[title] || [null, 'info'];
+  const p = UI.plate({ title, sub: hint || line, icon, id: id || title });
+  parent.appendChild(p.card);
+  return { card: p.card, body: p.body, tag: p.badge, side: p.side };
 }
-/** A macro's card: its state (ON / OFF) and its toggle key in the head. */
+/** A macro's plate: its state (ON / OFF) and its toggle key in the head. */
 function macroCard(parent, key, title, hint, bindKey) {
   const c = sect(parent, title, hint, key);
   const on = settings[key] === true;
   c.card.classList.add('macro');
   c.card.classList.toggle('on', on);
   c.tag.textContent = on ? 'ON' : 'OFF';
-  c.tag.classList.add(on ? 'on' : 'off');
   if (bindKey && settings[bindKey]) c.side.insertBefore(el('kbd', null, prettyBind(settings[bindKey])), c.tag);
   return c;
 }
@@ -1534,7 +1450,27 @@ function lockList() {
     return true;
   }).map((e) => Object.assign({ key: e.key, lock: e.lock !== false, sec: Number(e.sec) > 0 ? Number(e.sec) : 1 }, e.off === true ? { off: true } : {}));
 }
-const lockKeysOn = () => lockList().filter((e) => !e.off).map((e) => keyName(e.key)).join('');
+/**
+ * Lock's keys as the game's diamonds, one per key switched on. Held ones are lit – with more than
+ * one they are re-pressed in turn (lib/clicker.js: 600 ms down, 50 ms up, staggered), and blink
+ * with it; timed ones flash on their time. Waiting (map, chat, portal, a left click): gold, still.
+ */
+function lockDias(paused) {
+  const box = el('span', 'dias');
+  const keys = lockList().filter((e) => !e.off);
+  const held = keys.filter((e) => e.lock).length;
+  let k = 0;
+  keys.forEach((e) => {
+    const d = el('i', 'ld ' + (e.lock ? 'held' : 'timed') + (e.lock && held > 1 ? ' cyc' : ''));
+    d.title = keyLabel(e.key) + (e.lock ? ' — held' : ' — every ' + fmtSec(e.sec));
+    d.appendChild(el('em', null, keyName(e.key)));
+    if (!paused && e.lock && held > 1) d.style.animationDelay = -Math.round(k++ * 650 / held) + 'ms';
+    if (!paused && !e.lock) d.style.animationDuration = Math.max(200, Math.round(e.sec * 1000)) + 'ms';
+    box.appendChild(d);
+  });
+  if (!keys.length) box.textContent = '–';
+  return box;
+}
 
 // Characters: [{ name, lockKeys }]; the one in use is also what the settings hold, so
 // the helper needs to know nothing about characters.
@@ -1709,7 +1645,8 @@ function setData(root) {
   title.onchange = () => save({ d4WindowTitle: title.value });
   opt(b, 'Window title', 'How the game window is recognised', title);
 }
-function setMsg(t) { setMsgText = t; render(); }
+/** A line on what just happened – under the settings, and in the line at the foot (the page is long). */
+function setMsg(t) { setMsgText = t; if (t) footNote(t, 'ok'); render(); }
 function refreshBackupAt() {
   api.lastBackup().then((t) => { backupAt = Number(t) || 0; if (section === 'settings') render(); });
 }
@@ -1740,15 +1677,9 @@ const PILL_ITEMS = [['search', 'Search'], ['farm', 'Builds'], ['maptool', 'Map t
 const pillHide = () => (Array.isArray(settings.pillHide) ? settings.pillHide : []);
 const pillEl = (k) => (k === 'quit' ? $('btnQuit') : $('rail').querySelector('[data-section="' + k + '"]') || $(k));
 function applyLayout() {
-  const horizontal = (settings.orientation || 'vertical') === 'horizontal';
-  $('shell').classList.toggle('horizontal', horizontal);
   document.documentElement.style.setProperty('--fade', settings.fadeOpacity == null ? 0.35 : settings.fadeOpacity);
-  $('app').classList.toggle('shrink', settings.idleShrink !== false);
   PILL_ITEMS.forEach(([k]) => { const e = pillEl(k); if (e) e.classList.toggle('pillhide', pillHide().includes(k)); });
   $('app').classList.toggle('wbbright', settings.wbBright !== false);
-  $('rail').classList.toggle('wide', !!settings.railWide && !horizontal);
-  $('btnRail').querySelector('span').textContent = settings.railWide ? 'Collapse' : 'Expand';
-  $('stHotkey').textContent = settings.hotkeySearch || '—';
   renderTimers();
   reportSize();
 }
@@ -1760,7 +1691,7 @@ function onQuery() {
     openSection('search');
     $('q').value = v; $('q').setSelectionRange(v.length, v.length);
   }
-  chip = 'all'; pick = null; detailOpen = false; bossCls = null;   // a new search starts with everything in view
+  chip = 'all'; pick = null; bossCls = null;   // a new search starts with everything in view
   clearTimeout(debounce);
   debounce = setTimeout(() => { updateItems($('q').value.trim()); render(); }, 80);
   // a search counts as done once the typing has stopped for a moment
@@ -1776,22 +1707,21 @@ function wireResize() {
   // the main process reads the cursor itself and keeps the corner under it – the window
   // moves while it grows, so the coordinates in here would drift
   let from = null, frame = 0;
-  const big = () => !!EMBEDDED[section] || section === 'farm' || section === 'builder';
   grip.addEventListener('pointerdown', (e) => {
     from = true;
     try { grip.setPointerCapture(e.pointerId); } catch (_) {}   // not available everywhere
     document.body.classList.add('resizing');
-    api.resizeDrag('start', big());
+    api.resizeDrag('start');
     e.preventDefault();
   });
   grip.addEventListener('pointermove', () => {
     if (!from || frame) return;
-    frame = requestAnimationFrame(() => { frame = 0; if (from) api.resizeDrag('move', big()); });
+    frame = requestAnimationFrame(() => { frame = 0; if (from) api.resizeDrag('move'); });
   });
   const stop = (e) => {
     if (!from) return;
     from = null;
-    api.resizeDrag('move', big());
+    api.resizeDrag('move');
     api.resizeDrag('end');
     document.body.classList.remove('resizing');
     try { grip.releasePointerCapture(e.pointerId); } catch (_) {}
@@ -1815,12 +1745,10 @@ async function init() {
   applyLayout();
 
   document.querySelectorAll('#rail .ri[data-section]').forEach((b) => { b.onclick = () => openSection(b.dataset.section); });
-  $('btnRail').onclick = () => save({ railWide: !settings.railWide }).then(applyLayout);
   $('btnQuit').onclick = () => api.quit();
   // the world boss timer: blinking, a click stops the blinking; otherwise the timers are the
   // biggest target in the small pill and open what was open last (or the search)
   const openFromTimer = () => {
-    wake();
     if (section) openSection('search');
     else openSection(lastSection || 'search', lastSection === 'page' ? lastUrl : undefined);
   };
@@ -1829,7 +1757,7 @@ async function init() {
     openFromTimer();
   };
   $('ht').onclick = openFromTimer;
-  $('miss').onclick = () => { wake(); openSection('farm'); };
+  $('miss').onclick = () => openSection('farm');
   // your own timer: a click starts it (over), a right click clears it – the panel stays shut
   $('ct').onclick = (e) => { e.stopPropagation(); startCt(true); };
   $('ct').oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); startCt(false); };
@@ -1851,7 +1779,7 @@ async function init() {
       const i = resultKeys.indexOf(pick || shownKey);
       const n = e.key === 'ArrowDown' ? Math.min(resultKeys.length - 1, i + 1) : Math.max(0, i < 0 ? 0 : i - 1);
       pick = resultKeys[n]; render();
-      const on = document.querySelector('#side .res.on');
+      const on = document.querySelector('#side .hit.on');
       if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
     }
   });
@@ -1862,35 +1790,29 @@ async function init() {
   api.onLoot((l) => { loot = useLoot(l) || loot; loadIcons(); render(); });
   api.onCraft((c) => { craft = c || craft; render(); });
   api.onActivities((a) => { activities = a || activities; render(); });
-  api.onFarmReady(() => { if (window.FarmView) window.FarmView.reload(); });
+  api.onFarmReady(() => { loadIcons(); if (window.FarmView) window.FarmView.reload(); });
+  if (api.onIconsReady) api.onIconsReady(loadIcons);
   if (window.FarmView) window.FarmView.onChange = updateMissing;
   api.onItemsReady(async () => { itemQuery = null; loadIcons(); runewords = (await api.getRunewords()) || runewords; updateItems($('q').value.trim()); });
   api.onWorldBoss((d) => { wb = d; renderTimers(); });
   // what the app reports by itself (data loaded, login saved, backup …) goes to the footer only –
   // it never opens the panel while you play
   api.onNotice((n) => footNote(n.text, n.kind));
+  // the game's state: a dot at the foot of the spine
   api.onStatus((s) => {
     const e = $('stD4');
-    e.textContent = '';
-    e.appendChild(el('i', 'dot' + (s.d4Active || s.running ? '' : ' off')));
-    e.appendChild(document.createTextNode(s.d4Active ? 'Diablo IV in foreground' : s.running ? 'Diablo IV running' : 'Diablo IV not found'));
+    e.classList.toggle('off', !(s.d4Active || s.running));
+    e.title = s.d4Active ? 'Diablo IV in foreground' : s.running ? 'Diablo IV running' : 'Diablo IV not found';
   });
   api.onDataInfo((d) => { dataInfo = d.text; });
   api.onAuthInfo(() => {});
   api.onViewLoading((on) => $('viewSlot').classList.toggle('loading', !!on));
-  api.onFocusSearch(() => { wake(); if (section !== 'search') openSection('search'); else { typeIn($('q')); $('q').select(); } });
-  api.onToggle(() => { wake(); if (section) closeAll(); else openSection('search'); });
-  api.onOpenSection((name) => { wake(); openSection(name); });
+  api.onFocusSearch(() => { if (section !== 'search') openSection('search'); else { typeIn($('q')); $('q').select(); } });
+  api.onToggle(() => { if (section) closeAll(); else openSection('search'); });
+  api.onOpenSection((name) => openSection(name));
   api.onEscape(closeAll);
-  api.onLayout(({ up, offset, maxH, manual }) => {
+  api.onLayout(({ manual }) => {
     $('app').classList.toggle('manual', !!manual);
-    $('app').classList.toggle('up', up);
-    $('rail').style.marginLeft = (offset || 0) + 'px';
-    if (maxH) {
-      const card = Math.max(220, maxH - 56);
-      document.documentElement.style.setProperty('--content-max', card + 'px');
-      document.documentElement.style.setProperty('--view-h', Math.max(200, card - 96) + 'px');
-    }
     setTimeout(syncView, 30);
   });
   api.onClickSpam(({ on, button }) => {
@@ -1900,7 +1822,6 @@ async function init() {
   });
   // straight to the build's skills or paragon; pressed again on the same page, it closes
   api.onOpenBuildView((v) => {
-    wake();
     const fv = window.FarmView;
     if (!fv) return;
     if (section === 'farm' && fv.view() === v) { closeAll(); return; }
@@ -1919,7 +1840,7 @@ async function init() {
         : why === 'chat' ? 'Lock waits — the chat is open, Enter or Esc closes it'
         : why === 'portal' ? 'Lock waits — town portal (T), 5 seconds or a left click' : 'Lock waits — goes on when you let go of the left button';
     t.firstChild.textContent = !paused ? 'Lock' : ({ map: 'Map', chat: 'Chat', portal: 'Portal' })[why] || 'Wait';
-    t.lastChild.textContent = lockKeysOn() || '–';
+    t.lastChild.replaceWith(lockDias(!!paused));
   });
   api.onChatUnread((n) => {
     const b = $('chatBadge');
@@ -1937,14 +1858,8 @@ async function init() {
   refreshBackupAt();
   api.refreshStatus();            // ask once – avoids a race with the first broadcast
   setInterval(renderTimers, 1000);
-  const ro = new ResizeObserver(reportSize);
-  ro.observe($('shell'));
-  ro.observe($('rail'));             // the bar grows too (timer, fonts) – the window must follow
-  // the search switches between list + detail and list-then-detail as the panel is resized
-  new ResizeObserver(() => {
-    const n = isNarrow();
-    if (section === 'search' && n !== $('cols').classList.contains('narrow')) render();
-  }).observe($('cols'));
+  // the strip grows with what it shows (a timer, a badge) – the window must follow
+  new ResizeObserver(() => { if ($('panel').hidden) reportSize(); }).observe($('rail'));
   window.addEventListener('resize', syncView);
   render();
 }

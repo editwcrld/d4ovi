@@ -9,10 +9,52 @@ automating game input, so using them can put your account at risk. They are all 
 switched on in *Settings → Macros*, each one past a "use at your own risk" warning — and a build
 can leave them out entirely (`lib/features.js`, see *Building*).
 
+## The look
+
+The overlay reads like a page of the game's own journal ("Codex"): ash black, parchment text,
+blood red for what you act on, gold for numbers, Cinzel for titles. Every page is built from the
+same few parts (renderer/ui.js, renderer/style.css):
+
+- **the bar** – closed a slim strip (timers, lock, the sections); open the **spine** on the left of
+  the panel: the sections with their names, the timers, settings and quit
+- **the page** – its head (what you look at, or the search field; pin and close on the right),
+  its tabs in small caps with a red diamond under the one shown, its body
+- **the plate** – every part of a page sits on one: a head (icon, title, a line on it, a badge)
+  and its body
+- **the line** – every thing on a plate: its picture, its name in its rarity's colour, what it is,
+  and on the right a count, a tick or buttons
+- **the tick** – the game's diamond, wherever something is ticked off
+- **one hover card** for everything: the in-game tooltip, a slot's rolls, a charm, a guide line
+
+**Pictures for everything.** Every unique, mythic, aspect, charm, seal, set, gem, rune, soul
+splinter and runeword has its picture – lib/icons.js builds one map by name from the farm catalog
+(d4guides.gg), maxroll's game data (every item's picture id) and d2core's gems, runes, splinters,
+charms and seals (the same game ids, served by maxroll). An aspect shows its category's picture,
+as the codex does; a set the picture of its first piece; a boss trophy ("Duriel: Shard of Agony")
+its item's.
+
+**Every size.** The open panel is made for the room left of the game's inventory, skill tree and
+paragon: **820 × 600** at 1080p (the zoom grows it with the screen, up to twice on 4K). *Settings →
+Appearance → Size → Panel size*: Small (700 × 510), Medium, Large (985 × 720) or **Mobile** (393 ×
+850, tall and narrow like a phone). The corner bottom right drags any size from 360 × 400 up; the
+text grows a little with the width (13 px at 560, 15 at 820). Below 900 wide the search results
+become chips over the picked one; below 760 two columns become one; below 600 the spine turns into
+a tab bar at the bottom with the timers above it. Nothing overlaps or runs out of its box at any
+of these sizes (checked page by page). The panel and the strip are dragged by the bar or the
+page's head.
+
 ## The bar
 
-A narrow icon rail (48 px) that can be expanded to show labels, and switched between **vertical**
-(default, sits at the edge) and **horizontal** (sits on top). Each icon opens one section:
+Closed, the bar is a strip with the timers and lock only: drag handle · world boss · Helltide ·
+your own timer · (to farm) · (lock). The mouse over it slides the section icons, settings and quit
+out to the right (those switched on for it); leaving, they slide back in. Opening a section – by a
+click, a timer or a hotkey – the panel grows out of it. Open, the bar is the panel's spine.
+
+**Lock** shows one diamond per key while it runs, as in the game's own UI: a held key is lit – with
+more than one they blink with the re-press, one after the other – a timed key is an outline that
+flashes on its time. While it waits (map, chat, town portal, a left click) the diamonds turn gold
+and stand still, and the label says why. Each icon opens one
+section:
 
 | Icon | Section | What it does |
 |---|---|---|
@@ -20,16 +62,16 @@ A narrow icon rail (48 px) that can be expanded to show labels, and switched bet
 | 📋 | **Builds** | *My builds*: your farm list – cheat sheet, gear, where each piece drops, skills, paragon. *Find a build*: pick a class and a skill, every site's guides for it explained, or build it yourself — see below |
 | 🗺 | **Map tool** | The maxroll map tool, embedded — see below |
 | 🛍 | **diablo.trade** | Your listings with your own login — the chat is one click away there; unread messages show a red badge |
-| ⚙ | **Settings** | Behaviour · Appearance · Hotkeys · Macros · diablo.trade · Data |
+| ⚙ | **Settings** | One page: Behaviour · Appearance · Hotkeys · Macros · diablo.trade · Data – the chips on top jump to a group |
 
 **Closing and pinning.** A click into the game closes the open panel and the bar goes back to the
-small pill — no Esc needed. **Pin** (top right of every panel, next to ✕) keeps it open: pinned,
+strip — no Esc needed. **Pin** (top right of every panel, next to ✕) keeps it open: pinned,
 it fades back while you play and the mouse over it brings it forward. Nothing pins itself; pinned builds do
 not fade (*Settings → Behaviour*). The first time it opens, a short hint explains this.
 **The game keeps the focus:** clicking around in the overlay leaves Diablo IV in front (lock keeps
 running). The overlay takes the keyboard only while you type — the search, a text field, a key to
 record, an embedded page you clicked into — and gives it back right after. The open
-panel can be dragged by its header row as well as by the ⠿ handle.
+panel can be dragged by its spine and its head as well as by the ⠿ handle.
 
 `Ctrl+F` opens the search from inside the game, `Esc` closes everything and clears the field.
 Three more hotkeys can be assigned (show/hide, open map tool, open builds — `Ctrl+Shift+B` by default).
@@ -48,18 +90,17 @@ pictures come from d4builds.gg (sunderarmor.com); one that is missing falls back
 
 ## When nothing is open
 
-Closed — by a click into the game, ✕ or Esc — the bar shrinks to the pill right away (it fades
-out and back in while the window changes size) and fades to the opacity you set:
+Closed — by a click into the game, ✕ or Esc — the bar is the strip right away and fades to the
+opacity you set:
 
 ```
-⠿  WORLD BOSS 02h 15min 40sec  🔍  📋  🛍  ⚙  ✕
+⠿ │ WORLD BOSS 2:15:40 │ HELLTIDE 13:47 │ TIMER 05:00 │ LOCK ◆◆◆◇      (mouse over: … │ 🔍 📋 🗺 🛍 │ ⚙ ⏻)
 ```
 
-handle · timers · search · builds · diablo.trade · settings · quit. The horizontal bar
-uses the same order. The timer keeps its full strength; in the warning time it turns red, grows
+The timers keep their full strength; in the warning time it turns red, grows
 the closer the spawn gets and blinks — a click stops the blinking. Otherwise a click on the timer
 opens again whatever was open last (builds, diablo.trade, a guide …), the search if nothing was.
-Moving the mouse over the pill only takes the fade off — it keeps its shape and its place, so you
+Moving the mouse over the strip only takes the fade off — it keeps its shape and its place, so you
 can drag it there.
 
 Next to the world boss sits the **Helltide** timer: orange while a Helltide runs (how long it
@@ -86,17 +127,17 @@ timers: how many items, aspects, charms and gems of the active build are not tic
 (green **done** once everything is). A click opens the build. Off by default.
 
 Everything about the timers is in *Settings → Behaviour → Timers*: each one can be switched off
-on its own (*World boss timer*, *Helltide timer*, *Own timer*). *Settings → Appearance → Pill →
-What it shows* (the very first row there) switches each thing in the pill on or off: search,
-builds, map tool, diablo.trade, the world boss, Helltide and own timer, to farm, settings and ✕
-(quit). The handle (and the Lock tag while it runs) always stays; the open bar keeps everything.
+on its own (*World boss timer*, *Helltide timer*, *Own timer*). *Settings → Appearance → Closed bar →
+What it shows while closed* (the very first row there) switches each thing in the strip on or off:
+search, builds, map tool, diablo.trade, the world boss, Helltide and own timer, to farm, settings
+and quit. The handle (and the Lock tag while it runs) always stays; the spine keeps everything.
 By default all but the map tool show.
 
 Alerts punch through the fade and blink **on their own element only**: the timer when the world
 boss is closer than your warning threshold, the diablo.trade icon when a message arrives.
 
-Each of the two states keeps its own place on the screen: drag the pill where you want it while
-it is idle, drag the bar while it is open. Both are saved as `posIdle` and `posOpen`, and
+Each of the two states keeps its own place on the screen: drag the strip where you want it while
+it is closed, the panel while it is open (by default top left – the room left of the inventory). Both are saved as `posIdle` and `posOpen`, and
 *Settings → Appearance → Places* resets them.
 
 ## Backup
@@ -263,16 +304,16 @@ left out; augments go by their name: "Flurry hits twice – skill augment") · �
 
 **Gear** has three views; the one you used last stays.
 
-- **Route** (the default) — where to go, in order. On the left the stops: each boss
-  ("The Butcher", "Andariel" …), *Runewords*, *Dungeons* for aspects, *Salvage a legendary*,
-  then *Seal & charms*, *Runes*, *Gems* and *Soul splinters*, each with how much of it you have;
-  a finished stop turns green. On the right what you get at the picked stop: the item in its
-  rarity colour, its slot, the rolls of the build (greater affixes ✦, tempered lines ⚒) and its
-  sockets, and a tick. The picked stop is a card like those in Settings, its head showing how much
-  of it is farmed ("2 / 5", green when done). Things from the same boss sit together.
-- **List** — everything at once, one calm column, grouped the same way: one card per place with
-  its icon and how much is left there ("3 to farm"); in it name and slot, the rolls right under
-  it. What you have sinks to a dimmed *Farmed* card at the end.
+- **Route** (the default) — where to go, in order, as a path with a waypoint per stop: each boss
+  ("The Butcher", "Andariel" … with its portrait), *Runewords*, *Dungeons* for aspects, *Salvage a
+  legendary*, then *Seal & charms*, *Runes*, *Gems* and *Soul splinters*, each with how much of it
+  you have; a finished stop gets a green tick. The stop you are at (the first one not finished, or
+  the one clicked) opens right there on the path: what you get there – the item with its picture
+  in its rarity colour, its slot, the rolls of the build (greater affixes ✦, tempered lines ⚒),
+  its sockets, and the diamond tick. Things from the same boss sit together.
+- **List** — everything at once, one calm column, grouped the same way: one plate per place with
+  its icon and how much is left there ("3 to farm"); in it picture, name and slot, the rolls right
+  under it. What you have sinks to a dimmed *Farmed* plate at the end.
 - **Slots** — the build as the game shows it: armour on the left, jewellery and weapons on the
   right, each with its picture and what it is ("Mythic Unique Helm", "Unique Bow"). In the
   middle what is socketed where (the slot under each group of gems and runes) and the skill bar —
@@ -285,7 +326,7 @@ tick and goes into the progress on top. A gem needed twice shows "×2" and what 
 pieces are worn; the seal can lower that). Where gems, runes and splinters come from is a general
 hint, not taken from a data source.
 
-*Only missing* hides what you have. A click on a name opens the search dropdown for that slot —
+Route, List, Slots and *Only missing* sit in the toolbar under the list. *Only missing* hides what you have. A click on a name opens the search dropdown for that slot —
 type to filter, *Unique / Mythic / Aspect* switch what it lists, `Enter` takes the first hit,
 `Esc` closes it; a legendary slot takes an aspect (two on the amulet). Ticking, folding and
 redrawing keep the place in the list. Weapons are named by their kind: a rogue has a bow and two
@@ -297,19 +338,22 @@ tooltip of the kind the build uses (Infinity on a bow, not the scythe).
 build code — the site is recognised, the variants load by themselves and are ticked, *Import*
 adds them. A builds file can be dropped on the dialog or picked with *Import file …*.
 
-**Skills.** The skill bar with ranks and modifiers, and the whole skill tree in d2core's layout
-with every node the build took lit — hover a node for its text at that rank. The bar is in the
-tree's order, top to bottom. A click on a skill — in the bar, in the tree (a modifier counts for
+**Skills.** The skill bar as cards – picture, name, rank as the game's pips, its upgrades
+numbered in the order they are taken – then the passives as medallions (when the tree data has
+them), then the whole skill tree in d2core's layout on its own plate, with every node the build
+took lit — hover a node for its text at that rank. The cards are in the tree's order, top to bottom. A click on a skill — in the bar, in the tree (a modifier counts for
 its skill) or in the slots view — zooms the tree in on it and lights it and its modifiers up
 (again: back out). maxroll saves the tree by the game's node ids and d2core by skill ids, so both
 land on the same drawing — infinitybuilds.gg too, it keeps the game's node ids as well. d4builds.gg serves its skill tree data encrypted; for its builds the bar
 is shown and a button opens d4builds' own tree inside the overlay.
 
-**Paragon.** The boards on their grid, turned as in the build, the nodes taken lit up by rarity,
-the glyph in its socket — as plain squares (*Minimal*) or with the game's node icons (*Icons*);
-switching keeps where you zoomed to. The names sit in the gap above each board, gates that touch
-are joined by a line. A click on a board — in the list on the right or in the drawing — lights it
-up and moves the view to it, the whole board in view (again: all back). All sites land on
+**Paragon.** The boards as a film strip on top (name, glyph and its rank), the first one shown
+big to start with, *All* for the whole chain. Beside it the board's glyph as a medallion and its
+legendary node (showing all: every glyph). The boards sit on their grid, turned as in the build,
+the nodes taken lit up by rarity, the glyph in its socket — as plain squares (*Minimal*) or with the
+game's node icons (*Icons*); switching keeps where you zoomed to. The names sit in the gap above
+each board, gates that touch are joined by a line. A click on a board — in the strip or in the
+drawing — lights it up and moves the view to it (again: all back). All sites land on
 d2core's board drawings: d2core, maxroll and infinitybuilds by board key, d4builds by board name. Both views zoom
 with the wheel and move by dragging; ⤢ fits everything again.
 
@@ -673,7 +717,7 @@ in German, to find it quickly.
 | `mapstore-test.js` | map progress: save, restore, never overwrite newer |
 | `d4guides-test.js` | database list parsing (name, icon, link, columns) |
 | `mythics-test.js` | iconic mythics: the list, the acquisition text, bad pages |
-| `place-test.js` | where the bar lands: the pill never drifts, places stay on screen |
+| `place-test.js` | where the bar lands: the strip never drifts, places stay on screen |
 | `clicker-test.js` | macros: bindings, speed limits, key lists, off by default, what the helper is told |
 | `maxbuild-test.js` | maxroll import: links, guide page, planner variant → build, dual wield |
 | `infinitybuilds-test.js` | infinitybuilds import: links and variants, English names, stat values like the site's tooltips, command skills, paragon, charms |
@@ -681,7 +725,8 @@ in German, to find it quickly.
 | `sitebuilds-test.js` | d4builds + d2core import: links, variants, slots, aspects by game id, Chinese titles |
 | `farm-test.js` | farm list: slots, sources, aspect tooltips, merged variants; builds: save, ticks, code, import |
 | `compare-test.js` | comparing two builds: partner variant, gear, skills, charms, paragon, what is left to farm |
-| `renderer-smoke.js` | the whole UI in jsdom: every section (incl. farm list, builds, compare, builder), settings and macros, the cards in each view, hotkeys, Esc, idle fade |
+| `renderer-smoke.js` | the whole UI in jsdom: every section (incl. farm list, builds, compare, builder), settings and macros, the plates and lines in each view, strip and spine, panel sizes, hotkeys, Esc, idle fade |
+| `icons-test.js` | a picture for every thing by name: catalog, game data, d2core, aspects by category, trophies, sets |
 
 If something misbehaves at runtime, `overlay-log.txt` in the data folder records cookie changes,
 view navigation, zoom and data loading.

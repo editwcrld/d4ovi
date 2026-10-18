@@ -81,7 +81,7 @@ function syncDialog() {
   code.onfocus = () => code.select();
   const row1 = el('div', 'wrow');
   row1.appendChild(code);
-  const cp = el('button', 'tbtn', 'Copy');
+  const cp = el('button', 'btn', 'Copy');
   cp.onclick = () => { api.copyText(code.value); cp.textContent = 'Copied'; };
   row1.appendChild(cp);
   box.appendChild(row1);
@@ -91,7 +91,7 @@ function syncDialog() {
   other.spellcheck = false;
   const row2 = el('div', 'wrow');
   row2.appendChild(other);
-  const use = el('button', 'tbtn pri', 'Use it');
+  const use = el('button', 'btn pri', 'Use it');
   const msg = el('p', 'wmsg');
   use.onclick = async () => {
     if (!window.d4web.useCode(other.value)) { msg.textContent = 'That is not a device code.'; return; }
@@ -105,7 +105,7 @@ function syncDialog() {
   row2.appendChild(use);
   box.appendChild(row2);
   box.appendChild(msg);
-  const close = el('button', 'tbtn wclose', 'Close');
+  const close = el('button', 'btn wclose', 'Close');
   close.onclick = () => shade.remove();
   box.appendChild(close);
   shade.appendChild(box);
@@ -126,4 +126,6 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { const s 
 window.addEventListener('resize', fit);
 fit();
 render();
+// the pictures of every thing (lib/icons.js) – the page is drawn again once they are here
+api.icons().then((m) => { if (m && !m.error) { UI.setIcons(m); render(); } });
 })();

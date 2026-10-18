@@ -10,65 +10,67 @@
 <div id="app">
  <div id="shell">
 
-  <!-- ===== Rail: sections on top, app controls at the bottom ===== -->
+  <!-- ===== The bar: closed a strip (timers, the sections), open the spine of the panel ===== -->
   <nav id="rail">
     <span id="grip" title="Drag to move" aria-hidden="true"><svg viewBox="0 0 10 16"><circle cx="2.5" cy="2.5" r="1.4"/><circle cx="7.5" cy="2.5" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13.5" r="1.4"/><circle cx="7.5" cy="13.5" r="1.4"/></svg></span>
-    <button id="btnRail" class="ri" title="Expand bar">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Collapse</span>
-    </button>
-    <span class="rdiv"></span>
 
-    <button class="ri" data-section="search" title="Search">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg><span>Search</span>
-    </button>
-    <button class="ri" data-section="farm" title="Builds — your farm list, and every guide for a skill">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h8.5l3.5 3.5v13.5H6z"/><path d="M14.5 3.5V7H18"/><path d="M9 11.5l1.4 1.4 2.6-2.6M9 16.5h6"/></svg><span>Builds</span>
-    </button>
-    <button class="ri" data-section="maptool" title="Map tool">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.2l6-2.7 6 2.7 6-2.7v12.3l-6 2.7-6-2.7-6 2.7z"/><path d="M9 4.5v12.3M15 7.2v12.3"/></svg><span>Map tool</span>
-    </button>
-
-    <span class="rdiv"></span>
-    <button class="ri" data-section="listings" title="diablo.trade — listings, the chat is one click away there">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h16l-1.5 11h-13z"/><path d="M8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5"/></svg><i id="chatBadge" hidden></i><span>diablo.trade</span>
-    </button>
+    <div id="secs">
+      <button class="ri" data-section="search" title="Search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg><span>Search</span>
+      </button>
+      <button class="ri" data-section="farm" title="Builds — your farm list, and every guide for a skill">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h8.5l3.5 3.5v13.5H6z"/><path d="M14.5 3.5V7H18"/><path d="M9 11.5l1.4 1.4 2.6-2.6M9 16.5h6"/></svg><span>Builds</span>
+      </button>
+      <button class="ri" data-section="maptool" title="Map tool">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.2l6-2.7 6 2.7 6-2.7v12.3l-6 2.7-6-2.7-6 2.7z"/><path d="M9 4.5v12.3M15 7.2v12.3"/></svg><span>Map</span>
+      </button>
+      <button class="ri" data-section="listings" title="diablo.trade — listings, the chat is one click away there">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h16l-1.5 11h-13z"/><path d="M8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5"/></svg><i id="chatBadge" hidden></i><span>Trade</span>
+      </button>
+    </div>
 
     <span class="sp"></span>
-    <div id="wb" class="tmr" title="World boss (diablo.trade)"><b>WB</b><span id="wbTime">--:--</span></div>
-    <div id="ht" class="tmr" title="Helltide"><b>HT</b><span id="htTime">--:--</span></div>
-    <div id="ct" class="tmr idle" title="Timer"><b>Timer</b><span id="ctTime">05:00</span></div>
-    <div id="miss" class="tmr miss" title="What your build still needs" hidden><b>To farm</b><span id="missN">–</span></div>
-    <div id="lockTag" class="tmr lock" title="Lock running — the toggle key stops it" hidden><b>Lock</b><span>–</span></div>
-    <button class="ri" data-section="settings" title="Settings"><i id="updDot" hidden></i>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 12h3M11 12h9M4 17h7M15 17h5"/><circle cx="16" cy="7" r="2.1"/><circle cx="9" cy="12" r="2.1"/><circle cx="13" cy="17" r="2.1"/></svg><span>Settings</span>
-    </button>
-    <button id="btnQuit" class="ri" title="Quit">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg><span>Quit</span>
-    </button>
+    <div id="timers">
+      <div id="wb" class="tmr" title="World boss (diablo.trade)"><b>World boss</b><span id="wbTime">--:--</span></div>
+      <div id="ht" class="tmr" title="Helltide"><b>Helltide</b><span id="htTime">--:--</span></div>
+      <div id="ct" class="tmr idle" title="Timer"><b>Timer</b><span id="ctTime">05:00</span></div>
+      <div id="miss" class="tmr miss" title="What your build still needs" hidden><b>To farm</b><span id="missN">–</span></div>
+    </div>
+    <div id="lockTag" class="tmr lock" title="Lock running — the toggle key stops it" hidden><b>Lock</b><span class="dias">–</span></div>
+    <div id="sys">
+      <button class="ri" data-section="settings" title="Settings"><i id="updDot" hidden></i>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 12h3M11 12h9M4 17h7M15 17h5"/><circle cx="16" cy="7" r="2.1"/><circle cx="9" cy="12" r="2.1"/><circle cx="13" cy="17" r="2.1"/></svg><span>Settings</span>
+      </button>
+      <button id="btnQuit" class="ri" title="Quit">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8M6.3 7.2a7 7 0 1 0 11.4 0"/></svg><span>Quit</span>
+      </button>
+    </div>
+    <i id="stD4" class="dot off" title="Diablo IV not found"></i>
   </nav>
 
-  <!-- ===== Panel ===== -->
+  <!-- ===== The page: its head, its tabs, its body ===== -->
   <section id="panel" hidden>
-    <header id="top">
-      <div class="find">
+    <header id="head">
+      <div id="top" class="qbox">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
         <input id="q" placeholder="Item, boss, rune, recipe …" spellcheck="false" autocomplete="off">
-        <button id="qClear" class="ico" title="Clear" hidden>
+        <button id="qClear" class="btn icon ghost" title="Clear" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
         <span class="kbd">Esc</span>
       </div>
-      <div id="chips" class="chips"></div>
+      <div id="title"></div>
+      <!-- pin and close: on every page, the head's right end -->
+      <div id="ptools">
+        <button id="btnPin" class="btn icon" title="Pin — stays open while you play">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3z"/><path d="M12 14v6"/></svg>
+        </button>
+        <button id="panelClose" class="btn icon" title="Close (Esc)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+        </button>
+      </div>
     </header>
-    <!-- pin and close sit on every section, top right -->
-    <div id="ptools">
-      <button id="btnPin" class="tbtn" title="Pin — stays open while you play">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3z"/><path d="M12 14v6"/></svg><span>Pin</span>
-      </button>
-      <button id="panelClose" class="tbtn icon" title="Close (Esc)">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
-      </button>
-    </div>
+    <div id="chips"></div>
 
     <div id="cols">
       <aside id="side"></aside>
@@ -78,22 +80,18 @@
 
     <div id="coach" hidden>
       <span>A click into the game closes this panel. <b>Pin</b> keeps it open — handy while you spend paragon points.</span>
-      <button id="coachOk" class="tbtn">Got it</button>
+      <button id="coachOk" class="btn">Got it</button>
     </div>
-    <footer id="status">
-      <span id="stD4"><i class="dot off"></i>Diablo IV not found</span>
+    <footer id="status" hidden>
       <span id="stData"></span>
       <span id="stNote" hidden></span>
-      <span class="r">
-        <span><span class="kbd" id="stHotkey">Ctrl+F</span> search</span>
-        <span><span class="kbd">Esc</span> close</span>
-      </span>
     </footer>
     <div id="grip-resize" title="Drag to resize"></div>
   </section>
 
  </div>
 </div>
+<script src="ui.js"></script>
 <script src="cards.js"></script>
 <script src="search.js"></script>
 <script src="guide.js"></script>

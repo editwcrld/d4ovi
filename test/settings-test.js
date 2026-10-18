@@ -81,6 +81,10 @@ assert.ok(r.changed && !('pillTimersOnly' in r.settings));
 assert.deepStrictEqual(r.settings.pillHide, ['search', 'farm', 'maptool', 'listings'], 'only timers: the icons left out');
 assert.deepStrictEqual(load({ macroRev: 3, pillTimersOnly: false }).settings.pillHide, ['maptool'], 'off: as before');
 assert.deepStrictEqual(load({}).settings.pillHide, ['maptool'], 'by default all but the map tool');
+// the bar is a strip when closed and the panel's spine when open – nothing to choose about it
+r = load({ macroRev: 3, orientation: 'horizontal', railWide: true, idleShrink: false });
+assert.ok(r.changed && !('orientation' in r.settings) && !('railWide' in r.settings) && !('idleShrink' in r.settings), 'the old bar settings go');
+assert.ok(!('orientation' in load({}).settings), 'and are no defaults');
 r = load({ macroRev: 3, notes: { active: 0, seasons: [{ name: 'S1' }] } });
 assert.ok(r.changed && !('notes' in r.settings), 'the notes go');
 console.log('ok  pill choice, notes gone');

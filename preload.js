@@ -12,7 +12,8 @@ contextBridge.exposeInMainWorld('d4api', {
   getActivities: () => ipcRenderer.invoke('activities:get'),
   getRunewords: () => ipcRenderer.invoke('runewords:get'),
   searchItems: (q) => ipcRenderer.invoke('items:search', q),
-  itemIcons: (names) => ipcRenderer.invoke('items:icons', names),
+  icons: () => ipcRenderer.invoke('icons:get'),
+  onIconsReady: (cb) => ipcRenderer.on('icons-ready', () => cb()),
   refreshData: () => ipcRenderer.invoke('data:refresh'),
   getFarm: () => ipcRenderer.invoke('farm:get'),
   farmTooltip: (type, id) => ipcRenderer.invoke('farm:tooltip', type, id),
@@ -45,11 +46,11 @@ contextBridge.exposeInMainWorld('d4api', {
   setOpacity: (v) => ipcRenderer.send('overlay:opacity', v),
   refreshStatus: () => ipcRenderer.send('status:refresh'),
   setPanelSize: (size) => ipcRenderer.send('overlay:panel-size', size),
-  resizeDrag: (phase, big) => ipcRenderer.send('overlay:resize-drag', phase, !!big),
+  resizeDrag: (phase) => ipcRenderer.send('overlay:resize-drag', phase),
   setIdle: (v) => ipcRenderer.send('overlay:idle', !!v),
 
   // window / views
-  resize: (w, h, open, big) => ipcRenderer.send('overlay:resize', w, h, !!open, !!big),
+  resize: (w, h, open, hold) => ipcRenderer.send('overlay:resize', w, h, !!open, !!hold),
   quit: () => ipcRenderer.send('app:quit'),
   hotkeyCapture: (v) => ipcRenderer.send('hotkey:capture', !!v),
   checkUpdates: () => ipcRenderer.invoke('updates:check'),

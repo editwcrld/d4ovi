@@ -12,6 +12,7 @@ const lib = (n) => require(path.join(ROOT, 'lib', n));
 const farm = lib('farm'), builds = lib('builds'), buildimport = lib('buildimport'), guideinfo = lib('guideinfo');
 const maxbuild = lib('maxbuild'), zhdict = lib('zhdict'), d2db = lib('d2coredb'), builder = lib('builder'), builderipc = lib('builderipc');
 const store = require('./store');
+const icons = lib('icons');
 
 const DATA = process.env.DATA_DIR || path.join(os.tmpdir(), 'd4web');
 const SEED = path.join(__dirname, 'seed');
@@ -46,6 +47,16 @@ const who = new AsyncLocalStorage();               // the device code of the req
 const owner = () => who.getStore();
 const catalog = () => farm.catalog(loot, craft);
 const builderData = () => builder.current() || builder.load(net, () => d2db.currentBuild(net), log);
+// every thing's picture by name (lib/icons.js): the farm catalog, aspects by their category, and
+// d2core's gems, runes, splinters, charms, seals and sets – built again only when they changed
+let iconMap = { key: '', map: {} };
+async function iconsNow() {
+  try { await d2db.load(net, log); } catch (_) { /* the catalog's pictures still come */ }
+  const d2 = d2db.cached(), cat = catalog();
+  const key = [cat.items.length, cat.aspects.length, d2 ? d2.fetchedAt : 0].join('|');
+  if (iconMap.key !== key) iconMap = { key, map: icons.build({ catalog: cat.items, aspects: cat.aspects, d2: (d2 && d2.icons) || {} }) };
+  return iconMap.map;
+}
 
 async function importBuilds(text) {
   const got = builds.parseImport(text);
@@ -103,6 +114,7 @@ async function full(cls, key) {
 
 const API = {
   getFarm: catalog,
+  icons: () => iconsNow(),
   farmTooltip: (type, id) => farm.tooltip(net, String(type || ''), String(id || '')),
   farmCss: () => farm.tooltipCss(),
   getBuilds: async () => builds.clean(await store.get(owner())),

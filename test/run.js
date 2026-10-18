@@ -23,6 +23,7 @@ const TESTS = [
   ['d4builds + d2core import', 'sitebuilds-test.js'],
   ['infinitybuilds import', 'infinitybuilds-test.js'],
   ['builder engine', 'builder-test.js'],
+  ['pictures by name', 'icons-test.js'],
   ['overlay UI', 'renderer-smoke.js'],
 ];
 

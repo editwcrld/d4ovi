@@ -30,6 +30,7 @@ function pickFile(accept) {
 
 window.d4api = {
   getFarm: () => call('getFarm'),
+  icons: () => call('icons'),
   farmTooltip: (type, id) => call('farmTooltip', type, id),
   farmCss: () => call('farmCss'),
   getBuilds: () => call('getBuilds'),

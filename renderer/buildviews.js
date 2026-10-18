@@ -25,28 +25,12 @@ const svg = (tag, attrs, parent) => {
 };
 
 // ---------------------------------------------------------------- tooltip
-let tipEl = null;
-function tip(e, title, sub, lines) {
-  if (!tipEl) { tipEl = document.createElement('div'); tipEl.id = 'btt'; document.body.appendChild(tipEl); }
-  tipEl.textContent = '';
-  const h = document.createElement('b'); h.textContent = title; tipEl.appendChild(h);
-  if (sub) { const s = document.createElement('i'); s.textContent = sub; tipEl.appendChild(s); }
-  (lines || []).filter(Boolean).forEach((l) => { const p = document.createElement('p'); p.textContent = l; tipEl.appendChild(p); });
-  tipEl.hidden = false;
-  move(e);
-}
-function move(e) {
-  if (!tipEl || tipEl.hidden) return;
-  const w = tipEl.offsetWidth || 300, h = tipEl.offsetHeight || 120;
-  let x = e.clientX + 16, y = e.clientY + 12;
-  if (x + w > window.innerWidth - 6) x = Math.max(6, e.clientX - w - 16);
-  if (y + h > window.innerHeight - 6) y = Math.max(6, window.innerHeight - h - 6);
-  tipEl.style.left = x + 'px'; tipEl.style.top = y + 'px';
-}
-function untip() { if (tipEl) tipEl.hidden = true; }
+// the overlay's one hover card (renderer/ui.js)
+const tip = (e, title, sub, lines) => UI.tip.show(e, { title, sub, lines });
+const untip = () => UI.tip.hide();
 function hover(node, fn) {
   node.addEventListener('mouseenter', (e) => fn(e));
-  node.addEventListener('mousemove', move);
+  node.addEventListener('mousemove', (e) => UI.tip.move(e));
   node.addEventListener('mouseleave', untip);
 }
 
@@ -115,7 +99,7 @@ function panZoom(root, el, view, box, start) {
   [['+', 'Zoom in', () => zoom(1 / 1.4, vb.x + vb.w / 2, vb.y + vb.h / 2)],
     ['−', 'Zoom out', () => zoom(1.4, vb.x + vb.w / 2, vb.y + vb.h / 2)],
     ['⤢', 'Fit', () => go(box)]].forEach(([t, title, fn]) => {
-    const b = el('button', 'ab', t); b.title = title; b.onclick = fn; tools.appendChild(b);
+    const b = el('button', 'btn icon', t); b.title = title; b.onclick = fn; tools.appendChild(b);
   });
   root.appendChild(tools);
   set();
@@ -142,7 +126,9 @@ function skills(box, b, ctx) {
   const sk = b.skills;
   box.classList.add('fskills');
   if (!sk) { box.appendChild(el('div', 'empty', 'No skills in this build — import one from d2core.com, maxroll.gg, infinitybuilds.gg or d4builds.gg.')); return; }
-  const bar = el('div', 'sbar');
+  // the page scrolls as a whole: the bar's cards, the passives, then the tree on its plate
+  box.classList.add('scroll');
+  const bar = el('div', 'sbar sk3');
   let tree = null;                               // the drawn tree, once it is loaded
   let focused = null;                            // the skill id zoomed to
   const cards = [];
@@ -157,13 +143,28 @@ function skills(box, b, ctx) {
     cards.push(c);
     c.onclick = () => { if (tree && tree.idOf(s) != null) pick(tree.idOf(s)); };
     const ic = el('div', 'sic');
-    if (s.icon) { const im = el('img'); im.src = ICON(s.icon); im.referrerPolicy = 'no-referrer'; im.onerror = () => im.remove(); ic.appendChild(im); }
-    c.appendChild(ic);
+    if (s.icon) ic.appendChild(UI.img(ICON(s.icon)));
     const t = el('div', 't');
     t.appendChild(el('b', null, s.name));
-    if (s.rank) t.appendChild(el('span', 'rk', 'Rank ' + s.rank));
-    if (s.mods && s.mods.length) t.appendChild(el('div', 'mods', s.mods.join(' · ')));
-    c.appendChild(t);
+    if (s.rank) {
+      // the rank as the game's pips (five), the number beside them
+      const r = el('span', 'rk');
+      const pips = el('span', 'pips');
+      for (let i = 1; i <= 5; i++) pips.appendChild(el('i', i <= s.rank ? 'on' : ''));
+      r.appendChild(pips);
+      r.appendChild(el('span', null, 'Rank ' + s.rank));
+      t.appendChild(r);
+    }
+    const top = el('div', 'top');
+    top.appendChild(ic);
+    top.appendChild(t);
+    c.appendChild(top);
+    // its upgrades in the order they are taken in the game
+    if (s.mods && s.mods.length) {
+      const ol = el('ol', 'mods');
+      s.mods.forEach((m) => ol.appendChild(el('li', null, m)));
+      c.appendChild(ol);
+    }
     bar.appendChild(c);
   });
   box.appendChild(bar);
@@ -173,24 +174,50 @@ function skills(box, b, ctx) {
     const note = el('div', 'meta note-soft');
     note.appendChild(document.createTextNode('d4builds.gg keeps its skill tree data encrypted, so the tree comes straight from its page: '));
     if (b.source && /d4builds\.gg/.test(b.source.url) && ctx.openPage) {
-      const go = el('button', 'btn', 'Show the skill tree from d4builds.gg');
+      const go = UI.btn('Show the skill tree from d4builds.gg', null, 'pri');
       go.onclick = () => ctx.openPage(b.source.url);
       note.appendChild(go);
     }
     box.appendChild(note);
     return;
   }
+  const pass = el('div', 'passives');
+  box.appendChild(pass);
+  const tp = UI.plate({ title: 'Skill tree', sub: 'Click a skill above or in the tree to find it · wheel zooms, drag moves', icon: 'skills', cls: 'treeplate' });
   const area = el('div', 'canvas');
-  box.appendChild(area);
+  tp.body.appendChild(area);
+  box.appendChild(tp.card);
   waitFor(area, el, b.cls, cache.tree, () => ctx.api.buildTree(b.cls), (t) => {
     tree = drawTree(area, el, t, ranks, (id) => pick(id));
     if (!tree) return;
+    passives(pass, el, t, ranks, sk.bar);
     cards.forEach((c, i) => { if (tree.idOf(sk.bar[i]) != null) { c.classList.add('can'); c.title = 'Click to find it in the tree'; } });
     // the bar in the tree's order: top of the tree first, then down
     cards.map((c, i) => [c, tree.rowOf(sk.bar[i]), i]).sort((a, b) => a[1] - b[1] || a[2] - b[2]).forEach(([c]) => bar.appendChild(c));
     // a skill clicked elsewhere (the bar in the slots view): straight to it
     if (focusNext) { const id = tree.idOf(focusNext); focusNext = null; if (id != null) pick(id); }
   });
+}
+
+/** The passives the build takes, as medallions with their rank – key passives in red. */
+function passives(box, el, t, ranks, bar) {
+  const inBar = new Set((bar || []).map((s) => s.id));
+  const list = (t.nodes || []).filter((n) => n.k === 'skill' && ranks[n.id] && !inBar.has(n.id) && t.skills[n.id])
+    .filter((n, i, a) => a.findIndex((x) => x.id === n.id) === i);
+  if (!list.length) return;
+  const p = UI.plate({ title: 'Passives', sub: 'in the order of the tree', icon: 'glyph', badge: list.length });
+  const m = el('div', 'medals');
+  list.forEach((n) => {
+    const s = t.skills[n.id];
+    const key = /key passive/i.test((s.desc || []).join(' ')) || n.ranks === 1;
+    const d = el('span', 'medal' + (key ? ' key' : ''));
+    d.appendChild(el('i', null, String(ranks[n.id])));
+    d.appendChild(el('span', null, s.name));
+    hover(d, (e) => tip(e, s.name, 'Rank ' + ranks[n.id] + ' / ' + (n.ranks || '?'), (s.desc || []).map((x) => fill(x, s.val, ranks[n.id]))));
+    m.appendChild(d);
+  });
+  p.body.appendChild(m);
+  box.appendChild(p.card);
 }
 
 function drawTree(area, el, t, ranks, onPick) {
@@ -291,7 +318,7 @@ const turn = (r, c, k) => { for (let i = 0; i < k; i++) [r, c] = [c, N - 1 - r];
 const KIND = ['normal', 'normal', 'magic', 'rare', 'legendary'];
 const GAP = 3;                                 // empty cells between two boards – room for the name
 const PIMG = (f) => 'https://cloudstorage.d2core.com/data_img/d4/paragon/' + f;
-const pstate = { icons: false, sel: -1 };
+const pstate = { icons: false, sel: 0 };   // as in the mockup: one board big to start with – All shows the chain
 try { pstate.icons = localStorage.getItem('paragon.icons') === '1'; } catch (_) { /* private storage */ }
 
 function paragon(box, b, ctx) {
@@ -301,32 +328,44 @@ function paragon(box, b, ctx) {
   if (!P) { box.appendChild(el('div', 'empty', 'No paragon boards in this build — import it from d2core.com, maxroll.gg, infinitybuilds.gg or d4builds.gg.')); return; }
   if (pstate.sel >= P.boards.length) pstate.sel = -1;
   const keys = P.boards.map((x) => x.k);
+  // as in the mockup: the boards as a film strip on top, the one picked big, beside it its glyph
+  // and its legendary node – "All" shows the whole chain
+  const film = el('div', 'pfilm');
+  const row = el('div', 'pmain');
   const area = el('div', 'canvas');
   const side = el('div', 'pside');
-  box.appendChild(area);
-  box.appendChild(side);
-  waitFor(area, el, keys.join('|'), cache.paragon, () => ctx.api.buildParagon(keys), (d) => show(area, side, el, P, d));
+  row.appendChild(area);
+  row.appendChild(side);
+  box.appendChild(film);
+  box.appendChild(row);
+  waitFor(area, el, keys.join('|'), cache.paragon, () => ctx.api.buildParagon(keys), (d) => show(area, side, film, el, P, d));
 }
 // drawn again when the look is switched – the boards are already here
-function show(area, side, el, P, d, at) {
+function show(area, side, film, el, P, d, at) {
   const drawn = drawParagon(area, el, P, d, at);
+  const redraw = () => {
+    const keep = drawn && drawn.pz.get();          // the same spot and zoom in the other look
+    area.textContent = ''; side.textContent = ''; film.textContent = '';
+    show(area, side, film, el, P, d, keep);
+  };
+  const ui = { drawn, side, film, el, P, d, redraw };
   if (drawn) {
     drawn.pz.onTap = (target) => {
       const g = target && target.closest && target.closest('g.board');
       const i = g ? [...drawn.view.querySelectorAll('g.board')].indexOf(g) : -1;
-      if (i >= 0) select(drawn, side, i);
+      if (i >= 0) select(ui, i);
     };
   }
-  sideList(side, el, P, d, drawn, () => {
-    const keep = drawn && drawn.pz.get();          // the same spot and zoom in the other look
-    area.textContent = ''; side.textContent = '';
-    show(area, side, el, P, d, keep);
-  });
+  filmStrip(ui);
+  sidePlates(ui);
+  // a board picked before: straight to it
+  if (drawn && pstate.sel >= 0 && !at && drawn.rects[pstate.sel]) drawn.pz.go(drawn.rects[pstate.sel]);
 }
 
-/** Lights one board up (and dims the rest) and moves to it; a second click shows all again. */
-function select(drawn, side, i) {
-  pstate.sel = pstate.sel === i ? -1 : i;
+/** Lights one board up (and dims the rest) and moves to it; a second click (or All) shows all again. */
+function select(ui, i) {
+  pstate.sel = i < 0 || pstate.sel === i ? -1 : i;
+  const { drawn } = ui;
   const view = drawn && drawn.view;
   // the whole board with its name and a little room around it, or everything again
   if (drawn) drawn.pz.go(pstate.sel >= 0 && drawn.rects[pstate.sel] ? drawn.rects[pstate.sel] : drawn.box);
@@ -334,46 +373,85 @@ function select(drawn, side, i) {
     g.classList.toggle('sel', j === pstate.sel);
     g.classList.toggle('dim', pstate.sel >= 0 && j !== pstate.sel);
   });
-  side.querySelectorAll('.pb').forEach((r, j) => r.classList.toggle('on', j === pstate.sel));
+  ui.film.querySelectorAll('.pb').forEach((r, j) => r.classList.toggle('on', j === pstate.sel));
+  const all = ui.film.querySelector('.pall');
+  if (all) all.classList.toggle('on', pstate.sel < 0);
+  ui.side.textContent = '';
+  sidePlates(ui);
 }
 
-function sideList(side, el, P, d, drawn, redraw) {
+/** The board's legendary node, when the build takes it. */
+function legendaryOf(bd, d) {
+  const g = d.boards[bd.k];
+  if (!g) return null;
+  const rows = g.rows.map((r) => String(r).split(','));
+  const leg = bd.nodes.map(([r, c]) => rows[r] && rows[r][c]).find((k) => k && d.nodes[k] && d.nodes[k].r === 4);
+  return leg ? d.nodes[leg] : null;
+}
+
+/** The film strip: All, then every board – its name, its glyph and how many nodes it takes. */
+function filmStrip(ui) {
+  const { film, el, P, d } = ui;
+  const all = el('button', 'pall' + (pstate.sel < 0 ? ' on' : ''));
+  all.appendChild(el('b', null, 'All'));
+  all.appendChild(el('small', null, P.boards.reduce((n, bd) => n + bd.nodes.length, 0) + ' nodes'));
+  all.title = 'The whole chain';
+  all.onclick = () => select(ui, -1);
+  film.appendChild(all);
+  P.boards.forEach((bd, i) => {
+    const g = d.boards[bd.k];
+    if (i) film.appendChild(el('span', 'arrow', '›'));
+    const b = el('button', 'pb' + (i === pstate.sel ? ' on' : ''));
+    b.title = 'Click to show this board';
+    b.appendChild(el('b', null, (i + 1) + '. ' + (g ? g.name : bd.k)));
+    const gl = bd.glyph && d.glyphs[bd.glyph];
+    b.appendChild(el('small', 'gl', gl ? '◈ ' + gl.name + (bd.glyphRank ? ' · ' + bd.glyphRank : '') : bd.nodes.length + ' nodes'));
+    b.onclick = () => select(ui, i);
+    film.appendChild(b);
+  });
+}
+
+/** Beside the board: its glyph as a medallion, its legendary node, how it is drawn. */
+function sidePlates(ui) {
+  const { side, el, P, d } = ui;
+  const i = pstate.sel;
+  const boards = i >= 0 ? [P.boards[i]] : P.boards;
+  // the glyph: the picked board's, or – showing all – every board's
+  const gp = UI.plate({ title: i >= 0 ? 'Glyph' : 'Glyphs', icon: 'glyph', cls: 'pglyph' });
+  boards.forEach((bd) => {
+    const gl = bd.glyph && d.glyphs[bd.glyph];
+    if (!gl) return;
+    const m = el('div', 'gmed');
+    m.appendChild(el('span', 'gm'));
+    const t = el('div', 'gtx');
+    t.appendChild(el('b', null, gl.name));
+    t.appendChild(el('span', null, bd.glyphRank ? 'Rank ' + bd.glyphRank : 'Glyph'));
+    m.appendChild(t);
+    hover(m, (e) => tip(e, gl.name, 'Glyph' + (bd.glyphRank ? ' · rank ' + bd.glyphRank : ''), [gl.desc, gl.bonus]));
+    gp.body.appendChild(m);
+  });
+  if (!gp.body.children.length) gp.body.appendChild(el('div', 'meta', 'No glyph on this board.'));
+  side.appendChild(gp.card);
+  // the legendary nodes taken
+  const lp = UI.plate({ title: 'Legendary', icon: 'star', cls: 'plegend' });
+  boards.forEach((bd) => {
+    const n = legendaryOf(bd, d);
+    if (!n) return;
+    const x = el('div', 'lg', '★ ' + n.name);
+    hover(x, (e) => tip(e, n.name, 'Legendary node', [n.d]));
+    lp.body.appendChild(x);
+  });
+  if (lp.body.children.length) side.appendChild(lp.card);
+  // how it is drawn
   const look = el('div', 'plook');
   [['Minimal', false], ['Icons', true]].forEach(([label, v]) => {
     const x = el('button', 'lk' + (pstate.icons === v ? ' on' : ''), label);
     x.title = v ? 'The node icons as in the game' : 'Plain squares by rarity';
-    x.onclick = () => { if (pstate.icons === v) return; pstate.icons = v; try { localStorage.setItem('paragon.icons', v ? '1' : '0'); } catch (_) {} redraw(); };
+    x.onclick = () => { if (pstate.icons === v) return; pstate.icons = v; try { localStorage.setItem('paragon.icons', v ? '1' : '0'); } catch (_) {} ui.redraw(); };
     look.appendChild(x);
   });
   side.appendChild(look);
-  side.appendChild(el('h4', null, 'Boards'));
-  let total = 0;
-  P.boards.forEach((bd, i) => {
-    const g = d.boards[bd.k];
-    const row = el('div', 'pb' + (i === pstate.sel ? ' on' : ''));
-    row.title = 'Click to highlight this board';
-    row.onclick = () => select(drawn, side, i);
-    row.appendChild(el('b', null, (i + 1) + '. ' + (g ? g.name : bd.k)));
-    const gl = bd.glyph && d.glyphs[bd.glyph];
-    if (gl) {
-      const x = el('div', 'gl', '◈ ' + gl.name + (bd.glyphRank ? ' · ' + bd.glyphRank : ''));
-      hover(x, (e) => tip(e, gl.name, 'Glyph' + (bd.glyphRank ? ' · rank ' + bd.glyphRank : ''), [gl.desc, gl.bonus]));
-      row.appendChild(x);
-    }
-    // the board's legendary node, when it is taken
-    if (g) {
-      const rows = g.rows.map((r) => String(r).split(','));
-      const leg = bd.nodes.map(([r, c]) => rows[r] && rows[r][c]).find((k) => k && d.nodes[k] && d.nodes[k].r === 4);
-      if (leg) {
-        const x = el('div', 'lg', '★ ' + d.nodes[leg].name);
-        hover(x, (e) => tip(e, d.nodes[leg].name, 'Legendary node', [d.nodes[leg].d]));
-        row.appendChild(x);
-      }
-    }
-    row.appendChild(el('div', 'cnt', bd.nodes.length + ' nodes'));
-    total += bd.nodes.length;
-    side.appendChild(row);
-  });
+  const total = boards.reduce((n, bd) => n + bd.nodes.length, 0);
   side.appendChild(el('div', 'meta', total + ' nodes taken'));
 }
 

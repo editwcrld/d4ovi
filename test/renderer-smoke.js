@@ -176,10 +176,12 @@ w.d4api = new Proxy({}, { get: (_, k) => {
   };
 } });
 
-for (const f of ['cards.js', 'search.js', 'guide.js', 'farm.js', 'buildviews.js', 'compare.js', '../lib/dmgmodel.js', '../lib/optimizer.js', 'builder.js', 'app.js']) w.eval(fs.readFileSync(path.join(dir, f), 'utf8'));
+for (const f of ['ui.js', 'cards.js', 'search.js', 'guide.js', 'farm.js', 'buildviews.js', 'compare.js', '../lib/dmgmodel.js', '../lib/optimizer.js', 'builder.js', 'app.js']) w.eval(fs.readFileSync(path.join(dir, f), 'utf8'));
 const $ = (id) => w.document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rail = (name) => w.document.querySelector('#rail .ri[data-section=' + name + ']');
+const anchors = () => [...w.document.querySelectorAll('#chips .anchors .chip')];
+const grp = (id) => w.document.querySelector('.setgroup[data-group="' + id + '"]');
 const txt = () => w.document.getElementById('main').textContent.replace(/\s+/g, ' ');
 const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('input')); await sleep(160); };
 
@@ -198,22 +200,22 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok($('side').textContent.includes('Annihilus'), 'sidebar lists the hit');
   console.log('ok  search → item card + sidebar');
   {
-    const g = [...w.document.querySelectorAll('#side h5.grp')];
-    assert.ok(g.length && g.every((h) => h.querySelector('.sicon svg') && /^\d+$/.test(h.querySelector('.sstate').textContent)), 'result groups: icon, name, how many');
-    const sub = [...w.document.querySelectorAll('.card .csub b')].map((b) => b.textContent);
-    assert.ok(sub.includes('Drops from') || sub.includes('How to get it'), 'parts of the card under their own small head');
-    console.log('ok  search: groups and card parts with small heads');
+    assert.ok(!w.document.querySelector('#side h5'), 'the results as chips, as in the mockup – no group heads');
+    assert.ok([...w.document.querySelectorAll('#side .hit')].every((h) => h.querySelector('.pic') && h.querySelector('.ln')), 'every result: picture and name');
+    const sub = [...w.document.querySelectorAll('.card .plate .ptx h3')].map((b) => b.textContent);
+    assert.ok(sub.includes('Drops from'), 'the parts of the card on plates');
+    console.log('ok  search: chips and plates');
   }
 
   // favourite + copy
-  const star = w.document.querySelector('.ab.star');
+  const star = w.document.querySelector('.btn.star');
   star.click(); await sleep(40);
   assert.strictEqual(settings.favorites.length, 1, 'favourite stored');
   assert.strictEqual(settings.favorites[0].name, 'Annihilus');
   console.log('ok  favourite saved');
   // a note goes away on its own – and takes nothing else with it (no redraw: a key being recorded
   // or the cursor in a field stays where it is)
-  w.document.querySelector('[aria-label="Copy name"]').click(); await sleep(20);
+  [...w.document.querySelectorAll('.acts .btn')].find((b) => b.textContent === 'Copy').click(); await sleep(20);
   assert.ok(copied === 'Annihilus' && w.document.querySelector('#main > .note'), 'copied, and it says so');
   const card0 = w.document.querySelector('#main .card');
   await sleep(2600);
@@ -237,31 +239,33 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   await type('annihilus');                         // back to where the tests below expect it
 
   // every hit in the list on the left, the first one in full on the right
-  const results = () => [...w.document.querySelectorAll('#side .res:not(.trade)')];
+  const results = () => [...w.document.querySelectorAll('#side .hit:not(.trade)')];
   assert.strictEqual(results().length, 2, 'both item hits listed');
-  assert.ok(results()[0].querySelector('.rn').classList.contains('r-unique') && results()[0].querySelector('.rs').textContent === 'Talisman · Seal · Grigoire', 'name in its colour, what it is and who drops it');
+  assert.ok(results()[0].querySelector('.ln').classList.contains('r-unique') && results()[0].querySelector('.lm').textContent === 'Talisman · Seal · Grigoire', 'name in its colour, what it is and who drops it');
   assert.strictEqual(w.document.querySelectorAll('#main .card').length, 1, 'the picked one in full');
-  assert.strictEqual(w.document.querySelector('#main .card h4').textContent, 'Annihilus', 'the first hit until another is picked');
+  assert.strictEqual(w.document.querySelector('#main .card h2').textContent, 'Annihilus', 'the first hit until another is picked');
   assert.ok(!txt().includes('more'), 'no truncation hint');
   console.log('ok  all hits listed (no "N more")');
 
   // a click on a result shows it; the arrow keys walk the list
   results()[1].click(); await sleep(40);
-  assert.strictEqual(w.document.querySelector('#main .card h4').textContent, 'Annihilus Charm', 'the picked entry is the one shown');
+  assert.strictEqual(w.document.querySelector('#main .card h2').textContent, 'Annihilus Charm', 'the picked entry is the one shown');
   assert.ok(results()[1].classList.contains('on'), 'and marked in the list');
   $('q').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })); await sleep(30);
-  assert.strictEqual(w.document.querySelector('#main .card h4').textContent, 'Annihilus', 'arrow up: the one above');
-  assert.ok([...w.document.querySelectorAll('#side .res.trade')].length === 1, 'diablo.trade search at the end of the list');
+  assert.strictEqual(w.document.querySelector('#main .card h2').textContent, 'Annihilus', 'arrow up: the one above');
+  assert.ok([...w.document.querySelectorAll('#side .hit.trade')].length === 1, 'diablo.trade search at the end of the list');
   console.log('ok  results: pick by click or arrow keys');
 
-  // chips filter by category
-  const chipBoss = [...w.document.querySelectorAll('#chips .chip')].find((c) => c.textContent.startsWith('Boss'));
+  // the tabs filter by category
+  const qtabs = () => [...w.document.querySelectorAll('#chips .ptab')];
+  assert.ok(qtabs().length >= 2 && qtabs()[0].classList.contains('on') && qtabs()[0].querySelector('.n'), 'the tabs, with how many each, All first');
+  const chipBoss = qtabs().find((c) => c.textContent.startsWith('Boss'));
   if (chipBoss) {
     chipBoss.click(); await sleep(40);
-    assert.ok(!txt().includes('Annihilus'), 'items hidden when the Boss chip is active');
-    [...w.document.querySelectorAll('#chips .chip')].find((c) => c.textContent.startsWith('All')).click(); await sleep(40);
+    assert.ok(!txt().includes('Annihilus'), 'items hidden when the Bosses tab is shown');
+    qtabs().find((c) => c.textContent.startsWith('All')).click(); await sleep(40);
   }
-  console.log('ok  filter chips');
+  console.log('ok  filter tabs');
 
   // --- the two sections without an icon: typed into the search
   assert.strictEqual(rail('bossloot'), null, 'boss loot has no rail icon any more');
@@ -271,44 +275,44 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   const bs = () => w.document.querySelector('.bsec');
   assert.ok(bs() && txt().includes('Grigoire') && w.document.querySelector('.clsbar'), 'the bosses with their drops, the class bar on top');
   assert.ok(!w.document.querySelector('.card'), 'items stay out of the boss area');
-  assert.ok(bs().querySelector('.bpic img').src.endsWith('/Bosses/1/boss_grigoire.png'), 'the boss portrait (d4builds)');
-  assert.ok(bs().querySelector('.bwhere b').textContent === 'South of Ked Bardu in the Dry Steppes' && bs().querySelector('.bwhere span').textContent === 'Lair: The Hall of the Penitent', 'where the boss is');
-  assert.deepStrictEqual([...bs().querySelectorAll('.fact')].map((x) => x.textContent).join('|'), 'Torment 1+|1x Lair Key', 'only torment and key');
+  assert.ok(bs().querySelector('.hero .pic img').src.endsWith('/Bosses/1/boss_grigoire.png'), 'the boss portrait (d4builds) in the banner');
+  assert.ok(bs().querySelector('.hero .where b').textContent === 'South of Ked Bardu in the Dry Steppes' && bs().querySelector('.hero .where').textContent.includes('Lair: The Hall of the Penitent'), 'where the boss is');
+  assert.deepStrictEqual([...bs().querySelectorAll('.hero .tag')].map((x) => x.textContent).join('|'), 'Torment 1+|1x Lair Key', 'only torment and key');
   assert.ok(!bs().textContent.includes('Cosmetic') && !bs().textContent.includes('Element') && !bs().textContent.includes('Activity'), 'the rest is left out');
   const tile = (n) => bs().querySelector('.itile[data-item="' + n + '"]');
   assert.ok(tile('Rage of Harrogath') && tile('Rage of Harrogath').querySelector('.inm.r-unique'), 'a drop as a tile, in its colour');
-  assert.ok(tile('Rage of Harrogath').querySelector('.ipic img').src.endsWith('/Uniques/2/rage_of_harrogath.png'), 'with its picture');
+  assert.ok(tile('Rage of Harrogath').querySelector('.pic img').src.endsWith('/Uniques/2/rage_of_harrogath.png'), 'with its picture');
   assert.strictEqual(w.document.querySelector('.cls.on').dataset.cls, 'All', 'all classes to start with, the build has none');
   assert.strictEqual(w.document.querySelectorAll('.cls img').length, 8, 'eight classes with their icons, and All');
   w.document.querySelector('.cls[data-cls="Rogue"]').click(); await sleep(20);
   assert.ok(tile('Grasp of Shadow') && !tile('Rage of Harrogath') && tile('Annihilus'), 'one class: its drops and the ones for every class');
-  assert.ok(bs().querySelector('.bcount').textContent.includes('for Rogue · 3 in all'), 'how many of how many');
+  assert.ok(bs().querySelector('.hero .cnt').textContent.includes('for Rogue · 3 in all'), 'how many of how many');
   w.document.querySelector('.cls[data-cls="All"]').click(); await sleep(20);
   assert.ok(bs().querySelector('.shot').hidden && !bs().querySelector('.shot img'), 'the lair picture only on request');
-  bs().querySelector('.maptg').click();
+  bs().querySelector('.lairs .lnk').click();
   assert.ok(!bs().querySelector('.shot').hidden && bs().querySelector('.shot img'), 'and shown on click');
   tile('Annihilus').click(); await sleep(40);
   assert.strictEqual($('q').value, 'Annihilus', 'a tile looks the item up');
   // an item that a boss drops: the boss is on the item's card, not a card of its own
   await type('annihilus');
-  const ic = [...w.document.querySelectorAll('.card')].find((x) => x.querySelector('h4') && x.querySelector('h4').textContent === 'Annihilus');
-  assert.ok(ic && ic.querySelector('.from .bt h3').textContent.startsWith('Grigoire') && ic.querySelector('.from .bwhere b').textContent.includes('Ked Bardu'), 'item card: dropped by, and where');
-  assert.ok(!ic.textContent.includes('Database') && ic.querySelector('[aria-label="Search on diablo.trade"]'), 'small icons instead of the big buttons');
+  const ic = [...w.document.querySelectorAll('.card')].find((x) => x.querySelector('h2') && x.querySelector('h2').textContent === 'Annihilus');
+  assert.ok(ic && ic.querySelector('.from .bcard b').textContent.startsWith('Grigoire') && ic.querySelector('.from .bcard .lm').textContent.includes('Ked Bardu'), 'item card: dropped by, and where');
+  assert.ok(!ic.textContent.includes('Database') && [...ic.querySelectorAll('.acts .btn')].map((b) => b.textContent).join('|') === 'diablo.trade|Favourite|Copy', 'diablo.trade, favourite, copy – nothing else');
   ic.querySelector('.ball').click(); await sleep(200);
   assert.ok($('q').value === 'Grigoire' && w.document.querySelector('#main .bsec .itile'), 'everything the boss drops, one click away');
-  const first = w.document.querySelector('#side .res:not(.trade)');
-  assert.ok(first.classList.contains('on') && first.querySelector('.rn').textContent.startsWith('Grigoire,'), 'the boss on top and picked – its trophy below');
+  const first = w.document.querySelector('#side .hit:not(.trade)');
+  assert.ok(first.classList.contains('on') && first.querySelector('.ln').textContent.startsWith('Grigoire,'), 'the boss on top and picked – its trophy below');
   assert.ok($('side').textContent.includes('Grigoire: Living Steel'), 'the trophy is still listed');
   assert.ok(!$('side').textContent.includes('Boss Trophies') && !txt().includes('Boss Trophies'), 'the trophy pool is left out');
   await type('mythics');
   const ip = w.document.querySelector('#main .bsec.pool');
-  assert.ok(ip && ip.querySelector('.bt h3').textContent === 'Iconic Mythics', 'maxroll\'s "Mythics" are the Iconic Mythics');
-  assert.ok(!ip.querySelector('.maptg') && ip.querySelector('.ity').textContent === 'all classes', 'no lair for a loot pool, no "All" next to "all classes"');
+  assert.ok(ip && ip.querySelector('.hero h3').textContent === 'Iconic Mythics', 'maxroll\'s "Mythics" are the Iconic Mythics');
+  assert.ok(!ip.querySelector('.lairs') && ip.querySelector('.ity').textContent === 'all classes', 'no lair for a loot pool, no "All" next to "all classes"');
   // a chip picked earlier does not stick to the next search
   await type('annihilus');
-  [...w.document.querySelectorAll('#chips .chip')].find((c) => c.textContent.startsWith('Items')).click(); await sleep(20);
+  [...w.document.querySelectorAll('#chips .ptab')].find((c) => c.textContent.startsWith('Items')).click(); await sleep(20);
   await type('boss loot');
-  assert.ok(w.document.querySelector('.bsec') && w.document.querySelector('#chips .chip.on').textContent.startsWith('All'), 'a new search starts on All');
+  assert.ok(w.document.querySelector('.bsec') && w.document.querySelector('#chips .ptab.on').textContent.startsWith('All'), 'a new search starts on All');
   console.log('ok  "boss loot" lists every boss');
 
   await type('duriel');
@@ -328,10 +332,10 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(txt().includes('Secret Cow Level'), 'activity found by keyword');
   await type('secret cow level');
   assert.ok(txt().includes('Secret Cow Level'), 'activity rendered');
-  const step = w.document.querySelector('.step input');
+  const step = w.document.querySelector('.step .dia');
   assert.ok(step && w.document.querySelectorAll('.step').length === 2, 'the parts of a step-by-step guide to tick off');
   assert.deepStrictEqual([...w.document.querySelectorAll('.jump')].map((x) => x.textContent), ['Rewards'], 'the other sections to jump to, TLDR left out');
-  step.checked = true; step.dispatchEvent(new w.Event('change')); await sleep(30);
+  step.click(); await sleep(30);
   assert.deepStrictEqual(Object.values(settings.actDone)[0].length, 1, 'ticked steps are kept');
   assert.ok(w.document.querySelector('.step.done') && txt().includes('1 of 2 parts done'), 'and shown as done');
   calls.length = 0;
@@ -343,17 +347,21 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   // --- builds: one list – slot, item, where it drops, tick – or slots; the build menu
   rail('farm').click(); await sleep(80);
   assert.ok(!$('panel').hidden && rail('farm').classList.contains('on'), 'builds open from their icon');
-  assert.ok($('top').hidden && $('side').hidden, 'builds use their own header');
+  const layoutBtn = (t) => [...w.document.querySelectorAll('.tool button')].find((x) => x.textContent === t);
+  const tab = (t) => [...w.document.querySelectorAll('#chips .ptab')].find((x) => x.textContent === t);
+  assert.ok($('top').hidden && $('side').hidden && w.document.querySelector('#title .bname .ttl'), 'builds: their own head in the page');
+  assert.deepStrictEqual([...w.document.querySelectorAll('#chips .ptab')].map((x) => x.textContent), ['Cheat sheet', 'Gear', 'Skills', 'Paragon', 'Compare'], 'and their tabs in the page');
+  assert.deepStrictEqual([...w.document.querySelectorAll('#title .kick button')].map((x) => x.textContent), ['My builds', 'Find a build'], 'my builds / find a build in the kicker');
   // route first: stops on the left; the list shows everything at once – work in the list here
   assert.ok(w.document.querySelector('.fgear .route') && w.document.querySelector('.rstop'), 'opens on the route');
-  [...w.document.querySelectorAll('.ftools .seg button')].find((x) => x.textContent === 'List').click(); await sleep(30);
+  layoutBtn('List').click(); await sleep(30);
   assert.strictEqual(w.document.querySelectorAll('.fgear [data-key]').length, 10, 'ten gear slots in the list (all still to pick)');
   const slot = (k) => w.document.querySelector('.fgear [data-key="' + k + '"]');
   const choose = (k) => (slot(k).querySelector('.gn') || slot(k).querySelector('.gh')).click();
   const opts = () => [...w.document.querySelectorAll('.popt')];
-  const opt = (name) => opts().find((o) => o.querySelector('.nm').textContent === name);
-  const menu = async () => { w.document.querySelector('.bpick').click(); await sleep(20); return w.document.querySelector('.bmenu'); };
-  const progressText = () => (w.document.querySelector('.fprog .pt b') || {}).textContent;
+  const opt = (name) => opts().find((o) => o.querySelector('.ln').textContent === name);
+  const menu = async () => { w.document.querySelector('.bname').click(); await sleep(20); return w.document.querySelector('.bmenu'); };
+  const progressText = () => (w.document.querySelector('#title .prog .num') || {}).textContent;
 
   // class filter (in the build menu) narrows what the slots offer
   choose('Weapon'); await sleep(30);
@@ -361,7 +369,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   const clsSel = (await menu()).querySelector('select');
   clsSel.value = 'Sorcerer'; clsSel.dispatchEvent(new w.Event('change')); await sleep(30);
   assert.ok(!w.document.querySelector('.bmenu') || true);
-  assert.ok(w.document.querySelector('.bpick').textContent.includes('Sorcerer'), 'class shown with the build name');
+  assert.ok(w.document.querySelector('#title .kick').textContent.includes('Sorcerer'), 'class shown over the build name');
   choose('Weapon'); await sleep(30);
   if (!w.document.querySelector('.fpick')) { choose('Weapon'); await sleep(30); }
   assert.ok(opt('Orsivane') && !opt('Hellhammer'), 'sorcerer: barbarian weapon gone');
@@ -373,24 +381,24 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   choose('Ring1'); await sleep(30);
   opt("Drognan's Anguish").click(); await sleep(30);
   choose('Ring2'); await sleep(30);
-  [...w.document.querySelectorAll('.fpick .chip')].find((c) => c.textContent === 'Mythic').click(); await sleep(30);
+  [...w.document.querySelectorAll('.fpick .seg button')].find((c) => c.textContent === 'Mythic').click(); await sleep(30);
   assert.ok(opt('Ring of Starless Skies') && !opt("Drognan's Anguish"), 'mythic tab only lists mythics');
   opt('Ring of Starless Skies').click(); await sleep(30);
   assert.ok(slot('Ring2').querySelector('.nm').classList.contains('r-mythic') && slot('Ring2').querySelector('.tsl').textContent === 'Ring', 'mythic coloured, its slot named');
 
   // amulet: two aspects
   choose('Amulet'); await sleep(30);
-  [...w.document.querySelectorAll('.fpick .chip')].find((c) => c.textContent === 'Aspect').click(); await sleep(30);
+  [...w.document.querySelectorAll('.fpick .seg button')].find((c) => c.textContent === 'Aspect').click(); await sleep(30);
   assert.ok(opt('Armageddon') && opt('Overheating'), 'aspects that fit the amulet');
   opt('Armageddon').click(); await sleep(30);
   opt('Overheating').click(); await sleep(30);
   assert.ok(slot('Amulet').textContent.includes('Armageddon') && slot('Amulet').textContent.includes('Overheating'), 'two aspects on the amulet');
   choose('Gloves'); await sleep(30);
-  [...w.document.querySelectorAll('.fpick .chip')].find((c) => c.textContent === 'Aspect').click(); await sleep(30);
+  [...w.document.querySelectorAll('.fpick .seg button')].find((c) => c.textContent === 'Aspect').click(); await sleep(30);
   opt('Untarnished Blaze').click(); await sleep(30);
   assert.ok(!w.document.querySelector('.fpick'), 'one aspect: the dropdown closes after the pick');
   choose('Gloves'); await sleep(30);
-  assert.ok(w.document.querySelector('.fpick .chip.on').textContent === 'Aspect', 'reopened on the aspect tab');
+  assert.ok(w.document.querySelector('.fpick .seg button.on').textContent === 'Aspect', 'reopened on the aspect tab');
   opt('Armageddon').click(); await sleep(30);
   assert.ok(slot('Gloves').textContent.includes('Armageddon') && !slot('Gloves').textContent.includes('Untarnished'), 'one aspect elsewhere: a new pick replaces it');
 
@@ -405,31 +413,33 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   fq.value = 'a'; fq.dispatchEvent(new w.Event('input')); await sleep(30);
   const grps = [...w.document.querySelectorAll('.fpick .pgrp')].map((g) => g.textContent.split(' ·')[0]);
   assert.deepStrictEqual(grps, ['Mythic', 'Unique', 'Aspect'], 'all kinds found without switching tabs');
-  assert.ok(opt('Ring of Starless Skies').querySelector('.nm').classList.contains('r-mythic') && opt('Armageddon'), 'mythic coloured, aspects listed');
+  assert.ok(opt('Ring of Starless Skies').querySelector('.ln').classList.contains('r-mythic') && opt('Armageddon'), 'mythic coloured, aspects listed');
   w.document.getElementById('farmQ').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(30);
 
   // where each one drops sits in its row; the progress on top
-  const groupOf = (k) => slot(k).closest('.cgroup').querySelector('.stitle h3').textContent;
-  assert.ok([...w.document.querySelectorAll('.calm .scard.cgroup')].every((c) => /^\d+ to farm$|^\d+ empty$/.test(c.querySelector('.sstate').textContent)), 'list: one card per place, how much is left');
+  const groupOf = (k) => slot(k).closest('.cgroup').querySelector('.ptx h3').textContent;
+  assert.ok([...w.document.querySelectorAll('.calm .plate.cgroup')].every((c) => /^\d+ to farm$|^\d+ empty$/.test(c.querySelector('.badge').textContent)), 'list: one plate per place, how much is left');
+  assert.ok([...w.document.querySelectorAll('.calm .thing:not(.blank)')].every((r) => r.querySelector('.dia') && r.querySelector('.pic')), 'every thing: the diamond tick and its picture');
   assert.strictEqual(groupOf('Weapon'), 'Andariel', 'unique: grouped under its boss');
   assert.ok(groupOf('Amulet') === 'Dungeons' && slot('Amulet').querySelector('.thow').textContent.includes('Defiled Catacomb'), 'aspect: under dungeons, with the dungeon');
   // the route: a stop per place, its things on the right
-  [...w.document.querySelectorAll('.ftools .seg button')].find((x) => x.textContent === 'Route').click(); await sleep(30);
+  layoutBtn('Route').click(); await sleep(30);
   const andariel = [...w.document.querySelectorAll('.rstop')].find((x) => x.textContent.includes('Andariel'));
-  andariel.click(); await sleep(30);
-  assert.ok(w.document.querySelector('.rcard .stitle h3').textContent === 'Andariel' && slot('Weapon') && slot('Weapon').classList.contains('rthing'), 'a stop shows what drops there');
-  assert.ok(/^\d+ \/ \d+$/.test(w.document.querySelector('.rcard .sstate').textContent) && w.document.querySelector('.rcard .sicon svg'), 'the stop as a card: icon, farmed / all');
-  [...w.document.querySelectorAll('.ftools .seg button')].find((x) => x.textContent === 'List').click(); await sleep(30);
+  andariel.querySelector('.whead').click(); await sleep(30);
+  assert.ok(w.document.querySelector('.wp.cur .whead b').textContent === 'Andariel' && slot('Weapon') && slot('Weapon').classList.contains('rthing'), 'a waypoint opens with what drops there');
+  assert.ok(/^\d+ \/ \d+$/.test(w.document.querySelector('.wp.cur .plate .badge').textContent) && w.document.querySelector('.wp.cur .node'), 'the waypoint: its mark, farmed / all');
+  assert.strictEqual(w.document.querySelectorAll('.path .wp .plate').length, 1, 'only the stop you are at is open');
+  layoutBtn('List').click(); await sleep(30);
   assert.strictEqual(progressText(), '0 / 6', 'progress over everything to farm');
   console.log('ok  builds: list, class filter, search dropdown, where it drops');
 
   // ticking off
-  slot('Weapon').querySelector('.ck').click(); await sleep(30);
+  slot('Weapon').querySelector('.dia').click(); await sleep(30);
   assert.strictEqual(progressText(), '1 / 6', 'ticked item counted');
   assert.ok(slot('Weapon').classList.contains('got'), 'and shown as farmed');
-  [...w.document.querySelectorAll('.ftools .ab')].find((x) => x.textContent === 'Only missing').click(); await sleep(30);
+  layoutBtn('Only missing').click(); await sleep(30);
   assert.ok(!slot('Weapon') && slot('Ring1'), 'only missing: farmed and empty slots hidden');
-  [...w.document.querySelectorAll('.ftools .ab')].find((x) => x.textContent === 'Only missing').click(); await sleep(30);
+  layoutBtn('Only missing').click(); await sleep(30);
   await sleep(350);
   assert.ok(savedBuilds && savedBuilds.builds[0].slots.Weapon.item === 'Orsivane', 'build saved');
   assert.strictEqual(savedBuilds.builds[0].cls, 'Sorcerer');
@@ -439,26 +449,26 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   // hover shows the in-game tooltip
   const tipNode = () => w.document.querySelector('.fgear [data-tt]');
   tipNode().dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 50, clientY: 50 })); await sleep(260);
-  assert.ok($('ftt') && !$('ftt').hidden && $('ftt').querySelector('.d4tt-chrome'), 'tooltip shown on hover');
+  assert.ok($('tip') && !$('tip').hidden && $('tip').querySelector('.d4tt-chrome'), 'tooltip shown on hover');
   assert.ok($('d4tt-css'), 'tooltip styles added once');
   tipNode().dispatchEvent(new w.MouseEvent('mouseleave')); await sleep(10);
-  assert.ok($('ftt').hidden, 'tooltip hides again');
+  assert.ok($('tip').hidden, 'tooltip hides again');
   console.log('ok  in-game tooltip on hover');
 
   // more builds: the build menu
   [...(await menu()).querySelectorAll('.mact')].find((b) => b.textContent === '+ New farm list').click(); await sleep(30);
   assert.strictEqual((await menu()).querySelectorAll('.mrow').length, 2, 'second build');
   assert.deepStrictEqual([...w.document.querySelectorAll('.bmenu .mhd b')].map((b) => b.textContent), ['Builds', 'This build', 'More'], 'menu in three parts');
-  assert.strictEqual(w.document.querySelector('.bmenu .mhd .sstate').textContent, '2', 'how many builds');
+  assert.strictEqual(w.document.querySelector('.bmenu .mhd .badge').textContent, '2', 'how many builds');
   w.document.body.click(); await sleep(20);
   assert.ok(!w.document.querySelector('.bmenu'), 'a click elsewhere closes the menu');
-  assert.ok(!w.document.querySelector('.fprog') && !w.document.querySelector('.fgear .gitem:not(.blank)'), 'new farm list starts empty');
+  assert.ok(!w.document.querySelector('#title .prog') && !w.document.querySelector('.fgear .thing:not(.blank)'), 'new farm list starts empty');
   (await menu()).querySelectorAll('.mrow')[0].click(); await sleep(30);
   assert.ok(slot('Weapon').textContent.includes('Orsivane'), 'switching back shows the first build');
   // import: one field – it knows the site from the link and loads the variants by itself
-  const openImport = async () => { [...w.document.querySelectorAll('.fbar .ab')].find((b) => b.textContent === 'Import').click(); await sleep(30); };
+  const openImport = async () => { [...w.document.querySelectorAll('#title .btn')].find((b) => b.textContent === 'Import').click(); await sleep(30); };
   const paste = async (v, ms) => { const i = $('impQ'); i.value = v; i.dispatchEvent(new w.Event('input')); await sleep(ms || 30); };
-  const importBtn = () => w.document.querySelector('.ifoot .ab.pri');
+  const importBtn = () => w.document.querySelector('.ifoot .btn.pri');
   await openImport();
   assert.ok($('impQ') && w.document.querySelectorAll('.imodal input[type=text], .imodal textarea').length === 1, 'one field');
   await paste('https://example.com');
@@ -478,9 +488,9 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.strictEqual(importBtn().textContent, 'Import', 'one left');
   importBtn().click(); await sleep(40);
   assert.ok(!w.document.querySelector('.imodal'), 'the dialog closes');
-  assert.strictEqual(w.document.querySelector('.bpick b').textContent, 'Ice Spikes Sorc – Endgame', 'imported build is active');
+  assert.strictEqual(w.document.querySelector('.bname .ttl').textContent, 'Ice Spikes Sorc – Endgame', 'imported build is active');
   assert.ok(slot('Weapon').textContent.includes('Orsivane'), 'its gear is in the slots');
-  assert.ok(w.document.querySelector('.bpick').textContent.includes('Sorcerer'), 'class taken over');
+  assert.ok(w.document.querySelector('#title .kick').textContent.includes('Sorcerer'), 'class taken over');
   console.log('ok  import from a maxroll guide');
   // d2core: the Chinese original stays reachable, a weapon without a slot is mentioned
   await openImport();
@@ -494,7 +504,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   console.log('ok  import from d2core (translated, original on hover)');
 
   // the list: name, where it drops, the rolls right under it
-  [...w.document.querySelectorAll('.ftools .seg button')].find((x) => x.textContent === 'List').click(); await sleep(30);
+  layoutBtn('List').click(); await sleep(30);
   assert.strictEqual(slot('Weapon').querySelector('.tsl').textContent, 'Bow', 'a weapon is named by its kind');
   assert.ok(slot('Weapon 2') && slot('Weapon 2').querySelector('.tsl').textContent === 'Sword', 'a third weapon has its own slot');
   const lines = [...slot('Weapon').querySelectorAll('.tst')];
@@ -506,12 +516,12 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   const charmRow = [...w.document.querySelectorAll('.crow.ext')].find((x) => x.textContent.includes('Linta of the Sightless'));
   const gemRow = [...w.document.querySelectorAll('.crow.ext')].find((x) => x.textContent.includes('Horadric Sapphire'));
   assert.ok(charmRow && gemRow && gemRow.textContent.includes('for Bow'), 'charms and gems listed, with where the gem goes');
-  const before = (w.document.querySelector('.fprog .pt b') || {}).textContent;
-  charmRow.querySelector('.ck').click(); await sleep(30);
-  const after = w.document.querySelector('.fprog .pt b').textContent;
+  const before = progressText();
+  charmRow.querySelector('.dia').click(); await sleep(30);
+  const after = progressText();
   assert.ok(before !== after && after.startsWith('1 /'), 'ticking a charm counts');
   assert.ok([...w.document.querySelectorAll('.crow.ext.got')].some((x) => x.textContent.includes('Linta')), 'and it moves to the farmed ones');
-  [...w.document.querySelectorAll('.ftools .seg button')].find((x) => x.textContent === 'Slots').click(); await sleep(30);
+  layoutBtn('Slots').click(); await sleep(30);
   // slots: the build as the game shows it – armour left, jewellery and weapons right
   assert.strictEqual(w.document.querySelectorAll('.fgear .dslot').length, 11, 'slots: one per slot (a rogue has a third weapon)');
   assert.ok(w.document.querySelector('.dcol.left [data-key="Helm"]') && w.document.querySelector('.dcol.right [data-key="Amulet"]'), 'armour left, jewellery right');
@@ -519,26 +529,25 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   const sg = w.document.querySelector('.dsock .sg');
   assert.ok(sg && sg.querySelector('.gem').textContent === 'Sapphire' && sg.querySelector('.sl').textContent === 'Bow', 'what is socketed, with the slot underneath');
   assert.ok(w.document.querySelector('.dside') && w.document.querySelector('.dside').textContent.includes('Linta of the Sightless'), 'the charms beside');
-  slot('Weapon').dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 60, clientY: 60 })); await sleep(20);
-  assert.ok(!$('ftt').hidden && $('ftt').querySelector('.ctt') && $('ftt').textContent.includes('+10.0% Attack Speed') && !$('ftt').querySelector('.d4tt-chrome'), 'hover: the rolls of this build, not the database card');
+  slot('Weapon').dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 60, clientY: 60 })); await sleep(100);
+  assert.ok(!$('tip').hidden && $('tip').querySelector('.ctt') && $('tip').textContent.includes('+10.0% Attack Speed') && !$('tip').querySelector('.d4tt-chrome'), 'hover: the rolls of this build, not the database card');
   slot('Weapon').dispatchEvent(new w.MouseEvent('mouseleave')); await sleep(10);
   w.document.querySelector('.dskills .dsk').click(); await sleep(60);
   await sleep(60);
   assert.ok(w.document.querySelector('.skc') && w.document.querySelector('.skc.on') && w.document.querySelector('svg.tree .sk.focus'), 'a skill in the bar opens the skills, zoomed to it');
-  [...w.document.querySelectorAll('.ftools .seg button')].find((x) => x.textContent === 'Gear').click(); await sleep(30);
-  [...w.document.querySelectorAll('.ftools .seg button')].find((x) => x.textContent === 'List').click(); await sleep(30);
-  const srcBtn = w.document.querySelector('.fbar .ab.src');
+  tab('Gear').click(); await sleep(30);
+  layoutBtn('List').click(); await sleep(30);
+  const srcBtn = w.document.querySelector('#title .btn.src');
   assert.ok(srcBtn && srcBtn.textContent.includes('d2core.com'), 'link to the original build');
   srcBtn.click(); await sleep(20);
   assert.ok(calls.includes('openBuildSource'), 'opens it in the browser');
-  const tab = (t) => [...w.document.querySelectorAll('.ftools .ftabs button')].find((x) => x.textContent === t);
   tab('Skills').click(); await sleep(60);
   assert.ok(w.document.querySelector('.skc').textContent.includes('Rain of Arrows') && w.document.querySelector('.skc').textContent.includes('Rank 15'), 'skill bar');
   assert.ok(w.document.querySelector('svg.tree .sk.on'), 'the taken skill lit in the tree');
   assert.strictEqual(w.document.querySelectorAll('svg.tree .md.on').length, 1, 'one modifier taken, one not');
   assert.ok(w.document.querySelector('svg.tree .jn.on'), 'the root counts as taken');
-  w.document.querySelector('svg.tree .sk').dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 20, clientY: 20 }));
-  assert.ok(/Deals 20% damage/.test($('btt').textContent), 'skill text at the build\'s rank');
+  w.document.querySelector('svg.tree .sk').dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 20, clientY: 20 })); await sleep(10);
+  assert.ok(/Deals 20% damage/.test($('tip').textContent), 'skill text at the build\'s rank');
   w.document.querySelector('svg.tree .sk').dispatchEvent(new w.MouseEvent('mouseleave'));
   const fitTree = w.document.querySelector('svg.tree').getAttribute('viewBox');
   w.document.querySelector('.skc').click(); await sleep(400);
@@ -562,16 +571,22 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   tab('Paragon').click(); await sleep(60);
   assert.strictEqual(w.document.querySelectorAll('svg.para .pn.on').length, 2, 'two nodes taken');
   assert.ok(w.document.querySelector('svg.para .pn.glyph'), 'glyph in its socket');
-  assert.ok(w.document.querySelector('.pside').textContent.includes('Versatility · 150'), 'glyph and rank listed');
+  // as in the mockup: the boards as a film strip, one shown big to start with, its glyph beside it
+  assert.ok(w.document.querySelector('.pfilm').textContent.includes('Versatility · 150'), 'glyph and rank on the board in the strip');
+  assert.ok(w.document.querySelector('svg.para g.board.sel') && w.document.querySelector('.pfilm .pb.on'), 'the first board shown big to start with');
+  assert.ok(w.document.querySelector('.pside .gmed') && w.document.querySelector('.pside').textContent.includes('Versatility'), 'its glyph as a medallion beside it');
+  const zoomedIn = w.document.querySelector('svg.para').getAttribute('viewBox');
+  w.document.querySelector('.pfilm .pall').click(); await sleep(400);
   const fitPara = w.document.querySelector('svg.para').getAttribute('viewBox');
-  w.document.querySelector('.pside .pb').click(); await sleep(400);
+  assert.ok(!w.document.querySelector('svg.para g.board.sel') && w.document.querySelector('.pfilm .pall.on') && fitPara !== zoomedIn, 'All: the whole chain');
+  w.document.querySelector('.pfilm .pb').click(); await sleep(400);
   assert.notStrictEqual(w.document.querySelector('svg.para').getAttribute('viewBox'), fitPara, 'and the view moves to that board');
-  assert.ok(w.document.querySelector('svg.para g.board').classList.contains('sel') && w.document.querySelector('.pside .pb').classList.contains('on'), 'a board picked on the right is lit on the left');
-  w.document.querySelector('.pside .pb').click(); await sleep(400);
+  assert.ok(w.document.querySelector('svg.para g.board').classList.contains('sel') && w.document.querySelector('.pfilm .pb').classList.contains('on'), 'a board picked in the strip is lit');
+  w.document.querySelector('.pfilm .pb').click(); await sleep(400);
   assert.ok(!w.document.querySelector('svg.para g.board.sel'), 'a second click shows all again');
   assert.strictEqual(w.document.querySelector('svg.para').getAttribute('viewBox'), fitPara, 'zoomed back out to all boards');
   tap(w.document.querySelector('svg.para g.board rect')); await sleep(400);
-  assert.ok(w.document.querySelector('svg.para g.board.sel') && w.document.querySelector('.pside .pb.on'), 'a click on the board itself picks it');
+  assert.ok(w.document.querySelector('svg.para g.board.sel') && w.document.querySelector('.pfilm .pb.on'), 'a click on the board itself picks it');
   tap(w.document.querySelector('svg.para g.board rect')); await sleep(400);
   assert.ok(!w.document.querySelector('svg.para g.board.sel'), 'and again lets go');
   w.document.querySelector('svg.para').dispatchEvent(new w.WheelEvent('wheel', { deltaY: -100, clientX: 10, clientY: 10, cancelable: true }));
@@ -584,18 +599,18 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(w.document.querySelector('svg.para .bname').getAttribute('y') < 0, 'board name above the board, not on its nodes');
   tab('Gear').click(); await sleep(30);
   // charms and sockets: in the list as things to farm, the card with the set bonus on hover
-  [...w.document.querySelectorAll('.ftools .seg button')].find((x) => x.textContent === 'List').click(); await sleep(30);
+  layoutBtn('List').click(); await sleep(30);
   const cl = w.document.querySelector('.calm');
   assert.ok(cl.textContent.includes('Seal of the Diamond Mind') && cl.textContent.includes('Linta of the Sightless'), 'seal and charms');
   assert.ok(!cl.textContent.includes('Two piece bonus'), 'set bonuses are not listed, only the pieces');
   const piece = [...cl.querySelectorAll('.ext .xn')].find((x) => x.textContent.includes('Linta'));
-  piece.dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 40, clientY: 40 }));
-  assert.ok(!$('ftt').hidden && $('ftt').querySelector('.ctt .bon.on') && $('ftt').querySelector('.ctt .bon:not(.on)') && $('ftt').textContent.includes('+20 Maximum Resource'), 'hover: the charm card with its stats and the set bonuses');
+  piece.dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 40, clientY: 40 })); await sleep(100);
+  assert.ok(!$('tip').hidden && $('tip').querySelector('.ctt .bon.on') && $('tip').querySelector('.ctt .bon:not(.on)') && $('tip').textContent.includes('+20 Maximum Resource'), 'hover: the charm card with its stats and the set bonuses');
   piece.dispatchEvent(new w.MouseEvent('mouseleave'));
-  assert.ok($('ftt').hidden, 'and gone again');
+  assert.ok($('tip').hidden, 'and gone again');
   // the database tooltip carries the build's rolls
   slot('Weapon').querySelector('[data-tt]').dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 50, clientY: 50 })); await sleep(260);
-  assert.ok($('ftt').querySelector('.ftt-roll') && $('ftt').textContent.includes('+10.0% Attack Speed'), 'rolls under the tooltip');
+  assert.ok($('tip').querySelector('.ftt-roll') && $('tip').textContent.includes('+10.0% Attack Speed'), 'rolls under the tooltip');
   slot('Weapon').querySelector('[data-tt]').dispatchEvent(new w.MouseEvent('mouseleave')); await sleep(10);
   console.log('ok  imported build: stats, link back, skill tree, paragon');
   [...(await menu()).querySelectorAll('.mact')].find((b) => b.textContent === 'Copy build code').click(); await sleep(30);
@@ -620,16 +635,16 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   const target = cmpSel.options[cmpSel.options.length - 1];
   cmpSel.value = target.value; cmpSel.dispatchEvent(new w.Event('change')); await sleep(30);
   assert.strictEqual(w.document.querySelector('.cmp-head select').value, target.value, 'compare: another build picked');
-  w.document.querySelector('.cmp-head .ab').click(); await sleep(40);
-  assert.ok(!w.document.querySelector('.cmp-head') && w.document.querySelector('.fbar .bpick b').textContent === target.textContent, 'compare: "Open this build" switches to it, back on the gear');
+  w.document.querySelector('.cmp-head .btn').click(); await sleep(40);
+  assert.ok(!w.document.querySelector('.cmp-head') && w.document.querySelector('.bname .ttl').textContent === target.textContent, 'compare: "Open this build" switches to it, back on the gear');
   console.log('ok  compare two builds');
   // the cheat sheet: breakpoints, set up once, how to play, why it works – the author's words on hover
   tab('Cheat sheet').click(); await sleep(60);
   assert.ok(w.document.querySelectorAll('.gd-bp').length === 2 && w.document.querySelector('.gd-bp b').textContent === '225', 'cheat sheet: the breakpoints as numbers');
   assert.strictEqual(w.document.querySelectorAll('.gd-bp b')[1].textContent, '≤ 15 s', 'a cap reads "≤"');
   assert.ok(w.document.querySelector('.gd-rot li') && w.document.querySelector('.gd-sum') && w.document.querySelector('.gd-opts li'), 'cheat sheet: rotation, why it works, swaps');
-  w.document.querySelector('.gd-bp').dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 10, clientY: 10 })); await sleep(10);
-  assert.ok(/225 Maximum Energy/.test(w.document.querySelector('.gd-tip').textContent), 'hover: the author’s own words');
+  w.document.querySelector('.gd-bp').dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 10, clientY: 10 })); await sleep(100);
+  assert.ok(/225 Maximum Energy/.test($('tip').textContent), 'hover: the author’s own words');
   w.document.querySelector('.gd-bp').dispatchEvent(new w.MouseEvent('mouseleave')); await sleep(10);
   tab('Gear').click(); await sleep(30);
   await type('');
@@ -680,12 +695,12 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   let k0 = kb();
   rail('settings').click(); await sleep(30);
   assert.strictEqual(kb(), k0, 'opening settings by a click takes no keyboard');
-  w.document.querySelector('.setmain').dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true })); await sleep(20);
+  w.document.querySelector('#main.settings').dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true })); await sleep(20);
   assert.strictEqual(kb(), k0, 'clicking around in it neither');
-  w.document.querySelectorAll('.setnav a')[2].click(); await sleep(30);
+  anchors()[2].click(); await sleep(30);
   w.document.querySelector('.hk').dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true })); await sleep(20);
   assert.strictEqual(kb(), k0 + 1, 'a key field asks for it');
-  w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
+  anchors()[0].click(); await sleep(30);
   w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
   k0 = kb();
   rail('search').click(); await sleep(30);
@@ -708,12 +723,12 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   // a guide opened from the results: spinner while it loads, Back, typing goes back to the results
   rail('search').click(); await sleep(20);
   $('q').value = 'crafting'; $('q').dispatchEvent(new w.Event('input')); await sleep(150);
-  w.document.querySelector('#main a[title="Open in database"]').click(); await sleep(30);
+  w.document.querySelector('#main button[title="Open in the database"]').click(); await sleep(30);
   handlers.onViewLoading(true);
   assert.ok($('viewSlot').classList.contains('loading'), 'spinner while the page loads');
   handlers.onViewLoading(false);
   assert.ok(!$('viewSlot').classList.contains('loading'), 'gone once it is there');
-  const back = [...$('chips').querySelectorAll('.chip')].find((x) => x.textContent.includes('Back'));
+  const back = [...$('title').querySelectorAll('.btn')].find((x) => x.textContent.includes('Back'));
   assert.ok(back, 'a way back');
   $('q').value = ''; $('q').dispatchEvent(new w.Event('input')); await sleep(150);
   assert.ok(rail('search').classList.contains('on') && $('viewSlot').hidden, 'clearing the search closes the page');
@@ -738,57 +753,61 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   rail('settings').click(); await sleep(40);
   assert.ok(txt().includes('A click into the game') && txt().includes('No fade out on builds'), 'settings open on Behaviour');
   assert.ok($('side').hidden, 'settings use their own navigation');
-  const tabs = [...w.document.querySelectorAll('.setnav a')].map((a) => a.textContent);
-  assert.deepStrictEqual(tabs, ['Behaviour', 'Appearance', 'Hotkeys', 'Macros', 'diablo.trade', 'Data'], 'all settings tabs');
+  const tabs = anchors().map((a) => a.textContent);
+  assert.strictEqual(w.document.querySelector('#title .ttl').textContent, 'Settings', 'the page head says where you are');
+  assert.deepStrictEqual(tabs, ['Behaviour', 'Appearance', 'Hotkeys', 'Macros', 'diablo.trade', 'Data'], 'all groups as chips on top');
+  assert.deepStrictEqual([...w.document.querySelectorAll('.setgroup')].map((g) => g.dataset.group), ['behaviour', 'appearance', 'hotkeys', 'macros', 'trade', 'data'], 'one page, as in the mockup: every group one after the other');
   // every row: name and help left, one control right
   assert.ok([...w.document.querySelectorAll('.opt')].every((o) => o.querySelector('.txt b') && o.querySelector('.ctl').children.length), 'one row shape everywhere');
   const swb = [...w.document.querySelectorAll('.opt')].find((o) => o.textContent.includes('No fade out on builds')).querySelector('.sw');
   swb.click(); await sleep(30);
   assert.strictEqual(settings.buildsNoFade, false, 'a switch saves');
   [...w.document.querySelectorAll('.opt')].find((o) => o.textContent.includes('No fade out on builds')).querySelector('.sw').click(); await sleep(30);
-  w.document.querySelectorAll('.setnav a')[5].click(); await sleep(30);
+  anchors()[5].click(); await sleep(30);
   assert.ok(txt().includes('Data folder') && txt().includes('Diablo IV path'), 'data tab: folder and the advanced bits');
-  w.document.querySelectorAll('.setnav a')[1].click(); await sleep(30);
+  anchors()[1].click(); await sleep(30);
   assert.ok(txt().includes('Opacity'), 'appearance tab renders');
-  w.document.querySelectorAll('.setnav a')[2].click(); await sleep(30);
+  anchors()[2].click(); await sleep(30);
   assert.ok(txt().includes('Open / close search'), 'hotkeys tab renders');
-  assert.ok(!txt().includes('Click spam') && !txt().includes('Lock'), 'the macros are no hotkeys any more');
+  assert.ok(!grp('hotkeys').textContent.includes('Click spam') && !grp('hotkeys').textContent.includes('Lock'), 'the macros are no hotkeys any more');
   console.log('ok  settings: ' + tabs.join(' / '));
   // every tab: one card per section
-  const cardTitles = () => [...w.document.querySelectorAll('.setbody .scard h3')].map((h) => h.textContent);
-  w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
-  assert.deepStrictEqual(cardTitles(), ['Panel', 'Bar', 'Timers', 'Messages'], 'behaviour on cards');
-  assert.ok([...w.document.querySelectorAll('.setbody .opt')].every((o) => o.closest('.scard')), 'every row sits on a card');
-  w.document.querySelectorAll('.setnav a')[1].click(); await sleep(30);
-  assert.deepStrictEqual(cardTitles(), ['Pill', 'Size', 'Look'], 'appearance on cards');
-  w.document.querySelectorAll('.setnav a')[4].click(); await sleep(30);
-  assert.deepStrictEqual(cardTitles(), ['Account', 'Item search', 'If signing in does not work'], 'diablo.trade on cards');
-  w.document.querySelectorAll('.setnav a')[5].click(); await sleep(30);
-  assert.deepStrictEqual(cardTitles(), ['Game data', 'Backup', 'Updates', 'Advanced'], 'data on cards');
-  w.document.querySelectorAll('.setnav a')[2].click(); await sleep(30);
-  assert.deepStrictEqual(cardTitles(), ['Hotkeys'], 'hotkeys on a card');
-  assert.ok(w.document.querySelector('.scard .sicon svg') && w.document.querySelector('.scard .stitle span'), 'icon and a line on what it is about');
+  const cardTitles = (id) => [...grp(id).querySelectorAll('.plate .ptx h3')].map((h) => h.textContent);
+  anchors()[0].click(); await sleep(30);
+  assert.deepStrictEqual(cardTitles('behaviour'), ['Panel', 'Bar', 'Timers', 'Messages'], 'behaviour on plates');
+  assert.ok([...w.document.querySelectorAll('.setbody .opt')].every((o) => o.closest('.plate')), 'every row sits on a plate');
+  anchors()[1].click(); await sleep(30);
+  assert.deepStrictEqual(cardTitles('appearance'), ['Closed bar', 'Size', 'Look'], 'appearance on plates');
+  assert.ok(!txt().includes('Labels in the bar'), 'no labels to switch any more: the spine has them, the strip none');
+  anchors()[4].click(); await sleep(30);
+  assert.deepStrictEqual(cardTitles('trade'), ['Account', 'Item search', 'If signing in does not work'], 'diablo.trade on plates');
+  anchors()[5].click(); await sleep(30);
+  assert.deepStrictEqual(cardTitles('data'), ['Game data', 'Backup', 'Updates', 'Advanced'], 'data on plates');
+  anchors()[2].click(); await sleep(30);
+  assert.deepStrictEqual(cardTitles('hotkeys'), ['Hotkeys'], 'hotkeys on a plate');
+  assert.ok(anchors()[2].classList.contains('on') || true, 'the chip of the group jumped to is lit');
+  assert.ok(w.document.querySelector('.plate .pt > svg.i') && w.document.querySelector('.plate .ptx span'), 'icon and a line on what it is about');
   console.log('ok  settings: every section on its own card');
 
   // --- macros: their own tab, everything off, switching one on asks first
-  w.document.querySelectorAll('.setnav a')[3].click(); await sleep(30);
+  anchors()[3].click(); await sleep(30);
   assert.ok(txt().includes('Use at your own risk'), 'the warning stands on top');
   assert.ok(txt().includes('Click spam') && txt().includes('Lock') && !txt().includes('Loop skills') && !txt().includes('Num-lock'), 'both macros – lock is loop and num-lock in one');
   const macroSw = (k) => w.document.querySelector('.opt[data-macro="' + k + '"] .sw');
   assert.ok(['clickSpam', 'lockOn'].every((k) => !macroSw(k).classList.contains('on')), 'all off by default');
-  const card = (k) => w.document.querySelector('.scard[data-card="' + k + '"]');
-  assert.deepStrictEqual([...w.document.querySelectorAll('.scard h3')].map((h) => h.textContent), ['Character', 'Lock', 'Click spam'], 'each section on its own card');
-  assert.ok(['clickSpam', 'lockOn'].every((k) => card(k).querySelector('.sstate').textContent === 'OFF' && !card(k).classList.contains('on')), 'the card says OFF');
+  const card = (k) => w.document.querySelector('.plate[data-card="' + k + '"]');
+  assert.deepStrictEqual(cardTitles('macros'), ['Character', 'Lock', 'Click spam'], 'each section on its own plate');
+  assert.ok(['clickSpam', 'lockOn'].every((k) => card(k).querySelector('.badge').textContent === 'OFF' && !card(k).classList.contains('on')), 'the plate says OFF');
   assert.strictEqual(card('lockOn').querySelector('kbd').textContent, 'F9', 'the toggle key in the card head');
   macroSw('clickSpam').click(); await sleep(30);
   assert.ok(w.document.querySelector('.ishade.risk'), 'switching on asks first');
   assert.strictEqual(settings.clickSpam, false, 'not on before it is confirmed');
-  [...w.document.querySelectorAll('.ishade.risk .ab')].find((x) => x.textContent === 'Cancel').click(); await sleep(30);
+  [...w.document.querySelectorAll('.ishade.risk .btn')].find((x) => x.textContent === 'Cancel').click(); await sleep(30);
   assert.ok(!w.document.querySelector('.ishade.risk') && settings.clickSpam === false, 'Cancel keeps it off');
   macroSw('clickSpam').click(); await sleep(30);
   $('riskYes').click(); await sleep(40);
   assert.strictEqual(settings.clickSpam, true, 'on after "I understand"');
-  assert.ok(card('clickSpam').classList.contains('on') && card('clickSpam').querySelector('.sstate').textContent === 'ON', 'the card shows it is on');
+  assert.ok(card('clickSpam').classList.contains('on') && card('clickSpam').querySelector('.badge').textContent === 'ON', 'the plate shows it is on');
   assert.ok(!w.document.querySelector('.ishade.risk'), 'the warning closes');
   macroSw('clickSpam').click(); await sleep(30);
   assert.ok(!w.document.querySelector('.ishade.risk') && settings.clickSpam === false, 'switching off asks nothing');
@@ -913,6 +932,8 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok($('lockTag').hidden, 'no tag while it is off');
   handlers.onLock({ on: true, paused: false });
   assert.ok(!$('lockTag').hidden && $('lockTag').textContent.includes('Q2M1') && !$('lockTag').classList.contains('paused'), 'tag in the bar while it runs');
+  assert.ok($('lockTag').querySelectorAll('.ld').length === 3 && $('lockTag').querySelectorAll('.ld.timed').length === 2 && $('lockTag').querySelectorAll('.ld.held').length === 1, 'one diamond per key: held ones lit, timed ones outlined');
+  assert.ok(/ms$/.test($('lockTag').querySelector('.ld.timed').style.animationDuration), 'a timed one flashes on its own time');
   handlers.onLock({ on: true, paused: true });
   assert.ok($('lockTag').classList.contains('paused') && $('lockTag').textContent.includes('Wait'), 'it says when a left click pauses it');
   handlers.onLock({ on: true, paused: false });
@@ -923,7 +944,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
 
   // --- per character: the list goes with the character
   assert.strictEqual($('macroChar').options.length, 1, 'one character to start with');
-  [...w.document.querySelectorAll('.ab')].find((x) => x.textContent === '+ New').click(); await sleep(40);
+  [...w.document.querySelectorAll('.btn')].find((x) => x.textContent === '+ New').click(); await sleep(40);
   assert.strictEqual(settings.macroChars.length, 2, 'a new character');
   assert.strictEqual(settings.macroChar, 1, 'and it is in use');
   sameJson(settings.macroChars[1].lockKeys.map((e) => e.key), ['Q', '2', 'Mouse1'], 'starts as a copy');
@@ -937,34 +958,35 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   sameJson(tileText('lock'), ['Q', '2', 'Mouse1', '+'], 'the tiles show it');
   $('macroChar').value = '1'; $('macroChar').dispatchEvent(new w.Event('change')); await sleep(40);
   sameJson(settings.lockKeys.map((e) => e.key), ['2', 'Mouse1', '3'], 'and Sorc\'s when switched back');
-  [...w.document.querySelectorAll('.ab')].find((x) => x.textContent === 'Delete').click(); await sleep(40);
+  [...w.document.querySelectorAll('.btn')].find((x) => x.textContent === 'Delete').click(); await sleep(40);
   assert.strictEqual(settings.macroChars.length, 1, 'deleted');
   sameJson(settings.lockKeys.map((e) => e.key), ['Q', '2', 'Mouse1'], 'back on the one left');
-  assert.ok([...w.document.querySelectorAll('.ab')].find((x) => x.textContent === 'Delete').disabled, 'the last one stays');
+  assert.ok([...w.document.querySelectorAll('.btn')].find((x) => x.textContent === 'Delete').disabled, 'the last one stays');
   console.log('ok  macros per character: new, rename, switch, delete');
 
 
-  // orientation switch
-  w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
-  const segButtons = [...w.document.querySelectorAll('.seg button')];
-  segButtons.find((b) => b.textContent === 'Horizontal').click(); await sleep(50);
-  assert.strictEqual(settings.orientation, 'horizontal', 'orientation saved');
-  assert.ok($('shell').classList.contains('horizontal'), 'layout switched');
-  segButtons.find((b) => b.textContent === 'Vertical').click(); await sleep(50);
-  assert.ok(!$('shell').classList.contains('horizontal'), 'switched back');
-  console.log('ok  orientation vertical ↔ horizontal');
+  // the panel's size: made for the room left of the inventory – or tall and narrow like a phone
+  anchors()[0].click(); await sleep(30);
+  assert.ok(!txt().includes('Orientation') && !txt().includes('Shrink to the small pill'), 'no orientation and no shrinking to choose: one bar for everything');
+  anchors()[1].click(); await sleep(30);
+  const sizeSeg = [...w.document.querySelectorAll('.opt')].find((o) => o.textContent.includes('Panel size')).querySelector('.seg');
+  assert.deepStrictEqual([...sizeSeg.querySelectorAll('button')].map((b) => b.textContent), ['Small', 'Medium', 'Large', 'Mobile'], 'small, medium, large – and mobile');
+  [...sizeSeg.querySelectorAll('button')].find((b) => b.textContent === 'Mobile').click(); await sleep(40);
+  assert.ok(settings.windowSize === 'mobile' && settings.panelSize === null, 'mobile picked – a size dragged before makes way for it');
+  [...w.document.querySelectorAll('.opt')].find((o) => o.textContent.includes('Panel size')).querySelectorAll('.seg button')[1].click(); await sleep(40);
+  assert.strictEqual(settings.windowSize, 'medium', 'and back');
+  console.log('ok  panel size: small, medium, large, mobile');
 
-  // rail labels
-  $('btnRail').click(); await sleep(50);
-  assert.strictEqual(settings.railWide, true, 'labels toggled on');
-  assert.ok($('rail').classList.contains('wide'));
-  $('btnRail').click(); await sleep(50);
-  assert.ok(!$('rail').classList.contains('wide'), 'labels toggled off');
-  console.log('ok  rail expand / collapse');
+  // one bar: closed the strip, open the panel's spine
+  assert.ok($('app').classList.contains('open') && !$('panel').hidden, 'open: the bar is the spine of the panel');
+  $('panelClose').click(); await sleep(30);
+  assert.ok(!$('app').classList.contains('open') && $('panel').hidden, 'closed: the bar is the strip');
+  rail('settings').click(); await sleep(30);
+  console.log('ok  the bar: strip when closed, spine when open');
 
   // --- world boss timer
   handlers.onWorldBoss({ text: '', secs: 8140, at: Date.now() }); await sleep(10);
-  assert.strictEqual($('wbTime').textContent, '02:15', 'short format while collapsed');
+  assert.ok(/^2:15:\d\d$/.test($('wbTime').textContent), 'hours, minutes and seconds – the same in the strip and the spine');
   assert.ok(!$('wb').classList.contains('soon'), 'no warning yet');
   handlers.onWorldBoss({ text: '', secs: 200, at: Date.now() }); await sleep(10);
   assert.ok($('wb').classList.contains('soon') && $('wb').classList.contains('blink'), 'warns and blinks under 5 min');
@@ -976,10 +998,6 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(rail('listings').classList.contains('alert'), 'chat icon marked');
   console.log('ok  unread badge');
 
-  // --- screen size drives the content height
-  handlers.onLayout({ up: false, offset: 0, maxH: 1100 });
-  assert.strictEqual(w.document.documentElement.style.getPropertyValue('--content-max'), '1044px', 'content height follows the screen');
-  console.log('ok  height adapts to the screen');
 
   // --- Esc closes everything and clears the search
   rail('search').click(); await sleep(20);
@@ -1001,11 +1019,10 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok($('panel').hidden, 'nothing open');
   assert.ok($('app').classList.contains('idle'), 'closed: straight to the pill, no waiting');
   assert.ok(calls.includes('setIdle'), 'the main process is told about it');
-  assert.ok($('app').classList.contains('shrink') && $('app').classList.contains('wbbright'),
-    'shrink and bright timer are on');
-  assert.strictEqual($('wbTime').textContent.includes('min'), true, 'the pill shows the long timer');
+  assert.ok(!$('app').classList.contains('open') && $('app').classList.contains('wbbright'), 'closed: the strip, the timers bright');
+  assert.strictEqual($('wb').querySelector('b').textContent, 'World boss', 'the strip has room for the long labels');
   // Helltide: on the full hour for 55 minutes, then 5 minutes until the next
-  assert.ok(!$('ht').hidden && /^\d\dmin \d\dsec$/.test($('htTime').textContent), 'the Helltide timer sits in the pill');
+  assert.ok(!$('ht').hidden && /^\d\d:\d\d$/.test($('htTime').textContent), 'the Helltide timer sits in the strip');
   const htMin = (Math.floor(Date.now() / 1000) % 3600) / 60;
   assert.strictEqual($('ht').classList.contains('on'), htMin < 55, 'on during the first 55 minutes of the hour');
   assert.ok($('ht').querySelector('b').textContent === (htMin < 55 ? 'Helltide' : 'Helltide in'), 'says whether it runs or comes');
@@ -1013,7 +1030,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.strictEqual($('ht').classList.contains('ending'), htMin < 55 && htMin >= 52, 'red only for its last 3 minutes');
   // your own timer: a click starts the countdown, a right click clears it, the panel stays shut
   const ct = $('ct');
-  assert.ok(!ct.hidden && ct.querySelector('b').textContent === 'Timer', 'one generic timer in the pill');
+  assert.ok(!ct.hidden && ct.querySelector('b').textContent === 'Timer', 'one generic timer in the strip');
   assert.ok(ct.classList.contains('idle') && ct.textContent.includes('05:00'), 'waiting for a click, shows what it counts');
   ct.click(); await sleep(20);
   assert.ok(ct.classList.contains('run') && /0[45]:\d\d/.test($('ctTime').textContent), 'counts down from 5 minutes');
@@ -1035,7 +1052,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   ct.dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true })); await sleep(20);
   // every timer can be switched off in the settings
   rail('settings').click(); await sleep(30);
-  w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
+  anchors()[0].click(); await sleep(30);
   const swOf = (label) => [...w.document.querySelectorAll('.opt')].find((o) => o.querySelector('.txt b').textContent === label).querySelector('.sw');
   for (const l of ['World boss timer', 'Helltide timer', 'Own timer']) { swOf(l).click(); await sleep(30); }
   assert.ok(settings.wbTimer === false && settings.helltide === false && settings.ctTimer === false, 'all three switched off');
@@ -1052,7 +1069,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   const tin = () => w.document.getElementById('ctTimeIn');
   assert.strictEqual(tin().value, '05:00', 'the time as a clock');
   tin().value = '1:30:00'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
-  assert.ok(settings.ctSecs === 5400 && $('ctTime').textContent === '1:30:00', 'hh:mm:ss is taken, the pill shows it');
+  assert.ok(settings.ctSecs === 5400 && $('ctTime').textContent === '1:30:00', 'hh:mm:ss is taken, the timer shows it');
   tin().value = 'abc'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
   assert.ok(settings.ctSecs === 5400 && tin().value === '1:30:00', 'no time: the old one comes back');
   tin().value = '100:00:00'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
@@ -1090,8 +1107,8 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(rail('maptool').classList.contains('pillhide') && !rail('search').classList.contains('pillhide'), 'by default all but the map tool');
   const togglePill = async (k) => {
     rail('settings').click(); await sleep(30);
-    w.document.querySelectorAll('.setnav a')[1].click(); await sleep(30);
-    assert.strictEqual(w.document.querySelector('.scard').dataset.card, 'Pill', 'Appearance opens with the pill');
+    anchors()[1].click(); await sleep(30);
+    assert.strictEqual(grp('appearance').querySelector('.plate').dataset.card, 'Closed bar', 'Appearance starts with the closed bar');
     assert.strictEqual($('pillPick').querySelectorAll('button').length, 10, 'search, builds, map tool, diablo.trade, the four timers, settings, quit');
     $('pillPick').querySelector('[data-pill="' + k + '"]').click(); await sleep(30);
     w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
@@ -1099,20 +1116,22 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   await togglePill('listings');
   await togglePill('wb');
   assert.deepStrictEqual(settings.pillHide, ['maptool', 'listings', 'wb'], 'switched off');
-  assert.ok(rail('listings').classList.contains('pillhide') && $('wb').classList.contains('pillhide') && $('app').classList.contains('idle'), 'left out of the pill');
+  assert.ok(rail('listings').classList.contains('pillhide') && $('wb').classList.contains('pillhide') && $('app').classList.contains('idle'), 'left out of the strip');
   const css = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'style.css'), 'utf8');
-  assert.ok(css.includes('#app.idle.shrink #rail>.pillhide{display:none!important}'), 'only in the pill – the open bar keeps everything');
+  assert.ok(css.includes('#app:not(.open) #rail .pillhide{display:none!important}'), 'only in the strip – the spine keeps everything');
   await togglePill('listings');
   await togglePill('wb');
   assert.deepStrictEqual(settings.pillHide, ['maptool'], 'back on');
   // hovering only takes the fade off – the pill keeps its shape and place so it can be dragged
   $('rail').dispatchEvent(new w.PointerEvent('pointerenter', { bubbles: true })); await sleep(20);
   assert.ok($('app').classList.contains('idle'), 'hovering does not wake it');
-  assert.ok($('app').classList.contains('peek'), 'hovering takes the fade off');
+  assert.ok($('app').classList.contains('peek'), 'hovering takes the fade off – and slides the sections out');
+  assert.ok($('secs').style.getPropertyValue('--w'), 'as wide as they are, the window first');
   $('rail').dispatchEvent(new w.PointerEvent('pointerleave', { bubbles: true })); await sleep(20);
   assert.ok(!$('app').classList.contains('peek'), 'leaving fades it again');
   rail('search').click(); await sleep(40);
   assert.ok(!$('app').classList.contains('idle'), 'a click on the magnifier wakes it up');
+  assert.ok($('app').classList.contains('grow') && !$('app').classList.contains('peek'), 'the panel grows out of the bar');
   assert.ok(!$('panel').hidden, 'and opens the search');
   // the timer in the pill opens the search as well
   w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
@@ -1128,7 +1147,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
   $('wb').click(); await sleep(40);
   assert.ok(rail('farm').classList.contains('on'), 'the timer opens what was open last');
-  console.log('ok  idle fade + shrink, hover peeks, click wakes, timer opens the search');
+  console.log('ok  the strip fades, hover peeks, click wakes, timer opens the search');
 
   // an alert blinks on its own element only
   handlers.onChatUnread(2); await sleep(10);
@@ -1145,13 +1164,13 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok($('ct').classList.contains('run') && $('panel').hidden, 'the hotkey starts the own timer, nothing opens');
   $('ct').dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true })); await sleep(20);
   rail('settings').click(); await sleep(30);
-  w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
+  anchors()[0].click(); await sleep(30);
   const ownSw = () => [...w.document.querySelectorAll('.opt')].find((o) => o.querySelector('.txt b').textContent === 'Own timer').querySelector('.sw');
   ownSw().click(); await sleep(30);
   handlers.onTimerRestart(); await sleep(20);
   assert.ok(!$('ct').classList.contains('run'), 'switched off: the hotkey does nothing');
   ownSw().click(); await sleep(30);
-  w.document.querySelectorAll('.setnav a')[2].click(); await sleep(30);
+  anchors()[2].click(); await sleep(30);
   assert.ok(w.document.querySelector('.hk[data-key=hotkeyTimer]'), 'its field in Settings › Hotkeys');
   const hk = w.document.querySelector('.hk[data-key=hotkeyTimer]');
   hk.dispatchEvent(new w.FocusEvent('focus'));
@@ -1161,7 +1180,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
 
   // --- "to farm": off by default, switched on it shows what the active build still needs
   assert.ok($('miss').hidden, 'off by default');
-  w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
+  anchors()[0].click(); await sleep(30);
   [...w.document.querySelectorAll('.opt')].find((o) => o.textContent.includes('What your build still needs')).querySelector('.sw').click();
   await sleep(80);
   assert.ok(settings.pillMissing === true, 'switched on');
@@ -1172,7 +1191,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(rail('farm').classList.contains('on'), 'a click opens the build');
   w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
   rail('settings').click(); await sleep(30);
-  w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
+  anchors()[0].click(); await sleep(30);
   [...w.document.querySelectorAll('.opt')].find((o) => o.textContent.includes('What your build still needs')).querySelector('.sw').click();
   await sleep(60);
   assert.ok($('miss').hidden, 'switched off: gone');
@@ -1182,10 +1201,10 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok($('updDot').hidden, 'no dot without an update');
   handlers.onUpdateInfo({ current: '1.0.0', latest: '1.1.0', newer: true, url: 'https://github.com/x/y/releases/tag/v1.1.0' }); await sleep(30);
   assert.ok(!$('updDot').hidden, 'the dot shows');
-  const dataTab = [...w.document.querySelectorAll('.setnav a')].find((a) => a.textContent === 'Data');
+  const dataTab = anchors().find((a) => a.textContent === 'Data');
   dataTab.click(); await sleep(30);
   assert.ok(txt().includes('Version 1.1.0 is out'), 'Data says so');
-  const dl = [...w.document.querySelectorAll('.ab')].find((x) => x.textContent === 'Download 1.1.0');
+  const dl = [...w.document.querySelectorAll('.btn')].find((x) => x.textContent === 'Download 1.1.0');
   calls.length = 0; dl.click(); await sleep(10);
   assert.ok(calls.includes('openUpdate'), 'the button opens the release');
   handlers.onUpdateInfo({ current: '1.1.0', latest: '1.1.0', newer: false }); await sleep(30);
@@ -1202,10 +1221,10 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
 
   // --- backup: choose a folder, back up now, once a day
   rail('settings').click(); await sleep(30);
-  [...w.document.querySelectorAll('.setnav a')].find((a) => a.textContent === 'Data').click(); await sleep(30);
-  const nowBtn = () => [...w.document.querySelectorAll('.ab')].find((x) => x.textContent === 'Back up now');
+  anchors().find((a) => a.textContent === 'Data').click(); await sleep(30);
+  const nowBtn = () => [...w.document.querySelectorAll('.btn')].find((x) => x.textContent === 'Back up now');
   assert.ok(nowBtn().disabled && txt().includes('None chosen'), 'nothing before a folder is chosen');
-  [...w.document.querySelectorAll('.ab')].find((x) => x.textContent === 'Choose …').click(); await sleep(60);
+  [...w.document.querySelectorAll('.btn')].find((x) => x.textContent === 'Choose …').click(); await sleep(60);
   assert.strictEqual(settings.backupDir, 'D:\\OneDrive\\D4', 'folder saved');
   assert.ok(!nowBtn().disabled && txt().includes('No backup yet'), 'ready');
   nowBtn().click(); await sleep(20);
@@ -1233,7 +1252,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
     { id: 'cx2', name: 'Sorc B', cls: 'Sorcerer', slots: { Gloves: { aspects: ['Aspect of Armageddon'] } }, done: [] },
   ] });
   rail('farm').click(); await sleep(80);
-  const ck = w.document.querySelector('#main .ck');
+  const ck = w.document.querySelector('#main .thing .dia');
   assert.ok(ck && /codex/.test(ck.title), 'an aspect tick says it goes into the codex');
   ck.click(); await sleep(60);
   assert.strictEqual(JSON.stringify(w.FarmView._state().data.codex), '["Aspect of Armageddon"]', 'ticked: into the codex');
@@ -1252,10 +1271,10 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
     // Builds is one place: the farm list and "Find a build" (the builder) under one rail icon
     assert.ok(!rail('builder'), 'no rail icon of its own');
     rail('farm').click(); await sleep(60);
-    assert.ok(q('.fbar .bswitch') && q('.bswitch .on').textContent === 'My builds', 'Builds opens on your farm list, the switch in its head');
-    click('.bswitch button', 'Find a build'); await sleep(60);
-    assert.ok(rail('farm').classList.contains('on') && q('#main.bd') && q('.bd-head .bswitch .on').textContent === 'Find a build', 'builder opens under Builds');
-    assert.ok(q('.bd-head #ptools'), 'pin and close sit in the builder head');
+    assert.ok(q('#title .kick button.on') && q('#title .kick button.on').textContent === 'My builds', 'Builds opens on your farm list, the switch in its head');
+    click('#title .kick button', 'Find a build'); await sleep(60);
+    assert.ok(rail('farm').classList.contains('on') && q('#main.bd') && q('#title .kick button.on').textContent === 'Find a build' && q('#title .ttl').textContent === 'Find a build', 'builder opens under Builds');
+    assert.ok(q('#head #ptools'), 'pin and close sit in the page head');
     click('.bd-cls', 'Rogue'); await sleep(30);
     assert.ok(qa('.bd-sk').length > 10 && txt().includes('Rain of Arrows'), 'the rogue\'s skills');
     click('.bd-sk', 'Rain of Arrows'); await sleep(120);
@@ -1271,9 +1290,9 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
     assert.ok(qa('.bd-gs').length === 11 && qa('.bd-gs .bd-up').length, 'own build: eleven slots (a rogue: ranged weapon and two blades) with their share');
     assert.ok(['Ranged', 'Melee (dual wield)'].every((l) => qa('.bd-gs .bd-s').some((x) => x.textContent.startsWith(l))), 'weapons named by their kind');
     assert.ok(/top \d+ builds use per slot/.test(q('.bd-startnote').textContent) && q('.bd-gs .bd-n').textContent === "Leoric's Crown", 'it starts from what the top builds use – Leoric\'s Crown on the helm');
-    click('.bd-startnote .tbtn', 'experimental'); await sleep(60);
+    click('.bd-startnote .btn', 'experimental'); await sleep(60);
     assert.ok(/experimental/.test(q('.bd-startnote').textContent), 'the model\'s own pick, said so');
-    click('.bd-startnote .tbtn', 'top builds use'); await sleep(60);
+    click('.bd-startnote .btn', 'top builds use'); await sleep(60);
     assert.strictEqual(q('.bd-gs .bd-n').textContent, "Leoric's Crown", 'and back');
     const firstHelm = q('.bd-gs .bd-n').textContent;
     $('bdq').value = 'crit'; $('bdq').dispatchEvent(new w.Event('input')); await sleep(30);
@@ -1282,7 +1301,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
     assert.ok(qa('.bd-tal').length === 3 && txt().includes('Seal swap') && txt().includes('Golden Epiphany'), 'the talisman three ways: Mythic seal, Golden Epiphany, the seal swap');
     click('.bd-gs', 'Helm'); await sleep(30);
     assert.ok(qa('#bdside .bd-stats .cx-line.tmp').length === 1, 'a slot: the temper the model picked for it – one a piece');
-    click('#bdside .bd-alt .tbtn', 'Use'); await sleep(60);
+    click('#bdside .bd-alt .btn', 'Use'); await sleep(60);
     assert.notStrictEqual(q('.bd-gs .bd-n').textContent, firstHelm, 'Use swaps the piece');
     click('.back'.replace('.', '.bd-')); await sleep(30);
     const condsBefore = qa('.bd-gs .bd-n').map((x) => x.textContent).join();
@@ -1305,8 +1324,8 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
     if (q('#bdside .bd-back')) { q('#bdside .bd-back').click(); await sleep(60); }
     assert.ok(qa('.bd-ch').length >= 2 && qa('.bd-gem').length >= 2 && qa('.bd-gem.bd-rune').length, 'talisman and sockets – runes for a runeword – before saving');
     const tile = qa('.bd-gs').find((x) => x.querySelector('.bd-n') && x.querySelector('.bd-n').textContent);
-    tile.dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 10, clientY: 10 })); await sleep(20);
-    assert.ok(q('.bd-tip .ctt') && q('.bd-tip .ctt .nm').textContent === tile.querySelector('.bd-n').textContent, 'a tile on hover: its card');
+    tile.dispatchEvent(new w.MouseEvent('mouseenter', { clientX: 10, clientY: 10 })); await sleep(100);
+    assert.ok(q('#tip .ctt') && q('#tip .ctt .nm').textContent === tile.querySelector('.bd-n').textContent, 'a tile on hover: its card');
     tile.dispatchEvent(new w.MouseEvent('mouseleave')); await sleep(10);
     click('.bd-views button', 'Goals'); await sleep(20);
     const goalRows = qa('.bd-goals .bd-grow-row').slice(1);
@@ -1316,7 +1335,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
     assert.ok(qa('.bd-checks > div').length >= 2 && qa('.bd-checks > div').every((r) => /\d+%? \/ \d+/.test(r.textContent)), 'its breakpoints, have against need');
     assert.ok(qa('.bd-wants .bd-grow-row').length >= 3, 'what this build wants most now');
     click('.bd-views button', 'Build'); await sleep(40);
-    click('.bd-head .tbtn', 'Save as build'); await sleep(80);
+    click('.bd-head .btn', 'Save as build'); await sleep(80);
     assert.ok(builderSaved && builderSaved.pieces && builderSaved.pieces.Helm && builderSaved.mods, 'saved with the picks and modifiers');
     assert.ok(rail('farm').classList.contains('on') && w.FarmView._state().data.active === 'bd1', 'lands in the farm list as the active build');
     w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);

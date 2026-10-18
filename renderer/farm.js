@@ -21,7 +21,6 @@ const slotShown = (b, key) => {
   return key === 'Weapon 2' ? b.cls === 'Rogue' || b.cls === 'Barbarian' : b.cls === 'Barbarian';
 };
 const LABEL = { Ring1: 'Ring', Ring2: 'Ring' };
-const ICON = { Helm: '⛑', Amulet: '◎', 'Chest Armor': '▣', Ring: '◯', Gloves: '✋', Pants: '▥', Weapon: '⚔', Boots: '▙', 'Off-Hand': '◈' };
 const CLASSES = ['All', 'Barbarian', 'Druid', 'Necromancer', 'Paladin', 'Rogue', 'Sorcerer', 'Spiritborn', 'Warlock'];
 const maxAspects = (key) => (key === 'Amulet' ? 2 : 1);   // a legendary amulet carries two in the planners
 
@@ -34,7 +33,6 @@ let view = 'gear';                 // guide | gear | skills | paragon | compare
 let layout = 'route';              // route (where to go, what you get) | list (all at once) | slots (as in the game)
 try { const l = localStorage.getItem('farm.layout'); if (l === 'list' || l === 'slots') layout = l; } catch (_) { /* private storage */ }
 let routeAt = null;                // the stop picked in the route
-const routeScroll = { stops: {}, detail: {} };   // where the route's two columns were scrolled to
 let onlyMissing = false;           // hide what is farmed already
 let menuOpen = false;              // the build menu
 let gearAt = { key: '', top: 0 };  // where the gear list was scrolled to (kept across redraws)
@@ -89,7 +87,8 @@ function persist() {
 function touch() { const b = build(); if (b) b.updatedAt = Date.now(); persist(); ctx.rerender(); }
 
 // ---------------------------------------------------------------- tooltip on hover
-let tipEl = null, tipTimer = null, tipFor = null, cssDone = false;
+// The in-game tooltip from d4guides.gg (with its own stylesheet), in the overlay's one card
+let cssDone = false;
 const tipCache = new Map();
 async function ensureCss() {
   if (cssDone) return;
@@ -101,20 +100,7 @@ async function ensureCss() {
   st.textContent = css;
   document.head.appendChild(st);
 }
-function tipBox() {
-  if (!tipEl) { tipEl = document.createElement('div'); tipEl.id = 'ftt'; tipEl.hidden = true; document.body.appendChild(tipEl); }
-  return tipEl;
-}
-function place(x, y) {
-  const t = tipBox();
-  const w = t.offsetWidth || 380, h = t.offsetHeight || 300;
-  const vw = window.innerWidth, vh = window.innerHeight;
-  let left = x + 18, top = y - 40;
-  if (left + w > vw - 6) left = Math.max(6, x - w - 18);
-  if (top + h > vh - 6) top = Math.max(6, vh - h - 6);
-  t.style.left = left + 'px'; t.style.top = Math.max(6, top) + 'px';
-}
-function hideTip() { clearTimeout(tipTimer); tipFor = null; if (tipEl) tipEl.hidden = true; }
+const hideTip = () => UI.tip.hide();
 /**
  * @param {object} [slot]  the build's slot – an imported item brings its rolls, which are shown
  *                         under the database tooltip ("This build's roll")
@@ -123,24 +109,16 @@ function wireTip(node, kind, id, slot) {
   if (!id) return;
   const key = kind + ':' + id;
   node.dataset.tt = key;
-  node.addEventListener('mouseenter', (e) => {
-    tipFor = key;
-    const x = e.clientX, y = e.clientY;
-    clearTimeout(tipTimer);
-    tipTimer = setTimeout(async () => {
-      ensureCss();
-      let html = tipCache.get(key);
-      if (html == null) { html = (await api.farmTooltip(kind, id)) || ''; tipCache.set(key, html); }
-      if (tipFor !== key || !html) return;
-      const t = tipBox();
-      t.innerHTML = html;
-      if (slot && (slot.stats || slot.sockets)) t.appendChild(rollBox(slot));
-      t.hidden = false;
-      place(x, y);
-    }, 180);
-  });
-  node.addEventListener('mousemove', (e) => { if (tipEl && !tipEl.hidden && tipFor === key) place(e.clientX, e.clientY); });
-  node.addEventListener('mouseleave', hideTip);
+  UI.tip.bind(node, async () => {
+    ensureCss();
+    let html = tipCache.get(key);
+    if (html == null) { html = (await api.farmTooltip(kind, id)) || ''; tipCache.set(key, html); }
+    if (!html) return null;
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    if (slot && (slot.stats || slot.sockets)) box.appendChild(rollBox(slot));
+    return box;
+  }, 'game', 180);
 }
 
 /** The imported item's rolls as a card under the tooltip – text only, it comes from other sites. */
@@ -174,7 +152,7 @@ function render(main, c) {
   }
   const b = build();
   const wrap = el('div', 'fwrap');
-  wrap.appendChild(header(el, b));
+  header(el, b, wrap);
   if (imp.open) {
     main.appendChild(importDialog(el));
     setTimeout(() => {
@@ -194,7 +172,8 @@ function render(main, c) {
     main.appendChild(wrap);
     return;
   }
-  wrap.appendChild(toolbar(el, b));
+  const tb = toolbar(el, b);
+  if (ctx.tabs) ctx.tabs.appendChild(tb); else wrap.appendChild(tb);
   if (view === 'guide' && window.BuildGuide) {
     const box = el('div', 'fview');
     wrap.appendChild(box);
@@ -223,27 +202,13 @@ function render(main, c) {
   gear.appendChild(layout === 'slots' ? slotsView(el, b) : layout === 'list' ? calmList(el, b) : routeView(el, b));
   if (pickOpen) gear.appendChild(picker(el, b));
   wrap.appendChild(gear);
+  wrap.appendChild(gearTool(el));
   main.appendChild(wrap);
   // a redraw (a tick, a row folded out) keeps the place in the list – same build, same view
   const at = b.id + '|' + layout;
   if (gearAt.key === at) gear.scrollTop = gearAt.top;
   gearAt = { key: at, top: gear.scrollTop };
   gear.addEventListener('scroll', () => { gearAt.top = gear.scrollTop; });
-  // Route scrolls in its two columns instead: the stops keep their place (a click on one far down
-  // must not jump back to the top), the detail keeps it while the same stop stays open
-  const stopsBox = gear.querySelector('.rstops');
-  const detailBox = gear.querySelector('.rdetail');
-  if (stopsBox) {
-    if (routeScroll.stops.key === b.id) { stopsBox.scrollTop = routeScroll.stops.top; stopsBox.scrollLeft = routeScroll.stops.left; }
-    routeScroll.stops = { key: b.id, top: stopsBox.scrollTop, left: stopsBox.scrollLeft };
-    stopsBox.addEventListener('scroll', () => { routeScroll.stops.top = stopsBox.scrollTop; routeScroll.stops.left = stopsBox.scrollLeft; });
-  }
-  if (detailBox) {
-    const k = b.id + '|' + (detailBox.dataset.stop || '');
-    if (routeScroll.detail.key === k) detailBox.scrollTop = routeScroll.detail.top;
-    routeScroll.detail = { key: k, top: detailBox.scrollTop };
-    detailBox.addEventListener('scroll', () => { routeScroll.detail.top = detailBox.scrollTop; });
-  }
   if (pickOpen) placePicker();
   if (cat.details < cat.aspects.length) {
     ctx.status('Aspect slots: ' + cat.details + '/' + cat.aspects.length + ' checked — the rest go by category for now');
@@ -267,7 +232,7 @@ function extraStops(b) {
   const ch = b.charms;
   if (ch && (ch.seal || (ch.list || []).length)) {
     const things = [];
-    const add = (c, seal) => things.push({ ext: true, key: 'c:' + c.name, doneKey: 'c:' + c.name, name: c.name, cls: QCLS[c.q] || '',
+    const add = (c, seal) => things.push({ ext: true, key: 'c:' + c.name, doneKey: 'c:' + c.name, name: c.name, pname: c.name, kind: seal ? 'seal' : 'charm', cls: QCLS[c.q] || '',
       label: seal ? 'Seal' : 'Charm', how: c.set || '', stats: (c.stats || []).map((x) => ({ t: x.t })), charm: c, seal,
       set: c.set && (ch.sets || []).find((x) => x.name === c.set) });
     if (ch.seal) add(ch.seal, true);
@@ -290,51 +255,58 @@ function extraStops(b) {
     const list = [...socks.values()].filter((e) => gemKind(e.n) === k);
     if (!list.length) return;
     out.push({ key: 'sock-' + k, title: KIND[k][0], place: KIND[k][1], order: KIND[k][2],
-      things: list.map((e) => ({ ext: true, key: 's:' + e.n, doneKey: 's:' + e.n, name: e.n + (e.count > 1 ? ' ×' + e.count : ''),
+      things: list.map((e) => ({ ext: true, key: 's:' + e.n, doneKey: 's:' + e.n, name: e.n + (e.count > 1 ? ' ×' + e.count : ''), pname: e.n, kind: k,
         cls: 'gemname ' + k, label: k === 'splinter' ? 'Splinter' : k === 'gem' ? 'Gem' : 'Rune', how: 'for ' + e.where.join(', '), stats: [] })) });
   });
   return out;
 }
 
-function header(el, b) {
-  const h = el('div', 'fbar');
-  // which build: a button with its name, the menu holds the rest (switch, rename, class …)
-  const pickB = el('button', 'bpick' + (menuOpen ? ' on' : ''));
-  pickB.title = 'Your builds';
-  const tx = el('span', 'tx');
-  tx.appendChild(el('b', null, b.name));
-  tx.appendChild(el('span', null, (b.cls === 'All' ? 'All classes' : b.cls) + ' · ' + data.builds.length + ' build' + (data.builds.length === 1 ? '' : 's')));
-  pickB.appendChild(tx);
-  pickB.insertAdjacentHTML('beforeend', CHEVRON);
+/**
+ * The build's head: the kicker (class · site · how many builds), its name – a click opens the
+ * menu – and on the right how far you are, the source and Import. In the overlay it is the page's
+ * head (ctx.head), on the website the top of the farm list.
+ */
+function header(el, b, wrap) {
+  const host = ctx.head || wrap.appendChild(el('div', 'fhead'));
+  host.textContent = '';
+  const block = el('div', 'tblock');
+  const facts = [b.cls === 'All' ? 'All classes' : b.cls, b.source && b.source.site, data.builds.length + ' build' + (data.builds.length === 1 ? '' : 's')].filter(Boolean).join(' · ');
+  block.appendChild(ctx.kicker ? ctx.kicker(facts) : el('div', 'kick', facts));
+  // which build: its name, the menu holds the rest (switch, rename, class …)
+  const pickB = el('button', 'bname' + (menuOpen ? ' on' : ''));
+  pickB.title = 'Your builds – switch, rename, new, export …';
+  const h = el('h1', 'ttl', b.name);
+  pickB.appendChild(h);
+  pickB.appendChild(UI.icon('down'));
   pickB.onclick = (e) => { e.stopPropagation(); menuOpen = !menuOpen; ctx.rerender(); };
-  h.appendChild(pickB);
-  if (menuOpen) h.appendChild(buildMenu(el, b));
+  block.appendChild(pickB);
+  host.appendChild(block);
+  if (menuOpen) host.appendChild(buildMenu(el, b));            // hangs under the head (position: absolute)
 
-  const btn = (label, title, fn, cls) => { const x = el('button', 'ab' + (cls ? ' ' + cls : ''), label); x.title = title; x.onclick = fn; h.appendChild(x); return x; };
-  if (b.source && b.source.url) {
-    const go = btn('', 'Open the original build in your browser' + (b.source.title ? '\n' + b.source.title : ''),
-      () => api.openBuildSource(b.source.url), 'src');
-    go.innerHTML = EXTERNAL;
-    go.appendChild(document.createTextNode(b.source.site || 'Source'));
-    go.dataset.url = b.source.url;
-  }
+  const right = el('div', 'tright');
   const p = progress(b);
   if (p.total) {
-    const pr = el('div', 'fprog');
+    const pr = el('div', 'prog' + (p.got === p.total ? ' done' : ''));
     pr.title = p.got + ' of ' + p.total + ' items and aspects farmed';
-    const t = el('div', 'pt');
-    t.appendChild(el('span', null, 'Farmed'));
-    t.appendChild(el('b', null, p.got + ' / ' + p.total));
-    pr.appendChild(t);
-    const bar = el('div', 'pb');
+    const n = el('span', 'num', String(p.got));
+    n.appendChild(el('small', null, ' / ' + p.total));
+    pr.appendChild(n);
+    const bar = el('span', 'bar');
     const fill = el('i'); fill.style.width = Math.round(p.got / p.total * 100) + '%';
     bar.appendChild(fill);
     pr.appendChild(bar);
-    h.appendChild(pr);
+    right.appendChild(pr);
   }
-  h.appendChild(el('span', 'sp'));
-  btn('Import', 'Load a build from maxroll, d4builds, infinitybuilds or d2core – or a build code', () => { imp.open = true; ctx.rerender(); }, imp.open ? 'on' : '');
-  return h;
+  if (b.source && b.source.url) {
+    const go = UI.btn(b.source.site || 'Source', () => api.openBuildSource(b.source.url), 'ghost src', 'external');
+    go.title = 'Open the original build in your browser' + (b.source.title ? '\n' + b.source.title : '');
+    go.dataset.url = b.source.url;
+    right.appendChild(go);
+  }
+  const imb = UI.btn('Import', () => { imp.open = true; ctx.rerender(); }, imp.open ? 'on' : '', 'plus');
+  imb.title = 'Load a build from maxroll, d4builds, infinitybuilds or d2core – or a build code';
+  right.appendChild(imb);
+  host.appendChild(right);
 }
 
 /** The build menu: every build to switch to, then what can be done with this one. */
@@ -344,11 +316,9 @@ function buildMenu(el, b) {
   // three parts, each under a small head like the cards elsewhere: the builds, this one, more
   const head = (title, icon, n) => {
     const h = el('div', 'mhd');
-    const ic = el('span', 'sicon');
-    ic.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + window.SCard.ICONS[icon] + '"/></svg>';
-    h.appendChild(ic);
+    h.appendChild(UI.icon(icon));
     h.appendChild(el('b', null, title));
-    if (n != null) h.appendChild(el('span', 'sstate', String(n)));
+    if (n != null) h.appendChild(el('span', 'badge', String(n)));
     m.appendChild(h);
   };
   head('Builds', 'list', data.builds.length);
@@ -395,38 +365,34 @@ function buildMenu(el, b) {
   return m;
 }
 
-/** Gear / Skills / Paragon – and for the gear: route, list or slots, only what is missing. */
+/** The tabs: cheat sheet, gear, skills, paragon, compare. */
 function toolbar(el, b) {
-  const t = el('div', 'ftools');
-  const seg = (opts, cur, pick, cls) => {
-    const s = el('div', 'seg' + (cls ? ' ' + cls : ''));
-    opts.forEach(([id, label, title, off]) => {
-      const x = el('button', (cur === id ? 'on' : '') + (off ? ' none' : ''), label);
-      if (title) x.title = title;
-      x.onclick = () => pick(id);
-      s.appendChild(x);
-    });
-    t.appendChild(s);
-  };
-  seg([['guide', 'Cheat sheet', 'Breakpoints, what to set up, how to play it and why it works – from the guide'],
-    ['gear', 'Gear'], ['skills', 'Skills', b.skills ? '' : 'Import a build from maxroll, d2core, infinitybuilds or d4builds to see it', !b.skills],
-    ['paragon', 'Paragon', b.paragon ? '' : 'Import a build from maxroll, d2core, infinitybuilds or d4builds to see it', !b.paragon],
+  const off = 'Import a build from maxroll, d2core, infinitybuilds or d4builds to see it';
+  return UI.tabs([['guide', 'Cheat sheet', 'Breakpoints, what to set up, how to play it and why it works – from the guide'],
+    ['gear', 'Gear'], ['skills', 'Skills', b.skills ? '' : off, !b.skills],
+    ['paragon', 'Paragon', b.paragon ? '' : off, !b.paragon],
     ['compare', 'Compare', data.builds.length > 1 ? 'Side by side with another build or variant' : 'Needs a second build', data.builds.length < 2]],
-  view, (id) => { view = id; pickOpen = false; hideTip(); ctx.rerender(); }, 'ftabs');
-  if (view === 'gear') {
-    seg([['route', 'Route', 'Where to go next, and what you get there'], ['list', 'List', 'Everything at once, by where it drops'], ['slots', 'Slots', 'The build as the game shows it']],
-      layout, (id) => { layout = id; try { localStorage.setItem('farm.layout', id); } catch (_) {} pickOpen = false; ctx.rerender(); });
-    const miss = el('button', 'ab' + (onlyMissing ? ' on' : ''), 'Only missing');
-    miss.title = 'Hide what you already have';
-    miss.onclick = () => { onlyMissing = !onlyMissing; ctx.rerender(); };
-    t.appendChild(miss);
-  }
+  view, (id) => { view = id; pickOpen = false; hideTip(); ctx.rerender(); });
+}
+/** The gear's floating toolbar: route, list or slots – and only what is still missing. */
+function gearTool(el) {
+  const t = el('div', 'tool');
+  [['route', 'Route', 'Where to go next, and what you get there'], ['list', 'List', 'Everything at once, by where it drops'], ['slots', 'Slots', 'The build as the game shows it']].forEach(([id, label, title]) => {
+    const x = el('button', layout === id ? 'on' : '', label);
+    x.title = title;
+    x.dataset.layout = id;
+    x.onclick = () => { layout = id; try { localStorage.setItem('farm.layout', id); } catch (_) {} pickOpen = false; ctx.rerender(); };
+    t.appendChild(x);
+  });
+  t.appendChild(el('span', 'sep'));
+  const miss = el('button', onlyMissing ? 'on' : '');
+  miss.appendChild(UI.icon('check'));
+  miss.appendChild(document.createTextNode('Only missing'));
+  miss.title = 'Hide what you already have';
+  miss.onclick = () => { onlyMissing = !onlyMissing; ctx.rerender(); };
+  t.appendChild(miss);
   return t;
 }
-
-const CHEVRON = '<svg class="chev" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>';
-const EXTERNAL = '<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>';
-const CHECK = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 // ---- Import: one field – a link from maxroll, d4builds, infinitybuilds or d2core, or a build code; or a file
 const SITE_RE = [
@@ -486,9 +452,7 @@ function importDialog(el) {
   };
   const head = el('div', 'ihead');
   head.appendChild(el('h3', null, 'Import a build'));
-  const x = el('button', 'ab icon');
-  x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>';
-  x.title = 'Close'; x.onclick = closeImport;
+  const x = UI.iconBtn('Close', 'close', closeImport, 'ghost');
   head.appendChild(x);
   m.appendChild(head);
 
@@ -496,7 +460,7 @@ function importDialog(el) {
   body.appendChild(el('label', 'ilab', 'Paste a link or a build code'));
   const d = detect(imp.value);
   const field = el('div', 'ifield' + (d && d.kind === 'bad' ? ' bad' : d ? ' ok' : ''));
-  field.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>');
+  field.appendChild(UI.icon('link'));
   // wraps instead of scrolling sideways, so a long link stays readable as a whole
   const inp = el('textarea');
   inp.id = 'impQ'; inp.rows = 1; inp.spellcheck = false; inp.autocomplete = 'off';
@@ -557,14 +521,14 @@ function importDialog(el) {
   m.appendChild(body);
 
   const foot = el('div', 'ifoot');
-  const file = el('button', 'ab', 'Import file …');
+  const file = UI.btn('Import file …', null, 'ghost');
   file.onclick = async () => { const res = await api.importBuildFile(); if (res) took(res); };
   foot.appendChild(file);
   foot.appendChild(el('span', 'sp'));
-  const cancel = el('button', 'ab', 'Cancel'); cancel.onclick = closeImport;
+  const cancel = UI.btn('Cancel', closeImport);
   foot.appendChild(cancel);
   const n = r ? r.variants.filter((v, i) => !imp.off.has(i)).length : (d && d.kind === 'code' ? 1 : 0);
-  const go = el('button', 'ab pri', n > 1 ? 'Import ' + n + ' builds' : 'Import');
+  const go = UI.btn(n > 1 ? 'Import ' + n + ' builds' : 'Import', null, 'pri');
   go.disabled = !n;
   go.onclick = doImport;
   foot.appendChild(go);
@@ -652,20 +616,26 @@ function openPicker(b, key) {
   tab = s && s.aspects ? 'aspect' : s && s.item && itemBy(s.item) && itemBy(s.item).rarity === 'Mythic' ? 'mythic' : 'unique';
   ctx.rerender();
 }
+/** The game's diamond tick for a slot – an aspect goes into the codex, done in every build. */
 function tick(el, b, info) {
-  const ck = el('button', 'ck' + (info.got ? ' on' : ''));
-  ck.innerHTML = CHECK;
   const aspect = info.s && !info.s.item;
-  ck.title = aspect
-    ? (info.got ? 'In your codex – done in every build · click to undo' : 'Got it – into the codex, done in every build')
-    : (info.got ? 'Farmed – click to undo' : 'Got it');
-  ck.setAttribute('aria-label', 'Farmed');
-  ck.onclick = (e) => { e.stopPropagation(); setGot(b, info, !info.got); };
-  return ck;
+  return UI.tick({ on: info.got, onClick: (v) => setGot(b, info, v),
+    title: aspect
+      ? (info.got ? 'In your codex – done in every build · click to undo' : 'Got it – into the codex, done in every build')
+      : (info.got ? 'Farmed – click to undo' : 'Got it') });
 }
+/** A slot's picture: the item's (as it sits on its weapon), else its first aspect's category. */
+function slotPic(info, cls) {
+  if (info.s && info.s.item) return UI.pic(info.s.item, { url: info.it && info.it.icon, kind: info.kind === 'Mythic' ? 'mythic' : info.kind === 'Runeword' ? 'rune' : 'unique', cls });
+  if (info.s && info.s.aspects && info.s.aspects[0]) return UI.pic(info.s.aspects[0], { kind: 'aspect', cls });
+  const box = el0('span', (cls || 'pic') + ' none');
+  box.appendChild(UI.icon('plus'));
+  return box;
+}
+const el0 = (tag, cls, text) => UI.el(tag, cls, text);
 function clearBtn(el, b, key) {
   const x = el('button', 'xclr');
-  x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>';
+  x.appendChild(UI.icon('close'));
   x.title = 'Clear this slot';
   x.onclick = (e) => { e.stopPropagation(); delete b.slots[key]; pickOpen = false; touch(); };
   return x;
@@ -710,55 +680,64 @@ function farmStops(b) {
 }
 const thingGot = (t) => (t.ext ? (t.doneKey && (thingGot.done || new Set()).has(t.doneKey)) : t.info.got);
 
-/** One thing to farm: tick, name in its colour, the slot, its rolls – a click on the name picks another. */
+/** One thing to farm: tick, picture, name in its colour – a click on it picks another – where, its rolls, its sockets. */
 function thingRow(el, b, t, cls) {
   if (t.ext) {
     const got = doneOf(b).has(t.doneKey);
-    const row = el('div', cls + ' ext' + (got ? ' got' : ''));
-    const ck = el('button', 'ck' + (got ? ' on' : ''));
-    ck.innerHTML = CHECK;
-    ck.title = got ? 'Found – click to undo' : 'Got it';
-    ck.onclick = () => { const set = new Set(b.done || []); if (got) set.delete(t.doneKey); else set.add(t.doneKey); b.done = [...set]; touch(); };
-    row.appendChild(ck);
-    const body = el('div', 'tb');
-    const top = el('div', 'tt');
-    const nm = el('span', 'xn ' + t.cls, t.name);
-    top.appendChild(nm);
-    top.appendChild(el('span', 'tsl', t.label));
-    body.appendChild(top);
+    const row = el('div', 'line thing ext' + (cls ? ' ' + cls : '') + (got ? ' got' : ''));
+    row.appendChild(UI.tick({ on: got, title: got ? 'Found – click to undo' : 'Got it',
+      onClick: () => { const set = new Set(b.done || []); if (got) set.delete(t.doneKey); else set.add(t.doneKey); b.done = [...set]; touch(); } }));
+    row.appendChild(UI.pic(t.pname || t.name, { kind: t.kind }));
+    const body = el('div', 'l-tx');
+    const nm = el('span', 'xn ' + (t.cls || '').replace(/gemname\s*/, 'r-gem '), t.name);
+    body.appendChild(nm);
     if (t.how) body.appendChild(el('div', 'thow', t.how));
     (t.stats || []).forEach((x) => body.appendChild(el('div', 'tst', x.t)));
     row.appendChild(body);
+    const end = el('span', 'l-end');
+    end.appendChild(el('span', 'tsl', t.label));
+    row.appendChild(end);
     if (t.charm) wireCard(nm, () => charmCard(t.charm, t.seal, t.set));
     return row;
   }
-  const row = el('div', cls + (t.info.got ? ' got' : '') + (t.info.s ? '' : ' blank') + (open === t.key && pickOpen ? ' open' : ''));
+  const row = el('div', 'line thing' + (cls ? ' ' + cls : '') + (t.info.got ? ' got' : '') + (t.info.s ? '' : ' blank') + (open === t.key && pickOpen ? ' open' : ''));
   row.dataset.key = t.key;
-  if (t.info.s) row.appendChild(tick(el, b, t.info)); else row.appendChild(el('span', 'ck none'));
-  const body = el('div', 'tb');
-  const top = el('div', 'tt');
+  row.appendChild(t.info.s ? tick(el, b, t.info) : UI.tick({ on: false, onClick: () => {} }));
+  if (!t.info.s) row.lastChild.classList.add('none');
+  row.appendChild(slotPic(t.info));
+  const body = el('div', 'l-tx');
   const names = slotNames(el, b, t.info, 'gn');
   names.title = 'Click to choose another';
   names.onclick = () => openPicker(b, t.key);
-  top.appendChild(names);
-  top.appendChild(el('span', 'tsl', t.label));
-  body.appendChild(top);
+  body.appendChild(names);
   if (t.how) body.appendChild(el('div', 'thow', t.how));
   (t.stats || []).forEach((x) => body.appendChild(SCard.statLine(x, 'tst')));
   if (t.sockets && t.sockets.length) {
     const g = el('div', 'gems');
-    t.sockets.forEach((x) => g.appendChild(el('span', 'gem ' + gemKind(x), x)));
+    t.sockets.forEach((x) => g.appendChild(gemChip(el, x)));
     body.appendChild(g);
   }
   row.appendChild(body);
-  if (t.info.s) row.appendChild(clearBtn(el, b, t.key));
+  const end = el('span', 'l-end');
+  end.appendChild(el('span', 'tsl', t.label));
+  if (t.info.s) end.appendChild(clearBtn(el, b, t.key));
+  row.appendChild(end);
   return row;
 }
+/** A gem, rune or splinter in a socket: its picture and its name in its colour. */
+function gemChip(el, name, short) {
+  const k = gemKind(name);
+  const g = el('span', 'gem ' + k);
+  g.appendChild(UI.pic(name, { kind: k }));
+  g.appendChild(document.createTextNode(short ? shortGem(name) : name));
+  g.title = name;
+  return g;
+}
 
-/** What kind of place a stop is – its card's icon. */
-const STOP_ICON = { rw: 'rune', d: 'dungeon', x: 'salvage', charms: 'charm', blank: 'plus', 'sock-rune': 'rune', 'sock-gem': 'item', 'sock-splinter': 'charm' };
+/** What kind of place a stop is – its plate's icon. */
+const STOP_ICON = { rw: 'rune', d: 'dungeon', x: 'salvage', charms: 'charm', blank: 'plus', 'sock-rune': 'rune', 'sock-gem': 'gem', 'sock-splinter': 'splinter' };
 /**
- * A stop as a slim card (renderer/cards.js): where, what is there, and how much of it is farmed.
+ * A stop as a plate: where, what is there, and how much of it is farmed.
  * @param {number} [open_]  only what is still to farm (the list); else farmed / all (the route)
  */
 function stopCard(el, s, cls, open_) {
@@ -766,42 +745,57 @@ function stopCard(el, s, cls, open_) {
   const all = s.things.length;
   const badge = s.blank ? all + ' empty' : open_ != null ? open_ + ' to farm' : got + ' / ' + all;
   const finished = !s.blank && got === all;
-  return window.SCard.card(el, { title: s.title, sub: s.place, icon: STOP_ICON[s.key] || (String(s.key).startsWith('s:') ? 'boss' : 'item'),
-    badge, badgeCls: finished ? 'ok' : 'warn', cls: 'slim ' + cls + (finished ? ' done' : '') });
+  return UI.plate({ title: s.title, sub: s.place, icon: STOP_ICON[s.key] || (String(s.key).startsWith('s:') ? 'boss' : 'item'),
+    badge, badgeCls: finished ? 'ok' : 'warn', cls: cls + (finished ? ' done' : '') });
+}
+/** The waypoint's mark: the boss's portrait where the stop is a boss, else its number – a tick once it is done. */
+function stopNode(el, s, n, done) {
+  const node = el('span', 'node');
+  if (done) { node.appendChild(UI.icon('check')); return node; }
+  if (s.blank) { node.appendChild(UI.icon('plus')); return node; }
+  const boss = String(s.key).startsWith('s:') && !/^(any|helltide|world|nightmare|the pit|salvage|unknown|iconic)/i.test(s.title);
+  if (boss) node.appendChild(UI.img(UI.bossPic(s.title), () => { node.textContent = String(n); }));
+  else node.textContent = String(n);
+  return node;
 }
 
-/** Route: where to go on the left, what you get there on the right. */
+/** Route: a path with a waypoint per stop – the one you are at opens with what you get there. */
 function routeView(el, b) {
   const stops = farmStops(b);
-  const wrap = el('div', 'route');
+  const wrap = el('div', 'path route');
   if (!stops.length) { wrap.appendChild(el('div', 'empty', 'Nothing to farm yet — pick items in the slots.')); return wrap; }
   const cur = stops.find((s) => s.key === routeAt) || stops.find((s) => !s.blank && s.things.some((t) => !thingGot(t))) || stops[0];
-  const left = el('div', 'rstops');
-  left.appendChild(el('div', 'k', 'Stops'));
   let n = 0;
   stops.forEach((s) => {
-    const done = s.things.filter(thingGot).length;
-    const btn = el('button', 'rstop' + (s === cur ? ' on' : ''));
-    btn.appendChild(el('span', 'num' + (!s.blank && done === s.things.length ? ' done' : ''), s.blank ? '+' : String(++n)));
-    const tx = el('span', 'rtx');
+    const got = s.things.filter(thingGot).length;
+    const done = !s.blank && got === s.things.length;
+    const wp = el('div', 'wp rstop' + (s === cur ? ' cur on' : '') + (done ? ' done' : '') + (s.blank ? ' blank' : ''));
+    wp.dataset.stop = s.key;
+    wp.appendChild(stopNode(el, s, s.blank ? 0 : ++n, done));
+    const wt = el('div', 'wt');
+    const head = el('button', 'whead');
+    const tx = el('span', 'wtx');
     tx.appendChild(el('b', null, s.title));
-    tx.appendChild(el('span', null, s.blank ? s.things.length + ' empty' : s.things.map((t) => (t.ext ? t.name : t.info.s.item || (t.info.s.aspects || []).map((x) => (aspectBy(x) ? aspectBy(x).short : x)).join(' + '))).join(', ')));
-    btn.appendChild(tx);
-    if (!s.blank) btn.appendChild(el('span', 'rc', done + ' / ' + s.things.length));
-    btn.onclick = () => { routeAt = s.key; pickOpen = false; ctx.rerender(); };
-    left.appendChild(btn);
+    tx.appendChild(el('small', null, s === cur || !done ? s.place || '' : s.things.map((t) => (t.ext ? t.name : t.info.s.item || (t.info.s.aspects || []).map((x) => (aspectBy(x) ? aspectBy(x).short : x)).join(' + '))).join(', ')));
+    head.appendChild(tx);
+    head.appendChild(el('span', 'wn', s.blank ? s.things.length + ' empty' : got + '/' + s.things.length));
+    head.title = s.title + (s.place ? ' — ' + s.place : '');
+    head.onclick = () => { routeAt = s.key; pickOpen = false; ctx.rerender(); };
+    wt.appendChild(head);
+    if (s === cur) {
+      const c = UI.plate({ title: s.blank ? 'Choose what goes in' : 'Here you get', badge: s.blank ? '' : got + ' / ' + s.things.length, cls: 'here rdetail' });
+      c.card.dataset.stop = s.key;
+      s.things.filter((t) => !onlyMissing || !thingGot(t)).forEach((t) => c.body.appendChild(thingRow(el, b, t, 'rthing')));
+      if (!c.body.children.length) c.body.appendChild(el('div', 'empty', 'Everything here is farmed.'));
+      wt.appendChild(c.card);
+    }
+    wp.appendChild(wt);
+    wrap.appendChild(wp);
   });
-  wrap.appendChild(left);
-  const right = el('div', 'rdetail');
-  right.dataset.stop = cur.key;
-  const c = stopCard(el, cur, 'rcard');
-  right.appendChild(c.card);
-  cur.things.filter((t) => !onlyMissing || !thingGot(t)).forEach((t) => c.body.appendChild(thingRow(el, b, t, 'rthing')));
-  wrap.appendChild(right);
   return wrap;
 }
 
-/** List: everything at once, one calm column – what is farmed sinks to the end. */
+/** List: everything still to farm at once, a plate per place – what is farmed sinks to the end. */
 function calmList(el, b) {
   const stops = farmStops(b);
   const col = el('div', 'calm');
@@ -815,9 +809,8 @@ function calmList(el, b) {
     col.appendChild(g.card);
   });
   if (done.length && !onlyMissing) {
-    const g = window.SCard.card(el, { title: 'Farmed', sub: 'Ticked off — untick one to farm it again', icon: 'check',
-      badge: done.length, badgeCls: 'ok', cls: 'slim cdone dim done' });
-    done.forEach((t) => g.body.appendChild(thingRow(el, b, t, 'crow small')));
+    const g = UI.plate({ title: 'Farmed', sub: 'Ticked off — untick one to farm it again', icon: 'check', badge: done.length, badgeCls: 'ok', cls: 'cdone dim done' });
+    done.forEach((t) => g.body.appendChild(thingRow(el, b, t, 'crow sm')));
     col.appendChild(g.card);
   }
   if (!col.children.length) col.appendChild(el('div', 'empty', 'Everything is farmed.'));
@@ -838,11 +831,7 @@ function slotsView(el, b) {
       if (onlyMissing && (info.got || !info.s)) return;
       const row = el('div', 'dslot' + (info.got ? ' got' : '') + (info.s ? '' : ' blank') + (open === key && pickOpen ? ' open' : ''));
       row.dataset.key = key;
-      const slot = (SLOTS.find((x) => x[0] === key) || [])[1];
-      const ic = el('span', 'gi');
-      if (info.it && info.it.icon) { const im = el('img'); im.src = info.it.icon; im.referrerPolicy = 'no-referrer'; im.onerror = () => { ic.textContent = ICON[slot]; }; ic.appendChild(im); }
-      else ic.textContent = ICON[slot] || '◆';
-      row.appendChild(ic);
+      row.appendChild(slotPic(info, 'pic gi'));
       const t = el('div', 'dt');
       t.appendChild(slotNames(el, b, info, 'gn', true));
       t.appendChild(el('span', 'dk', info.s ? kindLine(info, slotLabel(b, key)) : slotLabel(b, key)));
@@ -867,7 +856,7 @@ function slotsView(el, b) {
     sock.forEach(([key, s]) => {
       const g = el('div', 'sg');
       const chips = el('div', 'sc');
-      s.sockets.forEach((x) => chips.appendChild(el('span', 'gem ' + gemKind(x), shortGem(x))));
+      s.sockets.forEach((x) => chips.appendChild(gemChip(el, x, true)));
       g.appendChild(chips);
       g.appendChild(el('span', 'sl', slotLabel(b, key)));
       g.title = slotLabel(b, key) + ': ' + s.sockets.join(', ');
@@ -881,7 +870,7 @@ function slotsView(el, b) {
     bar.forEach((x) => {
       const btn = el('button', 'dsk');
       btn.title = x.name + (x.rank ? ' · rank ' + x.rank : '') + ' — open the skills';
-      if (x.icon) { const im = el('img'); im.src = 'https://cloudstorage.d2core.com/data_img/d4/skill/' + x.icon + '.png'; im.referrerPolicy = 'no-referrer'; im.onerror = () => { im.remove(); btn.textContent = x.name.slice(0, 2); }; btn.appendChild(im); }
+      if (x.icon) btn.appendChild(UI.img(UI.skillPic(x.icon), () => { btn.textContent = x.name.slice(0, 2); }));
       else btn.textContent = x.name.slice(0, 2);
       btn.onclick = () => {
         if (window.BuildViews && window.BuildViews.focusSkill) window.BuildViews.focusSkill({ id: x.id, name: x.name });
@@ -897,19 +886,16 @@ function slotsView(el, b) {
   // the seal and the charms, each with its card on hover
   const ch = b.charms;
   if (ch) {
-    const side = el('div', 'dside');
-    side.appendChild(el('div', 'k', 'Seal & charms'));
+    const side = UI.plate({ title: 'Seal & charms', icon: 'charm', cls: 'dside', badge: (ch.seal ? 1 : 0) + ch.list.length });
     const line = (c, seal) => {
-      const r = el('div', 'dch');
-      r.appendChild(el('span', 'dot ' + (QCLS[c.q] || '')));
-      r.appendChild(el('span', 'nm ' + (QCLS[c.q] || ''), c.name));
+      const r = UI.line({ name: c.name, rarity: c.q, sub: [c.q, seal ? 'Seal' : 'Charm', c.set].filter(Boolean).join(' · '), pic: { name: c.name, kind: seal ? 'seal' : 'charm' }, cls: 'dch sm', title: '' });
       const set = c.set && (ch.sets || []).find((x) => x.name === c.set);
       wireCard(r, () => charmCard(c, seal, set));
-      side.appendChild(r);
+      side.body.appendChild(r);
     };
     if (ch.seal) line(ch.seal, true);
     ch.list.forEach((c) => line(c, false));
-    doll.appendChild(side);
+    doll.appendChild(side.card);
   }
   return doll;
 }
@@ -954,19 +940,7 @@ function shortGem(name) {
 const QCLS = { Mythic: 'r-mythic', Unique: 'r-unique', Set: 'r-set', Legendary: 'r-legendary', Magic: 'r-magic' };
 
 /** A card built here (not from the database) in the item tooltip's place. */
-function wireCard(node, build) {
-  node.addEventListener('mouseenter', (e) => {
-    clearTimeout(tipTimer);
-    tipFor = node;
-    const t = tipBox();
-    t.textContent = '';
-    t.appendChild(build());
-    t.hidden = false;
-    place(e.clientX, e.clientY);
-  });
-  node.addEventListener('mousemove', (e) => { if (tipEl && !tipEl.hidden && tipFor === node) place(e.clientX, e.clientY); });
-  node.addEventListener('mouseleave', hideTip);
-}
+const wireCard = (node, build) => UI.tip.bind(node, build, 'card', 60);
 /** Seal or charm: name, stats, its text and – for a set piece – the set bonuses, the active ones lit. */
 function charmCard(c, seal, set) {
   const mk = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; };
@@ -1011,8 +985,8 @@ function picker(el, b) {
   const p = el('div', 'fpick');
   const head = el('div', 'ph');
   head.appendChild(el('b', null, LABEL[open] || open));
-  const find = el('div', 'find');
-  find.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>';
+  const find = el('div', 'qbox find');
+  find.appendChild(UI.icon('search'));
   const inp = el('input');
   inp.id = 'farmQ'; inp.placeholder = 'Search everything for this slot …';
   inp.value = q; inp.spellcheck = false; inp.autocomplete = 'off';
@@ -1023,15 +997,8 @@ function picker(el, b) {
   };
   find.appendChild(inp);
   head.appendChild(find);
-  const tabs = el('div', 'chips');
-  [['unique', 'Unique'], ['mythic', 'Mythic'], ['aspect', 'Aspect']].forEach(([id, label]) => {
-    const c = el('span', 'chip' + (tab === id ? ' on' : ''), label);
-    c.onclick = () => { tab = id; ctx.rerender(); };
-    tabs.appendChild(c);
-  });
-  head.appendChild(tabs);
-  const close = el('button', 'x', '✕'); close.title = 'Close (Esc)';
-  close.onclick = () => { pickOpen = false; ctx.rerender(); };
+  head.appendChild(UI.seg([['unique', 'Unique'], ['mythic', 'Mythic'], ['aspect', 'Aspect']], tab, (id) => { tab = id; ctx.rerender(); }));
+  const close = UI.iconBtn('Close (Esc)', 'close', () => { pickOpen = false; ctx.rerender(); }, 'ghost sm');
   head.appendChild(close);
   p.appendChild(head);
 
@@ -1043,10 +1010,8 @@ function picker(el, b) {
   const isRuneword = (it) => it.src && it.src[0] && !!it.src[0].recipe;
   const aspectRow = (a) => {
     const on = have.indexOf(a.name) >= 0;
-    const row = el('div', 'popt' + (on ? ' picked' : ''));
-    row.appendChild(el('span', 'nm r-legendary', a.short));
-    row.appendChild(el('span', 'ty', a.cat + (a.cls !== 'All' ? ' · ' + a.cls : '')));
-    row.appendChild(el('span', 'where', a.dungeon ? a.dungeon + ' · ' + a.region : 'salvage'));
+    const row = UI.line({ tag: 'div', name: a.short, rarity: 'Legendary', sub: a.cat + (a.cls !== 'All' ? ' · ' + a.cls : ''), pic: { name: a.name, kind: 'aspect' },
+      end: a.dungeon ? a.dungeon + ' · ' + a.region : 'salvage', cls: 'popt click sm' + (on ? ' picked' : ''), title: '' });
     row.onclick = () => {
       let next = have.slice();
       if (on) next = next.filter((n) => n !== a.name);
@@ -1063,11 +1028,9 @@ function picker(el, b) {
     return row;
   };
   const itemRow = (it) => {
-    const row = el('div', 'popt' + (cur.item === it.name ? ' picked' : ''));
-    if (it.icon) { const im = el('img'); im.src = it.icon; im.referrerPolicy = 'no-referrer'; im.onerror = () => im.remove(); row.appendChild(im); }
-    row.appendChild(el('span', 'nm ' + (isRuneword(it) ? 'r-rune' : rcls(it.rarity)), it.name));
-    row.appendChild(el('span', 'ty', (isRuneword(it) ? 'Runeword · ' : '') + it.type + (it.cls !== 'All' ? ' · ' + it.cls : '')));
-    row.appendChild(el('span', 'where', sourceLine(it.src)));
+    const row = UI.line({ tag: 'div', name: it.name, rarity: isRuneword(it) ? 'Runeword' : it.rarity, sub: (isRuneword(it) ? 'Runeword · ' : '') + it.type + (it.cls !== 'All' ? ' · ' + it.cls : ''),
+      pic: { name: it.name, url: it.icon, kind: isRuneword(it) ? 'rune' : it.rarity === 'Mythic' ? 'mythic' : 'unique' },
+      end: sourceLine(it.src), cls: 'popt click sm' + (cur.item === it.name ? ' picked' : ''), title: '' });
     row.onclick = () => { if (cur.item !== it.name) b.slots[open] = { item: it.name }; pickOpen = false; touch(); };
     wireTip(row, 'item', it.id);
     return row;

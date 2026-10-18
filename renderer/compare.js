@@ -147,7 +147,7 @@ function render(box, a, ctx) {
   sel.onchange = () => { withId = sel.value; open = {}; ctx.rerender(); };
   head.appendChild(sel);
   head.appendChild(el('span', 'sp'));
-  const go = el('button', 'ab pri', 'Switch to it');
+  const go = UI.btn('Switch to it', null, 'pri');
   go.title = 'Open “' + b.name + '” in the farm list';
   go.onclick = () => ctx.choose(b.id);
   head.appendChild(go);

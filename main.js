@@ -20,6 +20,7 @@ const buildimport = require('./lib/buildimport');
 const guideinfo = require('./lib/guideinfo');
 const zhdict = require('./lib/zhdict');
 const d2db = require('./lib/d2coredb');
+const icons = require('./lib/icons');
 const builder = require('./lib/builder');
 const builderipc = require('./lib/builderipc');
 const place = require('./lib/place');
@@ -56,16 +57,17 @@ const userscript = require('./lib/userscript');
 
 
 // Everything scales with the screen: on a large display the text, icons and spacing grow,
-// on 1920x1080 they stay at the base size. The user can nudge it further (text size setting).
+// on 1920x1080 they stay at the base size (up to 4K: twice). The user can nudge it further
+// (text size setting).
 function zoomFor(wa) {
-  const fromScreen = Math.max(1, Math.min(wa.height / 1080, 1.5));
+  const fromScreen = Math.max(1, Math.min(wa.height / 1080, 2));
   const wish = Number(settings.textScale) || 1;
   return Math.round(fromScreen * wish * 100) / 100;
 }
 let curZoom = 1;
 function applyZoom() {
   if (!overlay || overlay.isDestroyed()) return curZoom;
-  const wa = screen.getDisplayMatching({ x: barX, y: barY, width: curBarW, height: BAR_HEIGHT }).workArea;
+  const wa = screen.getDisplayMatching({ x: barX, y: barY, width: curW, height: curH }).workArea;
   const z = zoomFor(wa);
   if (z !== curZoom) {
     curZoom = z;
@@ -76,8 +78,14 @@ function applyZoom() {
   return curZoom;
 }
 
-const BAR_WIDTH = 300;                   // until the overlay reports its real width
+const BAR_WIDTH = 300;                   // until the overlay reports its real size
 const BAR_HEIGHT = 52;
+// The open panel is made for the room left of the game's inventory, skill tree and paragon:
+// 820 × 600 at 1080p (CSS pixels – the zoom grows it with the screen), smaller or larger by the
+// "Panel size" setting – or tall and narrow like a phone (393 × 850, "mobile") – or the size
+// dragged by hand. Every page works down to the phone's width.
+const PANEL_SIZES = { small: { w: 700, h: 510 }, medium: { w: 820, h: 600 }, large: { w: 985, h: 720 }, mobile: { w: 393, h: 850 } };
+const PANEL_MIN = { w: 360, h: 400 };
 
 let settings = Settings.load({}).settings;
 let overlay = null;
@@ -87,9 +95,10 @@ let hideTicks = 0;
 let loot = { sections: [], fetchedAt: 0 };
 let craft = { tables: [], fetchedAt: 0 };
 // Layout: position of the bar itself plus the direction things open in
-let barX = 0, barY = 0, curH = BAR_HEIGHT, curW = BAR_WIDTH, curBarW = BAR_WIDTH, curOffset = 0, flipUp = false;
+let barX = 0, barY = 0, curH = BAR_HEIGHT, curW = BAR_WIDTH;
+let strip = { w: BAR_WIDTH, h: BAR_HEIGHT };   // the closed bar's last reported size (CSS pixels)
 let capturing = false;                   // a hotkey is being recorded in the settings
-let isIdle = false;                      // the overlay reported "nothing open, nothing touched"
+let isIdle = false;                      // the overlay reported "nothing open" – the bar is a strip
 let centreIdle = true;                   // no place dragged for the pill yet -> keep it centred
 let hiddenByHand = false;               // hidden from the tray – stays hidden until shown there again
 let placeLock = 0;                       // size reports that must not move the bar (just placed)
@@ -183,16 +192,16 @@ function onWindowState(st) {
 }
 
 // ---------- window & layout ----------
-// Two places are remembered: where the shrunk pill sits (by default centred at the top, out of
-// the way) and where the bar sits once it is awake (by default at the left edge). Dragging the
-// window always writes to the place of the state it is currently in.
+// Two places are remembered: where the closed bar sits (by default centred at the top, out of
+// the way) and where the open panel sits (by default top left – the room left of the game's
+// inventory). Dragging the window always writes to the place of the state it is in.
 const onScreen = (p) => place.onScreen(p, screen.getAllDisplays());
 
 function defaultPlace(idle) {
   const wa = screen.getPrimaryDisplay().workArea;
   return idle
-    ? { x: Math.round(wa.x + (wa.width - (curBarW || BAR_WIDTH)) / 2), y: wa.y + 8 }
-    : { x: wa.x + 24, y: wa.y + 120 };
+    ? { x: Math.round(wa.x + (wa.width - strip.w * curZoom) / 2), y: wa.y + 8 }
+    : { x: wa.x + 16, y: wa.y + 64 };
 }
 function checkCentre() { centreIdle = !onScreen(settings.posIdle); }
 function placeFor(idle) {
@@ -213,71 +222,44 @@ function setIdleState(on) {
   placeLock = 3;                         // the next size reports keep this place
   const p = placeFor(on);
   barX = p.x; barY = p.y;
-  dlog(on ? 'Idle: shrunk to the pill' : 'Awake', '→', barX + ',' + barY);
-  applySize(curBarW / curZoom, curH / curZoom, false, false);
+  dlog(on ? 'Closed: the strip' : 'Open: the panel', '→', barX + ',' + barY);
+  applySize(strip.w, strip.h, !on);
   saveSettingsFile();
 }
 
-/** Idle the bar is a flat pill, so it is placed like the horizontal one. */
-const flatBar = () => settings.orientation === 'horizontal' || (isIdle && settings.idleShrink !== false);
-/** Where a window of width w starts: centred under a flat bar, else from the bar – kept on screen. */
-function windowLeft(w, bw, wa, flat) {
-  return flat
-    ? Math.max(wa.x, Math.min(Math.round(barX + bw / 2 - w / 2), wa.x + wa.width - w))
-    : Math.max(wa.x, Math.min(barX, wa.x + wa.width - w));
+/** The open panel in screen pixels: the size dragged by hand, else 820 × 600 by "Panel size" – on the screen. */
+function panelBox(z, wa) {
+  const m = settings.panelSize && settings.panelSize.w > 0 ? settings.panelSize : null;
+  const p = PANEL_SIZES[settings.windowSize] || PANEL_SIZES.medium;
+  const w = m ? m.w : p.w, h = m ? m.h : p.h;
+  return { w: Math.min(Math.round(w * z), wa.width), h: Math.min(Math.round(h * z), wa.height), manual: !!m };
 }
 
-// The bar keeps its place; only what opens grows. The two orientations behave differently:
-//   vertical   – the rail sits on the left, the panel opens to its right. The window simply
-//                starts at the bar and is clamped to the screen; the bar follows that clamp.
-//   horizontal – the bar sits on top, the panel opens below (or above when there is no room),
-//                growing around the bar's centre. The rail is then shifted inside the window.
-// Sizes scale with the screen; the overlay measures in CSS pixels, the window needs real ones.
-function applySize(barW, h, open, big) {
+// Closed, the window is just the bar – a strip, where it was put (a strip never put anywhere stays
+// centred while its width changes – but not while its sections slide out under the mouse, hold).
+// Open, it is the panel at the open place. Either way it is kept on the screen and the place
+// follows that.
+function applySize(barW, barH, open, hold) {
   if (!overlay || overlay.isDestroyed()) return;
-  const wa = screen.getDisplayMatching({ x: barX, y: barY, width: curBarW, height: BAR_HEIGHT }).workArea;
+  const wa = screen.getDisplayMatching({ x: barX, y: barY, width: curW, height: curH }).workArea;
   const z = applyZoom();
-  const horizontal = flatBar();
-  const f = { small: 0.85, medium: 1, large: 1.2 }[settings.windowSize] || 1;
-  const panelW = Math.max(600, Math.min(Math.round(wa.width * (big ? 0.68 : 0.5) * f), big ? 1500 : 1200));
-  const maxH = Math.max(380, Math.min(Math.round(wa.height * (big ? 0.8 : 0.62) * f), 1400));
-
-  const bw = Math.max(44, Math.min(Math.round(barW * z), wa.width));
-  const bh = Math.max(44, Math.min(Math.round(h * z), wa.height));          // rail height when closed
-  // A size the user dragged wins over the automatic one (until they reset it)
-  const manual = open && settings.panelSize && settings.panelSize.w > 0 ? settings.panelSize : null;
-  const w = open
-    ? Math.min(Math.max(manual ? Math.round(manual.w * z) : panelW, bw), wa.width)
-    : bw;
-  const wantH = open
-    ? (manual ? Math.round(manual.h * z) : Math.min(maxH, Math.round(h * z)))
-    : bh;
-  const hh = Math.max(44, Math.min(wantH, wa.height));
-
-  let x, y, offset = 0, up = false;
-  if (horizontal) {
-    barX = place.barLeft({ barX, bw, prevBw: curBarW, wa, idle: isIdle, centre: centreIdle, fixed: placeLock > 0 });
-    x = windowLeft(w, bw, wa, true);
-    offset = barX - x;
-    const below = wa.y + wa.height - (barY + BAR_HEIGHT);
-    up = (hh - BAR_HEIGHT) > below && (barY - wa.y) > below;
-    y = up ? barY + BAR_HEIGHT - hh : barY;
+  let w, h, manual = false;
+  if (open) {
+    const p = panelBox(z, wa);
+    w = p.w; h = p.h; manual = p.manual;
   } else {
-    x = windowLeft(w, bw, wa, false);
-    y = Math.max(wa.y, Math.min(barY, wa.y + wa.height - hh));
-    barX = x; barY = y;                                                     // the bar follows the clamp
+    strip = { w: barW, h: barH };
+    w = Math.max(44, Math.min(Math.round(barW * z), wa.width));
+    h = Math.max(36, Math.min(Math.round(barH * z), wa.height));
+    if (!hold) barX = place.barLeft({ barX, bw: w, prevBw: curW, wa, idle: true, centre: centreIdle, fixed: placeLock > 0 });
   }
-
+  barX = Math.max(wa.x, Math.min(barX, wa.x + wa.width - w));
+  barY = Math.max(wa.y, Math.min(barY, wa.y + wa.height - h));
   if (placeLock > 0) placeLock--;
-  overlay.setBounds({ x, y, width: w, height: hh });
-  curH = hh; curW = w; curBarW = bw; curOffset = offset; flipUp = up;
+  overlay.setBounds({ x: barX, y: barY, width: w, height: h });
+  curW = w; curH = h;
   rememberPlace();
-  send('layout', {
-    up, offset: Math.round(offset / z),
-    maxH: Math.round((manual ? hh : maxH) / z),      // CSS pixels
-    manual: !!manual,
-    panelW: Math.round((w - (horizontal ? 0 : bw + 8)) / z),
-  });
+  send('layout', { manual });
 }
 
 function createOverlay() {
@@ -294,8 +276,7 @@ function createOverlay() {
   overlay.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   overlay.on('moved', () => {
     const [x, y] = overlay.getPosition();
-    barX = x + curOffset;
-    barY = settings.orientation === 'horizontal' && flipUp ? y + curH - BAR_HEIGHT : y;
+    barX = x; barY = y;
     rememberPlace();
     if (isIdle) centreIdle = false;       // dragged by hand -> keep exactly this spot
     saveSettingsFile();
@@ -463,18 +444,21 @@ ipcMain.handle('activities:get', () => acts.all());
 ipcMain.handle('runewords:get', () => d4g.byLabel('Runeword'));
 ipcMain.handle('data:refresh', () => refreshAll(true));
 
+// Every picture by name (lib/icons.js) – built again only when one of its sources changed
+let iconMap = { key: '', map: {} };
+function iconsNow() {
+  const d2 = d2db.cached();
+  const cat = farm.catalog(loot, craft);
+  const key = [items.count(), items.age(), d4g.count(), d4g.age(), cat.items.length, cat.aspects.length, d2 ? d2.fetchedAt : 0].join('|');
+  if (iconMap.key !== key) {
+    iconMap = { key, map: icons.build({ catalog: cat.items, aspects: cat.aspects, guides: d4g.all(), items: items.all(), d2: (d2 && d2.icons) || {} }) };
+  }
+  return iconMap.map;
+}
+ipcMain.handle('icons:get', () => iconsNow());
+
 // Search across both sources: maxroll supplies power/level/description (local, instant),
 // d4guides supplies icon, rarity, category and the detail page.
-// maxroll's picture for each name (the boss loot falls back to it) – { name: url }
-ipcMain.handle('items:icons', (_e, names) => {
-  const out = {};
-  (Array.isArray(names) ? names : []).slice(0, 2000).forEach((n) => {
-    // a boss trophy is "Duriel: Shard of Agony" on the loot sheet, "Shard of Agony" in the game data
-    const it = items.get(n) || items.get(String(n).split(':').slice(1).join(':').trim());
-    if (it && it.icon) out[n] = it.icon;
-  });
-  return out;
-});
 ipcMain.handle('items:search', async (_e, q) => {
   const { term, kinds } = S.parseQuery(String(q || ''));
   const out = [], seen = new Set();
@@ -624,45 +608,32 @@ ipcMain.handle('builds:import-file', async () => {
   return importBuilds(text);
 });
 
-ipcMain.on('overlay:resize', (_e, barW, h, open, big) => applySize(barW, h, open, big));
+ipcMain.on('overlay:resize', (_e, barW, h, open, hold) => applySize(barW, h, !!open, !!hold));
 ipcMain.on('overlay:idle', (_e, on) => setIdleState(!!on));
 ipcMain.on('overlay:panel-size', (_e, size) => {
   if (!size || !size.w) { settings.panelSize = null; }
   else {
-    settings.panelSize = { w: Math.max(360, Math.round(size.w)), h: Math.max(220, Math.round(size.h)) };
+    settings.panelSize = { w: Math.max(PANEL_MIN.w, Math.round(size.w)), h: Math.max(PANEL_MIN.h, Math.round(size.h)) };
   }
   saveSettingsFile();
-  applySize(curBarW / curZoom, curH / curZoom, true, size && size.big);
+  applySize(strip.w, strip.h, true);
 });
-// Dragging the panel's corner. The cursor is read here, in screen pixels: the window itself
-// moves while it grows (a horizontal bar keeps the panel centred under it), so the
-// renderer's own mouse coordinates would drift. The size is solved so the corner stays
-// under the mouse.
+// Dragging the panel's corner: the top left stays, the corner follows the cursor (read here, in
+// screen pixels – the renderer's own coordinates move with the window).
 let sizeDrag = null;
-ipcMain.on('overlay:resize-drag', (_e, phase, big) => {
+ipcMain.on('overlay:resize-drag', (_e, phase) => {
   if (!overlay || overlay.isDestroyed()) return;
   const p = screen.getCursorScreenPoint();
   const b = overlay.getBounds();
-  if (phase === 'start') {
-    sizeDrag = { ox: b.x + b.width - p.x, oy: b.y + b.height - p.y, y0: p.y, h0: b.height, up: flipUp, big: !!big };
-    return;
-  }
+  if (phase === 'start') { sizeDrag = { ox: b.x + b.width - p.x, oy: b.y + b.height - p.y }; return; }
   if (!sizeDrag) return;
   if (phase === 'end') { sizeDrag = null; saveSettingsFile(); return; }
   const z = curZoom || 1;
   const wa = screen.getDisplayMatching(b).workArea;
-  const flat = flatBar();
-  const minW = Math.round(360 * z), minH = Math.round(220 * z);
-  // where the right edge ends up for a width – the same placement as applySize
-  const rightOf = (w) => windowLeft(w, curBarW, wa, flat) + w;
-  const right = p.x + sizeDrag.ox;
-  let lo = minW, hi = wa.width;
-  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (rightOf(m) <= right) lo = m; else hi = m; }
-  const h = sizeDrag.up
-    ? sizeDrag.h0 + (p.y - sizeDrag.y0)                     // opened upwards: the bottom is fixed to the bar
-    : p.y + sizeDrag.oy - b.y;
-  settings.panelSize = { w: Math.round(lo / z), h: Math.round(Math.max(minH, Math.min(h, wa.height)) / z) };
-  applySize(curBarW / curZoom, curH / curZoom, true, sizeDrag.big);
+  const w = Math.min(p.x + sizeDrag.ox - b.x, wa.x + wa.width - b.x);
+  const h = Math.min(p.y + sizeDrag.oy - b.y, wa.y + wa.height - b.y);
+  settings.panelSize = { w: Math.max(PANEL_MIN.w, Math.round(w / z)), h: Math.max(PANEL_MIN.h, Math.round(h / z)) };
+  applySize(strip.w, strip.h, true);
 });
 let hoverWatch = null, hoverIn = null;
 ipcMain.on('overlay:hover-watch', (_e, on) => {
@@ -809,6 +780,8 @@ else {
     maxbuild.configure({ namesFile: userFile('maxroll-names.json') });
     zhdict.configure({ file: userFile('zh-dict.json') });
     d2db.configure({ file: userFile('d2core-db.json') });
+    // the pictures of gems, runes, splinters, charms and seals come with it – fetched once a week
+    d2db.load(net, dlog).then(() => send('icons-ready')).catch(() => {});
     builder.configure({ file: userFile('builder-db.json') });
 
     views.setLogger(dlog);

@@ -1,6 +1,6 @@
 /* The website around the overlay's build sections: a page, not a window over the game. */
 html,body{background:var(--bg);user-select:text}
-#app.web{position:fixed;inset:0;display:flex;flex-direction:column;padding:0}
+#app.web{position:fixed;inset:0;display:flex;flex-direction:column;align-items:stretch;padding:0}
 #wtop{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line2);background:var(--surf);flex:0 0 auto;flex-wrap:wrap}
 #wtop .brand{font:700 18px var(--head);letter-spacing:.02em;color:var(--accent-fg);text-decoration:none}
 #wtop .brand:hover{color:#ffd59a}

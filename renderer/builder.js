@@ -9,7 +9,7 @@
 (function () {
 const M = window.DmgModel, O = window.Optimizer;
 const SKILL_ICON = (id) => (id ? 'https://cloudstorage.d2core.com/data_img/d4/skill/' + id + '.png' : '');
-const KEEP = new Set(['tbtn', 'pri', 'sm']);
+const KEEP = new Set(['btn', 'pri', 'sm']);
 const E = (tag, cls, txt) => {
   const e = document.createElement(tag);
   if (cls) e.className = String(cls).split(/\s+/).filter(Boolean).map((c) => (KEEP.has(c) ? c : 'bd-' + c)).join(' ');
@@ -38,33 +38,16 @@ let catalog = null, catalogErr = '';
 const S = { step: 'class', cls: null, key: null, view: 'build', src: null, slot: null, skill: null, q: '' };
 const PLANS = {};       // key -> plan (+ proven when loaded)
 const STATE = {};       // key -> { on, forced, goal, mods, result, souls, par }
-let tipEl = null;
+
 
 const rerender = () => { if (ctx) ctx.rerender(); };
 const go = (patch) => { Object.assign(S, patch); rerender(); };
 
-function tip(e, title, text) {
-  if (!tipEl) { tipEl = E('div', 'tip'); tipEl.hidden = true; document.body.appendChild(tipEl); }
-  tipEl.replaceChildren(E('b', null, title), document.createTextNode(text || ''));
-  tipEl.hidden = false; moveTip(e);
-}
-// next to the mouse, always inside the window – a card taller than the room left starts at the top
-function moveTip(e) { if (!tipEl || tipEl.hidden) return; const r = tipEl.getBoundingClientRect(); tipEl.style.left = Math.max(6, Math.min(innerWidth - r.width - 10, e.clientX + 14)) + 'px'; tipEl.style.top = Math.max(6, Math.min(innerHeight - r.height - 10, e.clientY + 14)) + 'px'; }
-function untip() { if (tipEl) tipEl.hidden = true; }
-// a card whose piece was redrawn away goes when the mouse is no longer over one that has a card
-document.addEventListener('mousemove', (e) => { if (tipEl && !tipEl.hidden && e.target && e.target.closest && !e.target.closest('[data-tip]')) { untip(); return; } moveTip(e); });
-const hover = (node, title, text) => { node.dataset.tip = '1'; node.onmouseenter = (e) => tip(e, title, text); node.onmouseleave = untip; };
+// the overlay's one hover card (renderer/ui.js)
+const untip = () => UI.tip.hide();
+const hover = (node, title, text) => UI.tip.bind(node, () => ({ title, lines: [text || ''] }), '', 60);
 /** A card on hover – built when the mouse comes, in the farm list's card style (.ctt). */
-function hoverCard(node, build) {
-  node.dataset.tip = '1';
-  node.onmouseenter = (e) => {
-    if (!tipEl) { tipEl = E('div', 'tip'); tipEl.hidden = true; document.body.appendChild(tipEl); }
-    tipEl.replaceChildren(build());
-    tipEl.classList.add('bd-cardtip');
-    tipEl.hidden = false; moveTip(e);
-  };
-  node.onmouseleave = () => { untip(); if (tipEl) tipEl.classList.remove('bd-cardtip'); };
-}
+const hoverCard = (node, build) => UI.tip.bind(node, build, 'card', 60);
 const mk = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; };
 /**
  * A piece's card: name, kind and slot, its power, the stats to look for – ✦ on the one a Greater
@@ -247,7 +230,7 @@ function render(main, c) {
     const v = E('div', 'views');
     [['build', 'Build'], ['skills', 'Skills'], ['paragon', 'Paragon'], ['goals', 'Goals']].forEach(([k, l]) => { const b = E('button', S.view === k ? 'on' : '', l); b.onclick = () => go({ view: k }); v.appendChild(b); });
     head.appendChild(v);
-    const save = E('button', 'tbtn pri', S.saving ? 'Saving …' : 'Save as build');
+    const save = E('button', 'btn pri', S.saving ? 'Saving …' : 'Save as build');
     save.title = 'Into the farm list – every piece with where it drops, the skills and the paragon';
     // one save at a time: greyed out with a spinner until the answer is back
     if (S.saving) { save.disabled = true; save.prepend(E('i', 'spin')); }
@@ -495,7 +478,7 @@ function provenView(body, p, b) {
     side.appendChild(sec);
     talismanAndSockets(side, p, STATE[S.key]);
     const act = E('div', 'acts');
-    const custom = E('button', 'tbtn', 'Make it my own');
+    const custom = E('button', 'btn', 'Make it my own');
     custom.title = 'Takes these pieces into "Build it yourself" – swap anything and see what it does';
     custom.onclick = () => {
       const st = STATE[S.key];
@@ -505,7 +488,7 @@ function provenView(body, p, b) {
       go({ src: 'own', slot: null });
     };
     act.appendChild(custom);
-    const open = E('button', 'tbtn', 'Open on ' + (SITE[b.site] || b.site));
+    const open = E('button', 'btn', 'Open on ' + (SITE[b.site] || b.site));
     open.onclick = () => api.openBuildSource(b.url);
     act.appendChild(open);
     side.appendChild(act);
@@ -629,12 +612,12 @@ function ownView(body, p, st) {
   const n = p.consensus ? p.consensus.n : 0;
   if (st.seeded === 'consensus') {
     start.appendChild(E('span', null, 'Starts from what the top ' + n + ' builds use per slot – the model fills the slots they leave open and shows what each swap would do.'));
-    const b = E('button', 'tbtn sm', 'Let the model pick everything (experimental)');
+    const b = E('button', 'btn sm', 'Let the model pick everything (experimental)');
     b.onclick = () => { st.forced = {}; st.seeded = 'model'; rerender(); };
     start.appendChild(b);
   } else if (n) {
     start.appendChild(E('span', null, st.seeded === 'model' ? 'The model\'s own pick (experimental) – it reads item texts and cannot see everything top builds rely on.' : 'Your picks – the model fills the rest.'));
-    const b = E('button', 'tbtn sm', 'Back to what the top builds use');
+    const b = E('button', 'btn sm', 'Back to what the top builds use');
     b.onclick = () => { st.forced = {}; st.seeded = false; seedFromConsensus(p, st); rerender(); };
     start.appendChild(b);
   } else {
@@ -912,7 +895,7 @@ function pieceRow(p, st, c, g, onUse) {
     if (Math.abs(g.speed || 0) > 0.5) { v.appendChild(E('br')); v.appendChild(E('span', g.speed > 0 ? 'spd' : 'nd', pct(g.speed) + ' speed')); }
   }
   r.appendChild(v);
-  if (g && !g.here) { const use = E('button', 'tbtn sm', 'Use'); use.onclick = onUse; r.appendChild(use); } else r.appendChild(E('span'));
+  if (g && !g.here) { const use = E('button', 'btn sm', 'Use'); use.onclick = onUse; r.appendChild(use); } else r.appendChild(E('span'));
   hover(r, c.name, c.desc);
   return r;
 }
@@ -1023,10 +1006,10 @@ function slotView(side, p, st, slot) {
     sec5.appendChild(E('p', 'src-note', 'Picked by what they are made for, not by the number: a proc, a new tag or a mechanic can carry a build the model only partly counts. The number is what it does in this build compared with what sits there now.'));
     side.appendChild(sec2);
     side.appendChild(sec5);
-    if (st.forced[slot]) { const reset = E('button', 'tbtn sm', 'Let the builder pick again'); reset.onclick = () => { delete st.forced[slot]; rerender(); }; sec2.appendChild(reset); }
+    if (st.forced[slot]) { const reset = E('button', 'btn sm', 'Let the builder pick again'); reset.onclick = () => { delete st.forced[slot]; rerender(); }; sec2.appendChild(reset); }
     return;
   }
-  if (st.forced[slot]) { const reset = E('button', 'tbtn sm', 'Let the builder pick again'); reset.onclick = () => { delete st.forced[slot]; rerender(); }; sec2.appendChild(reset); }
+  if (st.forced[slot]) { const reset = E('button', 'btn sm', 'Let the builder pick again'); reset.onclick = () => { delete st.forced[slot]; rerender(); }; sec2.appendChild(reset); }
   side.appendChild(sec2);
 }
 
