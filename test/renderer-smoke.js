@@ -77,13 +77,13 @@ let settings = {
   orientation: 'vertical', railWide: false, windowSize: 'mittel', opacity: 1,
   tradeOpenMode: 'internal', pressEnter: false, hotkeySearch: 'Control+F',
   wbWarnMin: 5, wbBlink: true, favorites: [], recent: [],
-  fadeOpacity: 0.35, fadeAfterSec: 1, idleShrink: true, wbBright: true, msgBlink: true,
+  fadeOpacity: 0.35, fadeAfterSec: 1, idleShrink: true, pillHide: ['maptool'], wbBright: true, msgBlink: true,
   clickSpam: false, clickLeftBind: 'Mouse5', clickRightBind: 'Mouse4', clickCps: 15,
   lockOn: false, lockKeys: [], lockBind: 'F9', macroChars: [], macroChar: 0,
 };
 
 const calls = [];
-let backupMade = 0, notesFile = null, copied = null;
+let backupMade = 0, copied = null;
 const handlers = {};
 const on = (n) => (cb) => { handlers[n] = cb; };
 w.d4api = new Proxy({}, { get: (_, k) => {
@@ -102,7 +102,6 @@ w.d4api = new Proxy({}, { get: (_, k) => {
     if (k === 'pickBackupDir') return Promise.resolve('D:\\OneDrive\\D4');
     if (k === 'runBackup') { backupMade = Date.now(); return Promise.resolve({ ok: true, dir: 'x', at: backupMade }); }
     if (k === 'lastBackup') return Promise.resolve(backupMade);
-    if (k === 'saveNotesFile') { notesFile = a[0]; return Promise.resolve('C:\\docs\\d4-notes.md'); }
     if (k === 'copyText') { copied = a[0]; return undefined; }
     if (k === 'authStatus') return Promise.resolve({ cookies: 2, loggedIn: true });
     if (k === 'openTrade') return Promise.resolve('internal');
@@ -294,11 +293,11 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(txt().includes('2 recipes'), 'recipe count shown');
   console.log('ok  "crafting" lists all recipes and runewords');
 
-  // --- activities, by icon and by word
+  // --- activities: no tab of their own, found in the search
+  assert.ok(!rail('activities') && !rail('notes'), 'no activities or notes tab');
   await type('activities');
   assert.ok(txt().includes('Secret Cow Level'), 'activity found by keyword');
-  await type('');
-  rail('activities').click(); await sleep(40);
+  await type('secret cow level');
   assert.ok(txt().includes('Secret Cow Level'), 'activity rendered');
   const step = w.document.querySelector('.step input');
   assert.ok(step && w.document.querySelectorAll('.step').length === 2, 'the parts of a step-by-step guide to tick off');
@@ -309,8 +308,8 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   calls.length = 0;
   w.document.querySelector('.jump').click(); await sleep(30);
   assert.ok(!$('viewSlot').hidden && calls.includes('viewShow'), 'a section opens the guide right there');
-  rail('activities').click(); await sleep(30);
-  console.log('ok  activities section');
+  await type('');
+  console.log('ok  activities in the search');
 
   // --- builds: one list – slot, item, where it drops, tick – or slots; the build menu
   rail('farm').click(); await sleep(80);
@@ -622,12 +621,12 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(!$('coach').hidden, 'the hint about closing and pinning shows once');
   $('coachOk').click(); await sleep(20);
   assert.ok($('coach').hidden && settings.coachSeen === true, 'and is gone for good');
-  handlers.onBlur(); await sleep(20);
+  handlers.onClickOutside(); await sleep(20);
   assert.ok($('panel').hidden, 'click into the game closes it');
   rail('search').click(); await sleep(30);
   $('btnPin').click();
   assert.ok($('btnPin').classList.contains('on'), 'pinned');
-  handlers.onBlur(); await sleep(20);
+  handlers.onClickOutside(); await sleep(20);
   assert.ok(!$('panel').hidden && $('app').classList.contains('ghost'), 'pinned: stays, steps back');
   $('panel').dispatchEvent(new w.PointerEvent('pointerenter', { bubbles: true })); await sleep(10);
   assert.ok($('app').classList.contains('ghost'), 'the mouse over it only lifts the fade for the moment (CSS), it stays pinned-faded');
@@ -636,16 +635,34 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok($('app').classList.contains('near'), 'cursor over the window: bright');
   handlers.onCursorInside(false);
   assert.ok(!$('app').classList.contains('near') && $('app').classList.contains('ghost'), 'cursor gone (even a quick exit into the game): faded again');
-  handlers.onFocus(); await sleep(20);
-  assert.ok(!$('app').classList.contains('ghost'), 'focus brings it forward');
+  $('main').dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true })); await sleep(20);
+  assert.ok(!$('app').classList.contains('ghost'), 'a click on it brings it forward');
   $('panelClose').click(); await sleep(20);
   rail('farm').click(); await sleep(30);
   assert.ok(!$('btnPin').classList.contains('on'), 'builds do not pin themselves – pinning is your own click');
   $('btnPin').click();
-  handlers.onBlur(); await sleep(20);
+  handlers.onClickOutside(); await sleep(20);
   assert.ok(!$('panel').hidden && !$('app').classList.contains('ghost'), 'builds stay fully visible while you play (no fade out)');
   $('panelClose').click(); await sleep(20);
   console.log('ok  close on a click into the game, pin');
+
+  // the keyboard stays with the game: asked for only while something is typed into
+  const kb = () => calls.filter((c) => c === 'keyboard').length;
+  let k0 = kb();
+  rail('settings').click(); await sleep(30);
+  assert.strictEqual(kb(), k0, 'opening settings by a click takes no keyboard');
+  w.document.querySelector('.setmain').dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true })); await sleep(20);
+  assert.strictEqual(kb(), k0, 'clicking around in it neither');
+  w.document.querySelectorAll('.setnav a')[2].click(); await sleep(30);
+  w.document.querySelector('.hk').dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true })); await sleep(20);
+  assert.strictEqual(kb(), k0 + 1, 'a key field asks for it');
+  w.document.querySelectorAll('.setnav a')[0].click(); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  k0 = kb();
+  rail('search').click(); await sleep(30);
+  assert.ok(kb() > k0, 'the search takes it, to type into');
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  console.log('ok  keyboard only while typing');
 
   // a guide opened from the results: spinner while it loads, Back, typing goes back to the results
   rail('search').click(); await sleep(20);
@@ -802,12 +819,25 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   const rowOrder = () => [...w.document.querySelectorAll('.lockrow')].map((x) => x.dataset.key);
   sameJson(rowOrder(), ['1', '2', 'Q', 'Mouse1'], 'every key has its row');
   assert.ok(settings.lockKeys.every((e) => e.lock === true), 'lock is on by default');
-  assert.ok(lockRow('Q').querySelector('.sw').classList.contains('on') && lockRow('Q').querySelector('input[type=range]').disabled, 'lock on: the seconds are grey');
+  assert.ok(lockRow('Q').querySelector('.sw').classList.contains('on') && lockRow('Q').querySelector('input.ksec').disabled, 'lock on: the seconds are grey');
   lockRow('Q').querySelector('.sw').click(); await sleep(40);
   assert.strictEqual(settings.lockKeys[2].lock, false, 'lock off: timed');
-  assert.ok(!lockRow('Q').querySelector('input[type=range]').disabled, 'and the seconds can be set');
-  const secs = lockRow('Q').querySelector('input[type=range]');
-  secs.value = '12.5'; secs.dispatchEvent(new w.Event('change')); await sleep(40);
+  assert.ok(!lockRow('Q').querySelector('input.ksec').disabled, 'and the seconds can be set');
+  const secs = lockRow('Q').querySelector('input.ksec');
+  // a time as typed: comma, m:ss, units – anything else is put back
+  const ksec = () => lockRow('Q').querySelector('input.ksec');
+  const typeSec = async (v) => { ksec().value = v; ksec().dispatchEvent(new w.Event('change')); await sleep(40); };
+  const secOf = (k) => settings.lockKeys.find((e) => e.key === k).sec;
+  await typeSec('5,2');
+  assert.ok(secOf('Q') === 5.2 && ksec().value === '5.2s', 'a comma works');
+  await typeSec('1:12');
+  assert.ok(secOf('Q') === 72 && ksec().value === '01:12', 'm:ss');
+  await typeSec('1m5s');
+  assert.strictEqual(secOf('Q'), 65, 'units');
+  await typeSec('soon');
+  assert.ok(secOf('Q') === 65 && ksec().value === '01:05', 'no time: put back');
+  await typeSec('12.5 sec');
+  assert.strictEqual(secOf('Q'), 12.5, 'seconds with a word');
   lockRow('2').querySelector('.sw').click(); await sleep(40);
   assert.ok(lockRow('2').textContent.includes('timed · 1.') && lockRow('Q').textContent.includes('timed · 2.'), 'the timed keys carry their priority');
   assert.ok(txt().includes('Timed keys always go out on time'), 'held and timed: says who goes first');
@@ -988,6 +1018,11 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.strictEqual(settings.ctSecs, 5400, 'past 99:59:59: refused');
   tin().value = '90'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
   assert.ok(settings.ctSecs === 90 && $('ctTime').textContent === '01:30', 'plain seconds work too');
+  tin().value = '15m10s'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.strictEqual(settings.ctSecs, 910, 'units: 15m10s');
+  tin().value = '1h'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.ok(settings.ctSecs === 3600 && tin().value === '1:00:00', '1h');
+  tin().value = '90'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
   // counting up: from 0:00 to its time, red for the last 30 seconds, ready at the end
   [...w.document.querySelectorAll('.opt')].find((o) => o.querySelector('.txt b').textContent === 'Counting')
     .querySelectorAll('.seg button')[1].click(); await sleep(30);
@@ -1010,23 +1045,25 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   tin().value = '5:00'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
   assert.ok(settings.ctUp === false && settings.ctSecs === 300, 'back to 5:00, counting down');
   w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
-  // the pill with the timers only
-  assert.ok(!$('app').classList.contains('timersonly'), 'icons in the pill by default');
-  const onlySw = () => [...w.document.querySelectorAll('.opt')].find((o) => o.textContent.includes('Show only timers')).querySelector('.sw');
-  const setOnly = async () => {
+  // what the pill shows: each thing switched on or off
+  assert.ok(rail('maptool').classList.contains('pillhide') && !rail('search').classList.contains('pillhide'), 'by default all but the map tool');
+  const togglePill = async (k) => {
     rail('settings').click(); await sleep(30);
     w.document.querySelectorAll('.setnav a')[1].click(); await sleep(30);
     assert.strictEqual(w.document.querySelector('.scard').dataset.card, 'Pill', 'Appearance opens with the pill');
-    assert.ok(w.document.querySelector('.scard .opt').textContent.includes('Show only timers'), 'its first row: show only timers');
-    onlySw().click(); await sleep(30);
+    assert.strictEqual($('pillPick').querySelectorAll('button').length, 10, 'search, builds, map tool, diablo.trade, the four timers, settings, quit');
+    $('pillPick').querySelector('[data-pill="' + k + '"]').click(); await sleep(30);
     w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
   };
-  await setOnly();
-  assert.ok(settings.pillTimersOnly === true && $('app').classList.contains('timersonly') && $('app').classList.contains('idle'), 'pill: timers only');
+  await togglePill('listings');
+  await togglePill('wb');
+  assert.deepStrictEqual(settings.pillHide, ['maptool', 'listings', 'wb'], 'switched off');
+  assert.ok(rail('listings').classList.contains('pillhide') && $('wb').classList.contains('pillhide') && $('app').classList.contains('idle'), 'left out of the pill');
   const css = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'style.css'), 'utf8');
-  assert.ok(css.includes('#app.idle.shrink.timersonly #rail>.ri:not([data-section="settings"]):not(#btnQuit){display:none}'), 'timers only: settings and quit stay');
-  await setOnly();
-  assert.ok(settings.pillTimersOnly === false && !$('app').classList.contains('timersonly'), 'icons back');
+  assert.ok(css.includes('#app.idle.shrink #rail>.pillhide{display:none!important}'), 'only in the pill – the open bar keeps everything');
+  await togglePill('listings');
+  await togglePill('wb');
+  assert.deepStrictEqual(settings.pillHide, ['maptool'], 'back on');
   // hovering only takes the fade off – the pill keeps its shape and place so it can be dragged
   $('rail').dispatchEvent(new w.PointerEvent('pointerenter', { bubbles: true })); await sleep(20);
   assert.ok($('app').classList.contains('idle'), 'hovering does not wake it');
@@ -1113,37 +1150,6 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   handlers.onUpdateInfo({ current: '1.1.0', latest: '1.1.0', newer: false }); await sleep(30);
   assert.ok($('updDot').hidden && txt().includes('Up to date'), 'up to date: no dot');
   console.log('ok  update check: dot and download');
-
-  // --- notes per season: checklist and free text
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
-  rail('notes').click(); await sleep(40);
-  assert.ok(!$('panel').hidden && w.document.querySelector('#main.notes'), 'the notes page opens');
-  const add = () => $('noteAdd');
-  add().value = 'Get the Shako';
-  add().dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(40);
-  add().value = 'Pit 100';
-  add().dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(40);
-  assert.strictEqual(JSON.stringify(settings.notes.seasons[0].items.map((i) => i.text)), '["Get the Shako","Pit 100"]', 'points added');
-  const box1 = w.document.querySelector('.nlist .step input');
-  box1.checked = true; box1.dispatchEvent(new w.Event('change')); await sleep(40);
-  assert.ok(settings.notes.seasons[0].items[0].done && txt().includes('1 / 2'), 'ticked, counted');
-  const ta = $('noteText');
-  ta.value = 'Trade the spare runes'; ta.dispatchEvent(new w.Event('input')); await sleep(600);
-  assert.strictEqual(settings.notes.seasons[0].text, 'Trade the spare runes', 'the text is saved while typing');
-  [...w.document.querySelectorAll('.nbar .ab')].find((x) => x.textContent === '+ Season').click(); await sleep(40);
-  assert.ok(settings.notes.seasons.length === 2 && settings.notes.active === 1 && !w.document.querySelector('.nlist .step'), 'a new season starts empty');
-  $('noteSeasonPick').value = '0'; $('noteSeasonPick').dispatchEvent(new w.Event('change')); await sleep(40);
-  assert.ok(txt().includes('Get the Shako') && $('noteText').value === 'Trade the spare runes', 'back to the first season');
-  [...w.document.querySelectorAll('.ab')].find((x) => x.textContent === 'Remove the ticked ones').click(); await sleep(40);
-  assert.strictEqual(JSON.stringify(settings.notes.seasons[0].items.map((i) => i.text)), '["Pit 100"]', 'ticked ones removed');
-  console.log('ok  notes per season');
-
-  // --- notes export: this season to the clipboard, every season into a file
-  [...w.document.querySelectorAll('.sethead .ab')].find((x) => x.textContent === 'Copy').click(); await sleep(20);
-  assert.ok(copied.startsWith('# Season\n') && copied.includes('- [ ] Pit 100') && copied.includes('Trade the spare runes'), 'Markdown with the checklist');
-  [...w.document.querySelectorAll('.sethead .ab')].find((x) => x.textContent === 'Save as file …').click(); await sleep(30);
-  assert.ok(notesFile.includes('# Season\n') && notesFile.includes('# Season 2'), 'every season in the file');
-  console.log('ok  notes export');
 
   // what the app reports by itself: the footer only, the panel stays shut
   w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);

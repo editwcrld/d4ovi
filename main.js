@@ -141,10 +141,10 @@ function restartClicker() {
     },
     lock: (on) => { lockRunning = on; send('lock-state', { on, paused: false }); dlog('lock', on ? 'on' : 'off'); },
     // a pause only ever shows while lock runs – a late "goes on" must not bring the tag back
-    pause: (paused, map) => {
+    pause: (paused, why) => {
       if (!lockRunning) return;
-      send('lock-state', { on: true, paused, map });
-      dlog('lock', paused ? (map ? 'waits (map open)' : 'waits (left click)') : 'goes on');
+      send('lock-state', { on: true, paused, why });
+      dlog('lock', paused ? 'waits (' + (why ? why + ' open' : 'left click') + ')' : 'goes on');
     },
   }, MACROS);
   lockRunning = false;
@@ -161,7 +161,7 @@ function restartClicker() {
 function restartWatcher() {
   if (stopWatcher) stopWatcher();
   stopWatcher = startWatcher(gameProcNames(), onWindowState,
-    (e) => send('notice', { text: 'Window detection: ' + e.message, kind: 'error' }));
+    (e) => send('notice', { text: 'Window detection: ' + e.message, kind: 'error' }), onMouseDown);
 }
 function onWindowState(st) {
   lastState = st;
@@ -285,7 +285,7 @@ function createOverlay() {
   barX = pos.x; barY = pos.y;
   overlay = new BrowserWindow({
     width: BAR_WIDTH, height: BAR_HEIGHT, x: pos.x, y: pos.y,
-    frame: false, transparent: true, resizable: false, hasShadow: false, skipTaskbar: true, show: false,
+    frame: false, transparent: true, resizable: false, hasShadow: false, skipTaskbar: true, show: false, focusable: false,
     alwaysOnTop: true, title: 'D4 Overlay', backgroundColor: '#00000000',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
   });
@@ -300,13 +300,42 @@ function createOverlay() {
     if (isIdle) centreIdle = false;       // dragged by hand -> keep exactly this spot
     saveSettingsFile();
   });
-  // a click into the game takes the focus away: the panel closes (or, pinned, fades back)
-  overlay.on('blur', () => { if (!inDialog) send('overlay-blur'); });
-  overlay.on('focus', () => send('overlay-focus'));
+  // the focus went elsewhere (alt-tab, another window): the keyboard is the game's again
+  overlay.on('blur', () => setKeyboard(null));
   if (settings.visibility === 'always') overlay.once('ready-to-show', () => overlay.showInactive());
 }
 
-// our own file dialogs take the focus too – that is not a click into the game
+// ---------- focus: the game keeps it ----------
+// The overlay is not focusable, so a click on it leaves the game in front (and lock running).
+// It takes the keyboard only while something in it is typed into – a text field or a key to
+// record (asked for by the overlay, "ui"), or an embedded page clicked into ("view") – and gives
+// it back as soon as that is over, the focus goes elsewhere or the mouse goes down outside.
+const keyboard = { ui: false, view: false };
+/** who: 'ui' | 'view' (on or off), or null to give the keyboard back altogether. */
+function setKeyboard(who, on) {
+  if (who) keyboard[who] = !!on; else keyboard.ui = keyboard.view = false;
+  if (!overlay || overlay.isDestroyed()) return;
+  if (keyboard.ui || keyboard.view) {
+    overlay.setFocusable(true);
+    if (!overlay.isVisible()) overlay.show();
+    overlay.focus();
+    if (keyboard.view) views.focus(); else overlay.webContents.focus();
+  } else if (overlay.isFocusable()) {
+    if (overlay.isFocused()) overlay.blur();            // back to the window below – the game
+    overlay.setFocusable(false);
+  }
+}
+/** A mouse button pressed by hand anywhere (lib/winwatch.js): outside the overlay it is a click into the game. */
+function onMouseDown(pt) {
+  if (!overlay || overlay.isDestroyed() || !overlay.isVisible() || inDialog) return;
+  const p = screen.screenToDipPoint({ x: pt[0], y: pt[1] }), b = overlay.getBounds();
+  if (p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height) return;
+  setKeyboard(null);
+  send('click-outside');                                  // the panel closes (or, pinned, fades)
+}
+ipcMain.on('overlay:keyboard', (_e, on) => setKeyboard('ui', on));
+
+// our own file dialogs are clicked into – that is not a click into the game
 let inDialog = 0;
 async function withDialog(fn) {
   inDialog++;
@@ -323,8 +352,9 @@ function registerHotkeys() {
     try { if (!globalShortcut.register(acc, fn)) errors.push(label + ': "' + acc + '" is already taken'); }
     catch (_) { errors.push(label + ': "' + acc + '" is not a valid combination'); }
   };
-  const front = () => { if (overlay && !overlay.isDestroyed()) { overlay.show(); overlay.focus(); } };
-  reg(settings.hotkeySearch, () => { front(); send('focus-search'); }, 'Search');
+  // the overlay comes up without the focus – only the search takes the keyboard, to type into
+  const front = () => { if (overlay && !overlay.isDestroyed() && !overlay.isVisible()) overlay.showInactive(); };
+  reg(settings.hotkeySearch, () => { setKeyboard('ui', true); send('focus-search'); }, 'Search');
   reg(settings.hotkeyToggle, () => { front(); send('toggle'); }, 'Show/hide');
   reg(settings.hotkeyMap, () => { front(); send('open-section', 'maptool'); }, 'Map tool');
   reg(settings.hotkeyFarm, () => { front(); send('open-section', 'farm'); }, 'Builds');
@@ -658,7 +688,7 @@ ipcMain.on('view:bounds', (_e, r) => {
   if (!r) return;
   views.setBounds({ x: r.x * curZoom, y: r.y * curZoom, width: r.width * curZoom, height: r.height * curZoom });
 });
-ipcMain.on('view:hide', () => views.hide());
+ipcMain.on('view:hide', () => { views.hide(); setKeyboard('view', false); });
 
 ipcMain.handle('auth:status', () => auth.status());
 ipcMain.handle('auth:import', async (_e, text) => {
@@ -679,7 +709,7 @@ function setHiddenByHand(on) {
 function openFromTray(name) {
   hiddenByHand = false;
   if (!overlay || overlay.isDestroyed()) return;
-  overlay.show(); overlay.focus();
+  setKeyboard('ui', true);                   // opened from the tray: the game is not in front anyway
   send('open-section', name);
   tray.refresh();
 }
@@ -706,7 +736,7 @@ ipcMain.on('updates:open', () => {
   shell.openExternal(/^https:\/\/github\.com\//.test(u || '') ? u : updates.PAGE);
 });
 
-// ---------- backup & notes export ----------
+// ---------- backup ----------
 function runBackup(byHand) {
   try {
     saveSettingsFile();                        // what is on screen goes along
@@ -728,16 +758,6 @@ ipcMain.handle('backup:pick', async () => {
 ipcMain.handle('backup:run', () => runBackup(true));
 ipcMain.handle('backup:last', () => backup.lastAt(settings.backupDir));
 ipcMain.on('backup:open', () => { if (settings.backupDir) shell.openPath(settings.backupDir); });
-// the notes as a text file (Markdown, so the checklist stays a checklist)
-ipcMain.handle('notes:save-file', async (_e, text, name) => {
-  const r = await withDialog(() => dialog.showSaveDialog(overlay, {
-    defaultPath: path.join(app.getPath('documents'), String(name || 'd4-notes').replace(/[\\/:*?"<>|]+/g, '-') + '.md'),
-    filters: [{ name: 'Notes', extensions: ['md', 'txt'] }],
-  }));
-  if (r.canceled || !r.filePath) return null;
-  fs.writeFileSync(r.filePath, String(text || ''));
-  return r.filePath;
-});
 
 // ---------- world boss timer & chat badge ----------
 // Prefer the unread counter from diablo.trade's own endpoint. If it does not report one,
@@ -781,6 +801,7 @@ else {
 
     views.setLogger(dlog);
     views.setOnEscape(() => send('escape'));
+    views.setOnKeyboard(() => setKeyboard('view', true));
     views.setOnLoading((on) => send('view-loading', !!on));
     views.setMapHooks({
       onReady: (wc) => mapstore.restore(wc, false),   // fresh PC: play the file back in

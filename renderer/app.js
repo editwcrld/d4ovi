@@ -167,13 +167,46 @@ const ctUp = () => !!(settings && settings.ctUp);
 const ctName = () => String((settings && settings.ctName) || '').trim() || 'Timer';
 /** 5:00, 45:10, 1:30:00 – hours only when there are any. */
 const fmtClock = (s) => (s >= 3600 ? Math.floor(s / 3600) + ':' + pad2((s % 3600) / 60) : pad2(s / 60)) + ':' + pad2(s % 60);
-/** "1:30:00", "5:00", "90" (seconds), "1:5" -> seconds; null when it is no time. */
+/**
+ * A time as typed -> seconds (with tenths); null when it is no time. Everywhere a time is typed in:
+ *   10 · 5.2 · 5,2 · 5.2 sec   seconds
+ *   1:12 · 1:30:00             m:ss · h:mm:ss (the seconds may have tenths)
+ *   1h · 15m · 15m10s · 1h30m  hours, minutes, seconds
+ */
+function parseDuration(text) {
+  const t = String(text || '').trim().toLowerCase().replace(/,/g, '.').replace(/\s+/g, '');
+  if (/^\d+(:\d+)?:\d+(\.\d+)?$/.test(t)) {
+    const parts = t.split(':').map(Number);
+    if (parts.slice(1).some((v) => v >= 60)) return null;            // 1:75 is no time
+    return parts.reduce((acc, v) => acc * 60 + v, 0);
+  }
+  const m = t.match(/^(?:(\d+(?:\.\d+)?)h(?:ours?|rs?)?)?(?:(\d+(?:\.\d+)?)m(?:in(?:utes?|s)?)?)?(?:(\d+(?:\.\d+)?)(?:s(?:ec(?:onds?|s)?)?)?)?$/);
+  if (m && (m[1] || m[2] || m[3])) return (Number(m[1]) || 0) * 3600 + (Number(m[2]) || 0) * 60 + (Number(m[3]) || 0);
+  return null;
+}
+/** The own timer's time: whole seconds, 1 s – 99:59:59. */
 function parseClock(text) {
-  const parts = String(text || '').trim().split(':');
-  if (!parts.length || parts.length > 3 || parts.some((p) => !/^\d{1,3}$/.test(p.trim()))) return null;
-  const n = parts.map(Number);
-  const secs = n.reduce((acc, v) => acc * 60 + v, 0);
+  const v = parseDuration(text);
+  if (v == null) return null;
+  const secs = Math.round(v);
   return secs >= 1 && secs <= CT_MAX ? secs : null;
+}
+/** Lock: tenths of a second up to a minute ("5.2s"), past it the clock ("1:12"). */
+const fmtSec = (s) => (s < 60 ? String(Math.round(s * 10) / 10) + 's' : fmtClock(Math.round(s)));
+/** A field that takes a time (parseDuration): put back, red for a moment, when it is none. */
+function timeField(id, value, fmt, parse, onSet) {
+  const f = el('input');
+  f.type = 'text'; f.className = 'clock'; f.value = fmt(value); f.maxLength = 12; f.spellcheck = false;
+  if (id) f.id = id;
+  f.placeholder = '5.2 · 1:12 · 15m10s';
+  f.onchange = () => {
+    const v = parse(f.value);
+    if (v == null) { f.value = fmt(value); f.classList.add('bad'); setTimeout(() => f.classList.remove('bad'), 900); return; }
+    f.value = fmt(v);
+    onSet(v);
+  };
+  f.onkeydown = (e) => { if (e.key === 'Enter') f.blur(); };
+  return f;
 }
 function renderCt(wide) {
   const box = $('ct');
@@ -239,7 +272,7 @@ function openSection(name, url, heading) {
     [0, 60, 150, 350, 700].forEach((ms) => setTimeout(syncView, ms));
   } else api.viewHide();
 
-  if (section === 'search') { $('q').focus(); $('q').select(); }
+  if (section === 'search') { typeIn($('q')); $('q').select(); }
   showCoach();
   armIdle();
   render();
@@ -256,6 +289,7 @@ function closeAll() {
   showCoach();
   document.querySelectorAll('#rail .ri[data-section]').forEach((b) => b.classList.remove('on'));
   api.viewHide();
+  api.keyboard(false);
   armIdle();
   render();
 }
@@ -265,8 +299,8 @@ function setPinned(on) {
   $('btnPin').classList.toggle('on', pinned);
   $('btnPin').querySelector('span').textContent = pinned ? 'Pinned' : 'Pin';
 }
-/** The game got the focus: an open panel closes – pinned (or set to stay) it fades instead. */
-function onGameFocus() {
+/** A click outside the overlay (into the game): an open panel closes – pinned (or set to stay) it fades instead. */
+function onClickOutside() {
   if (!section) return;
   if (pinned || settings.clickGame === 'keep') {
     // builds (skills, paragon) are read while you play – they stay fully visible unless asked otherwise
@@ -280,6 +314,24 @@ function setGhost(on) {
   $('app').classList.toggle('ghost', !!on);
   if (!on) $('app').classList.remove('near');
   api.hoverWatch(!!on);
+}
+// ---- the keyboard stays with the game (main.js setKeyboard): the overlay asks for it only while
+// something is typed into – a text field, a key to record – and gives it back once that lost the focus
+const WANTS_KEYS = 'input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]), textarea, [contenteditable=""], [contenteditable="true"], .hk, [data-keys]';
+const wantsKeys = (t) => !!(t && t.closest && t.closest(WANTS_KEYS));
+/** Into a field from code (the search opening, a key to record): the keyboard first. */
+function typeIn(e) { clearTimeout(keysBack); api.keyboard(true); e.focus(); }
+let keysBack = null;
+function watchKeyboard() {
+  document.addEventListener('mousedown', (e) => {
+    setGhost(false);                                 // faded and clicked: it is used again
+    if (wantsKeys(e.target)) { clearTimeout(keysBack); api.keyboard(true); }
+  }, true);
+  // a moment later: a click from one field into the next (or a field focused from code) keeps it
+  document.addEventListener('focusout', () => {
+    clearTimeout(keysBack);
+    keysBack = setTimeout(() => { if (!wantsKeys(document.activeElement)) api.keyboard(false); }, 150);
+  });
 }
 function showCoach() { $('coach').hidden = !section || !!(settings && settings.coachSeen); }
 
@@ -338,7 +390,7 @@ function render() {
   tools.classList.remove('docked');
   $('panel').appendChild(tools);                     // out of the way before the content is cleared
   renderSection();
-  const host = !$('top').hidden ? $('top') : section === 'farm' ? $('main').querySelector('.fbar') : section === 'builder' ? $('main').querySelector('.bd-head') : section === 'settings' || section === 'notes' ? $('main').querySelector('.sethead') : null;
+  const host = !$('top').hidden ? $('top') : section === 'farm' ? $('main').querySelector('.fbar') : section === 'builder' ? $('main').querySelector('.bd-head') : section === 'settings' ? $('main').querySelector('.sethead') : null;
   if (host) { host.appendChild(tools); tools.classList.add('docked'); }
   if (host && (section === 'farm' || section === 'builder')) host.insertBefore(buildsSwitch(), host.firstChild);
 }
@@ -358,11 +410,11 @@ function renderSection() {
   const sm = document.querySelector('.setmain');
   setScroll.top = sm ? sm.scrollTop : 0;
   main.textContent = ''; side.textContent = '';
-  main.classList.remove('farm', 'settings', 'notes', 'bd');
+  main.classList.remove('farm', 'settings', 'bd');
   $('cols').classList.remove('narrow', 'detail');
   side.classList.toggle('results', section === 'search');
   $('qClear').hidden = !$('q').value;
-  const ownPage = section === 'settings' || section === 'farm' || section === 'notes' || section === 'builder';
+  const ownPage = section === 'settings' || section === 'farm' || section === 'builder';
   $('top').hidden = !section || ownPage;
   side.hidden = !section || !!EMBEDDED[section] || ownPage;
   $('chips').textContent = '';
@@ -371,13 +423,11 @@ function renderSection() {
   if (note) main.appendChild(el('div', 'note ' + note.kind, note.text));
 
   if (section === 'settings') { renderSettings(main); reportSize(); return; }
-  if (section === 'notes') { renderNotes(main); reportSize(); return; }
   if (EMBEDDED[section]) { renderEmbeddedSidebar(); reportSize(); return; }
 
   if (section === 'farm') { window.FarmView.render(main, farmCtx); reportSize(); return; }
   if (section === 'builder') { window.BuilderView.render(main, builderCtx); reportSize(); return; }
   if (section === 'search') renderSearch(main, side);
-  if (section === 'activities') renderActivities(main, side);
   reportSize();
 }
 
@@ -962,118 +1012,6 @@ function runewordList() {
   return c;
 }
 
-function renderActivities(main, side) {
-  if (!activities.length) { main.appendChild(el('div', 'empty', 'Activities are still loading …')); return; }
-  side.appendChild(el('h5', null, 'Activities'));
-  activities.forEach((a) => {
-    const steps = actSteps(a);
-    side.appendChild(sideRow('', a.name, steps.length ? actProgress(a) + '/' + steps.length : '', () => { pick = a.name; detailOpen = true; render(); }, pick === a.name));
-  });
-  narrowDetail(main, '← Activities');
-  const chosen = activities.find((a) => a.name === pick) || activities[0];
-  main.appendChild(activityCard(chosen));
-}
-
-// ---------------------------------------------------------------- notes
-// Notes per season: a checklist and free text, kept in the settings (notes.seasons).
-function notesOf() {
-  const n = (settings && settings.notes) || {};
-  const list = Array.isArray(n.seasons) ? n.seasons.filter((x) => x && typeof x === 'object') : [];
-  const seasons = (list.length ? list : [{ name: 'Season' }]).map((x) => ({
-    name: String(x.name || 'Season'), text: String(x.text || ''),
-    items: (Array.isArray(x.items) ? x.items : []).filter((i) => i && i.text).map((i) => ({ text: String(i.text), done: !!i.done })),
-  }));
-  return { active: Math.max(0, Math.min(seasons.length - 1, Number(n.active) || 0)), seasons };
-}
-/** quiet: while typing – saved a moment later, nothing redrawn (the cursor stays in the field). */
-function saveNotes(n, quiet) {
-  if (!quiet) return save({ notes: n });
-  settings.notes = n;
-  clearTimeout(saveNotes.t);
-  saveNotes.t = setTimeout(() => api.saveSettings({ notes: settings.notes }).then((r) => { if (r && r.settings) settings = r.settings; }), 500);
-  return Promise.resolve();
-}
-/** A season as Markdown: its name, the checklist as [ ] / [x], then the text. */
-function notesText(x) {
-  return ['# ' + x.name, '']
-    .concat(x.items.map((i) => '- [' + (i.done ? 'x' : ' ') + '] ' + i.text), x.items.length ? [''] : [])
-    .concat(x.text.trim() ? [x.text.trim(), ''] : [])
-    .join('\n');
-}
-function renderNotes(main) {
-  main.classList.add('notes');
-  const n = notesOf(), cur = n.seasons[n.active];
-  const head = el('div', 'sethead');
-  head.appendChild(el('h2', null, 'Notes'));
-  const copy = btn('Copy', () => { api.copyText(notesText(cur)); showNote('“' + cur.name + '” copied.', 'ok', 2500); });
-  copy.title = 'This season as text, for Discord or anywhere else';
-  const file = btn('Save as file …', async () => {
-    const f = await api.saveNotesFile(n.seasons.map(notesText).join('\n'), 'd4-notes');
-    if (f) showNote('Saved: ' + f, 'ok', 4000);
-  });
-  file.title = 'Every season into one Markdown file';
-  head.appendChild(copy);
-  head.appendChild(file);
-  main.appendChild(head);
-  const body = el('div', 'notesbody');
-
-  const bar = el('div', 'nbar');
-  const pickS = sel(n.seasons.map((x, i) => [String(i), x.name]), String(n.active), (v) => saveNotes(Object.assign(n, { active: Number(v) })));
-  pickS.id = 'noteSeasonPick';
-  bar.appendChild(pickS);
-  const name = el('input');
-  name.type = 'text'; name.id = 'noteSeason'; name.value = cur.name; name.maxLength = 40; name.spellcheck = false;
-  name.title = 'Rename this season';
-  name.onchange = () => { cur.name = name.value.trim() || 'Season'; saveNotes(n); };
-  bar.appendChild(name);
-  bar.appendChild(btn('+ Season', () => { n.seasons.push({ name: 'Season ' + (n.seasons.length + 1), text: '', items: [] }); n.active = n.seasons.length - 1; saveNotes(n); }));
-  const del = btn('Delete', () => { n.seasons.splice(n.active, 1); n.active = 0; saveNotes(n); });
-  del.disabled = n.seasons.length < 2;
-  del.title = 'Delete this season with its notes';
-  bar.appendChild(del);
-  body.appendChild(bar);
-
-  const done = cur.items.filter((i) => i.done).length;
-  body.appendChild(subHead('Checklist', 'check', cur.items.length ? done + ' / ' + cur.items.length : null));
-  const list = el('div', 'steps nlist');
-  cur.items.forEach((it, i) => {
-    const row = el('label', 'step' + (it.done ? ' done' : ''));
-    const cb = el('input'); cb.type = 'checkbox'; cb.checked = it.done;
-    cb.onchange = () => { it.done = cb.checked; saveNotes(n); };
-    row.appendChild(cb);
-    row.appendChild(el('span', null, it.text));
-    const x = el('button', 'ico');
-    x.title = 'Remove';
-    x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-    x.onclick = (e) => { e.preventDefault(); cur.items.splice(i, 1); saveNotes(n); };
-    row.appendChild(x);
-    list.appendChild(row);
-  });
-  const add = el('input');
-  add.type = 'text'; add.id = 'noteAdd'; add.maxLength = 200; add.spellcheck = false;
-  add.placeholder = 'Add a point — Enter';
-  add.onkeydown = (e) => {
-    if (e.key !== 'Enter' || !add.value.trim()) return;
-    cur.items.push({ text: add.value.trim(), done: false });
-    saveNotes(n).then(() => { const f = $('noteAdd'); if (f) f.focus(); });
-  };
-  list.appendChild(add);
-  body.appendChild(list);
-  if (done) {
-    const clr = btn('Remove the ticked ones', () => { cur.items = cur.items.filter((i) => !i.done); saveNotes(n); });
-    clr.classList.add('nclr');
-    body.appendChild(clr);
-  }
-
-  body.appendChild(subHead('Notes', 'list'));
-  const ta = el('textarea', 'ntext');
-  ta.id = 'noteText'; ta.rows = 8; ta.value = cur.text; ta.spellcheck = false;
-  ta.placeholder = 'Anything — builds to try, trades, what to do next …';
-  ta.oninput = () => { cur.text = ta.value; saveNotes(n, true); };
-  body.appendChild(ta);
-  main.appendChild(body);
-}
-
 // ---------------------------------------------------------------- settings
 // Five areas; in each, rows of the same shape – name and a line of help on the left, one
 // control on the right. Four kinds of control: switch, segments, slider, key field.
@@ -1175,7 +1113,7 @@ function setBehaviour(root) {
     seg([['horizontal', 'Horizontal'], ['vertical', 'Vertical']], settings.orientation || 'vertical', (v) => save({ orientation: v }).then(applyLayout)));
   opt(b, 'Show the overlay when', 'Otherwise it stays hidden',
     seg([['focused', 'D4 in front'], ['running', 'D4 running'], ['always', 'Always']], settings.visibility || 'focused', (v) => save({ visibility: v })));
-  opt(b, 'Shrink to the small pill', 'Closed, only handle, timer, search, builds, diablo.trade, settings and quit stay',
+  opt(b, 'Shrink to the small pill', 'Closed, the bar becomes a small pill — what it shows is set in Appearance › Pill',
     sw(settings.idleShrink !== false, (v) => save({ idleShrink: v }).then(applyLayout)));
   opt(b, 'What your build still needs', 'A small "to farm" count next to the timers — a click opens the build',
     sw(settings.pillMissing === true, (v) => save({ pillMissing: v }).then(() => { applyLayout(); updateMissing(); })));
@@ -1197,17 +1135,9 @@ function setBehaviour(root) {
   name.type = 'text'; name.id = 'ctName'; name.value = ctName(); name.maxLength = 16; name.spellcheck = false;
   name.onchange = () => save({ ctName: name.value.trim() }).then(renderTimers);
   const cn = opt(b, 'Its name', 'Shown above the time', name);
-  const time = el('input');
-  time.type = 'text'; time.id = 'ctTimeIn'; time.className = 'clock'; time.value = fmtClock(ctSecs());
-  time.maxLength = 9; time.spellcheck = false; time.placeholder = 'hh:mm:ss';
-  time.title = 'hh:mm:ss — e.g. 5:00, 45:00 or 1:30:00';
-  time.onchange = () => {
-    const v = parseClock(time.value);
-    if (v == null) { time.value = fmtClock(ctSecs()); time.classList.add('bad'); setTimeout(() => time.classList.remove('bad'), 900); return; }
-    save({ ctSecs: v }).then(renderTimers);
-  };
-  time.onkeydown = (e) => { if (e.key === 'Enter') time.blur(); };
-  const cm = opt(b, 'Its time', 'hh:mm:ss, up to 99:59:59 — what a click on it starts', time);
+  const time = timeField('ctTimeIn', ctSecs(), fmtClock, parseClock, (v) => save({ ctSecs: v }).then(renderTimers));
+  time.title = 'e.g. 90 (seconds), 5:00, 1:30:00, 15m, 15m10s or 1h';
+  const cm = opt(b, 'Its time', 'Up to 99:59:59 — 90, 1:12 (m:ss), 1:30:00, 15m10s or 1h — what a click on it starts', time);
   const cu = opt(b, 'Counting', 'Down from its time, or up from 0:00 to its time',
     seg([['down', 'Down'], ['up', 'Up']], ctUp() ? 'up' : 'down', (v) => save({ ctUp: v === 'up' }).then(renderTimers)));
   [cn, cm, cu].forEach((o) => o.classList.toggle('off', settings.ctTimer === false));
@@ -1221,11 +1151,19 @@ function setBehaviour(root) {
 function setAppearance(root) {
   let b;
   b = sect(root, 'Pill').body;
-  const only = opt(b, 'Show only timers', settings.idleShrink === false
+  const pick = el('div', 'seg multi chips');
+  pick.id = 'pillPick';
+  PILL_ITEMS.forEach(([k, label]) => {
+    const t = el('button', pillHide().includes(k) ? null : 'on', label);
+    t.dataset.pill = k;
+    t.onclick = () => save({ pillHide: pillHide().includes(k) ? pillHide().filter((x) => x !== k) : pillHide().concat([k]) }).then(applyLayout);
+    pick.appendChild(t);
+  });
+  const shows = opt(b, 'What it shows', settings.idleShrink === false
     ? 'Needs “Shrink to the small pill” (Behaviour › Bar)'
-    : 'The small pill shows the timers, settings and ✕ (quit), nothing else — a click on the world boss or Helltide opens the panel',
-    sw(settings.pillTimersOnly === true, (v) => save({ pillTimersOnly: v }).then(applyLayout)));
-  only.classList.toggle('off', settings.idleShrink === false);
+    : 'A click switches each one on or off — the drag handle always stays, a timer switched off in Behaviour stays off here too',
+    pick);
+  shows.classList.toggle('off', settings.idleShrink === false);
   b = sect(root, 'Size').body;
   opt(b, 'Text size', 'On top of the automatic scaling by screen size',
     seg([[0.9, 'S'], [1, 'M'], [1.15, 'L'], [1.3, 'XL']], Number(settings.textScale) || 1, (v) => save({ textScale: Number(v) })));
@@ -1294,7 +1232,7 @@ function setMacros(b) {
   opt(ch.body, 'Characters', chars.length + ' saved', [btn('+ New', () => newChar()), del]);
 
   if (features.lock) {
-    const lk = macroCard(b, 'lockOn', 'Lock', 'Press the toggle key in the game: every key is held down (lock) or pressed again after its time — until you press it again. A left click by hand or left click spam pauses it until you let go. The map (Tab) pauses it until Tab or Esc closes it.', 'lockBind');
+    const lk = macroCard(b, 'lockOn', 'Lock', 'Press the toggle key in the game: every key is held down (lock) or pressed again after its time — until you press it again. A left click by hand or left click spam pauses it until you let go. The map (Tab) or the chat (Enter) pauses it until the same key or Esc closes it. The town portal (T) pauses it for 5 seconds, a left click goes on at once.', 'lockBind');
     riskSwitch(lk.body, 'lockOn', 'Lock', 'Off means the toggle key does nothing');
     opt(lk.body, 'Toggle key', 'Switches it on and off', bindField('lockBind'));
     const keys = lockList();
@@ -1394,6 +1332,7 @@ function keyChips(kind, keys, onAdd, onRemove) {
     g.appendChild(t);
   });
   const add = el('button', 'add', '+');
+  add.dataset.keys = '';                             // records a key: it needs the keyboard
   add.title = 'Add a key';
   let rec = false, took = false;
   const stopRec = () => { rec = false; add.classList.remove('rec'); add.textContent = '+'; };
@@ -1408,7 +1347,7 @@ function keyChips(kind, keys, onAdd, onRemove) {
     if (took) { took = false; return; }              // the click that follows a mouse button taken
     if (rec) return;                                 // the click that starts listening is no key
     rec = true; add.classList.add('rec'); add.textContent = 'press a key …';
-    add.focus();
+    typeIn(add);
   };
   // while listening, a mouse button on the tile is taken as that button
   add.onmousedown = (e) => {
@@ -1491,14 +1430,13 @@ function lockRows(keys) {
     s.title = e.lock ? 'Held down — off to press it on a timer' : 'On a timer — on to hold it down';
     lab.appendChild(s);
     row.appendChild(lab);
-    const r = el('input'); r.type = 'range'; r.className = 'range'; r.min = 0.2; r.max = 30; r.step = 0.1; r.value = e.sec;
+    // pressed again every … – 5.2, 5,2, 10, 1:12 (m:ss), 15m10s; a tenth of a second up to an hour
+    const r = timeField(null, Number(e.sec) || 1, fmtSec, (t) => { const v = parseDuration(t); return v != null && v >= 0.1 && v <= 3600 ? Math.round(v * 10) / 10 : null; },
+      (v) => set(i, { sec: v }));
+    r.classList.add('ksec');
     r.disabled = e.lock;
-    r.title = e.lock ? 'Switch lock off to press it on a timer' : 'Pressed again every …';
-    const rv = el('span', 'val', Number(e.sec).toFixed(1) + ' s');
-    r.oninput = () => { rv.textContent = Number(r.value).toFixed(1) + ' s'; };
-    r.onchange = () => set(i, { sec: Number(r.value) });
+    r.title = e.lock ? 'Switch lock off to press it on a timer' : 'Pressed again every … — 5.2, 10, 1:12 (m:ss) or 15m10s';
     row.appendChild(r);
-    row.appendChild(rv);
     box.appendChild(row);
   });
   if (keys.some((e) => !e.off && !e.lock) && keys.some((e) => !e.off && e.lock)) {
@@ -1706,7 +1644,7 @@ function setData(root) {
       .concat(dir ? [btn('Open', () => api.openBackupDir())] : []));
   const now = btn('Back up now', () => api.runBackup(), 'pri');                     // backup-done redraws it
   now.disabled = !dir;
-  opt(b, 'Settings, notes, builds and map progress',
+  opt(b, 'Settings, builds and map progress',
     !dir ? 'Choose a folder first' : backupAt ? 'Last backup ' + new Date(backupAt).toLocaleString() + ' · the newest 10 are kept' : 'No backup yet · the newest 10 are kept', now);
   const auto = opt(b, 'Every day', 'One backup a day, when the overlay starts',
     sw(settings.backupAuto === true, (v) => save({ backupAuto: v })));
@@ -1753,12 +1691,17 @@ async function openTrade(name) {
   if (how === 'browser') showNote('Opened in your browser. “' + name + '” is on the clipboard.', 'ok', 7000);
   else if (how === 'internal-nofill') showNote('diablo.trade opened, but the search field was not found.', 'error');
 }
+// What the small pill shows – each one can be switched off (settings.pillHide lists those).
+const PILL_ITEMS = [['search', 'Search'], ['farm', 'Builds'], ['maptool', 'Map tool'], ['listings', 'diablo.trade'],
+  ['wb', 'World boss'], ['ht', 'Helltide'], ['ct', 'Own timer'], ['miss', 'To farm'], ['settings', 'Settings'], ['quit', 'Quit']];
+const pillHide = () => (Array.isArray(settings.pillHide) ? settings.pillHide : []);
+const pillEl = (k) => (k === 'quit' ? $('btnQuit') : $('rail').querySelector('[data-section="' + k + '"]') || $(k));
 function applyLayout() {
   const horizontal = (settings.orientation || 'vertical') === 'horizontal';
   $('shell').classList.toggle('horizontal', horizontal);
   document.documentElement.style.setProperty('--fade', settings.fadeOpacity == null ? 0.35 : settings.fadeOpacity);
   $('app').classList.toggle('shrink', settings.idleShrink !== false);
-  $('app').classList.toggle('timersonly', settings.idleShrink !== false && settings.pillTimersOnly === true);
+  PILL_ITEMS.forEach(([k]) => { const e = pillEl(k); if (e) e.classList.toggle('pillhide', pillHide().includes(k)); });
   $('app').classList.toggle('wbbright', settings.wbBright !== false);
   $('rail').classList.toggle('wide', !!settings.railWide && !horizontal);
   $('btnRail').querySelector('span').textContent = settings.railWide ? 'Collapse' : 'Expand';
@@ -1847,11 +1790,11 @@ async function init() {
   $('panelClose').onclick = closeAll;
   $('btnPin').onclick = () => { setPinned(!pinned); setGhost(false); };
   $('coachOk').onclick = () => { save({ coachSeen: true }); $('coach').hidden = true; };
-  api.onBlur(onGameFocus);
-  api.onFocus(() => setGhost(false));
+  api.onClickOutside(onClickOutside);
+  watchKeyboard();
   // faded: the main process says when the cursor is over the window – :hover misses a quick exit
   api.onCursorInside((inside) => $('app').classList.toggle('near', !!inside));
-  $('qClear').onclick = () => { $('q').value = ''; itemHits = []; itemQuery = ''; onQuery(); render(); $('q').focus(); };
+  $('qClear').onclick = () => { $('q').value = ''; itemHits = []; itemQuery = ''; onQuery(); render(); typeIn($('q')); };
   $('q').addEventListener('input', onQuery);
   $('q').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { const v = $('q').value.trim(); pushRecent(v); if (e.shiftKey) openTrade(v); }
@@ -1889,7 +1832,7 @@ async function init() {
   api.onDataInfo((d) => { dataInfo = d.text; });
   api.onAuthInfo(() => {});
   api.onViewLoading((on) => $('viewSlot').classList.toggle('loading', !!on));
-  api.onFocusSearch(() => { wake(); if (section !== 'search') openSection('search'); else { $('q').focus(); $('q').select(); } });
+  api.onFocusSearch(() => { wake(); if (section !== 'search') openSection('search'); else { typeIn($('q')); $('q').select(); } });
   api.onToggle(() => { wake(); if (section) closeAll(); else openSection('search'); });
   api.onOpenSection((name) => { wake(); openSection(name); });
   api.onEscape(closeAll);
@@ -1921,13 +1864,15 @@ async function init() {
   api.onTimerRestart(() => { if (settings.ctTimer !== false) startCt(true); });
   api.onUpdateInfo(onUpdate);
   api.onBackupDone((t) => { backupAt = Number(t) || Date.now(); if (section === 'settings') render(); });
-  api.onLock(({ on, paused, map }) => {
+  api.onLock(({ on, paused, why }) => {
     const t = $('lockTag');
     t.hidden = !on;
     t.classList.toggle('paused', !!paused);
     t.title = !paused ? 'Lock running — the toggle key stops it'
-      : map ? 'Lock waits — the map is open, Tab or Esc closes it' : 'Lock waits — goes on when you let go of the left button';
-    t.firstChild.textContent = !paused ? 'Lock' : map ? 'Map' : 'Wait';
+      : why === 'map' ? 'Lock waits — the map is open, Tab or Esc closes it'
+        : why === 'chat' ? 'Lock waits — the chat is open, Enter or Esc closes it'
+        : why === 'portal' ? 'Lock waits — town portal (T), 5 seconds or a left click' : 'Lock waits — goes on when you let go of the left button';
+    t.firstChild.textContent = !paused ? 'Lock' : ({ map: 'Map', chat: 'Chat', portal: 'Portal' })[why] || 'Wait';
     t.lastChild.textContent = lockKeysOn() || '–';
   });
   api.onChatUnread((n) => {
@@ -1952,7 +1897,7 @@ async function init() {
   // the search switches between list + detail and list-then-detail as the panel is resized
   new ResizeObserver(() => {
     const n = isNarrow();
-    if ((section === 'search' || section === 'activities') && n !== $('cols').classList.contains('narrow')) render();
+    if (section === 'search' && n !== $('cols').classList.contains('narrow')) render();
   }).observe($('cols'));
   window.addEventListener('resize', syncView);
   render();

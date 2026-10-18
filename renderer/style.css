@@ -94,7 +94,7 @@ button{font:inherit;cursor:pointer;color:inherit}
 
 /* ---------- timers (world boss · Helltide · your own): a small label over the time.
    world boss: grows towards 0 (--wbk), blinks red in the warning time until clicked
-   Helltide: orange while it runs, red for its last minutes
+   Helltide: its time orange while it runs (the label as the world boss's), red for its last minutes
    own timer: a click starts it, red and blinking for the last 30 seconds, green at 0 */
 .tmr{flex:0 0 auto;border-radius:var(--r2);text-align:center;cursor:pointer;transition:background .2s;
   width:44px;padding:4px 0}
@@ -116,7 +116,6 @@ button{font:inherit;cursor:pointer;color:inherit}
 #app.idle.shrink #rail>#wb span{font-size:calc(15px * var(--wbk,1))}
 
 #ht span{color:var(--dim)}
-#ht.on b{color:var(--legendary)}
 #ht.on span{color:#ffab5e}
 #ht.ending b{color:var(--red-soft)}
 #ht.ending span{color:#ff6b57}
@@ -163,12 +162,9 @@ button{font:inherit;cursor:pointer;color:inherit}
 #app.idle.shrink #rail>.ri span{display:none}
 #app.idle.shrink #rail>#btnRail,
 #app.idle.shrink #rail>.rdiv,
-#app.idle.shrink #rail>.sp,
-#app.idle.shrink #rail>.ri[data-section="activities"],
-#app.idle.shrink #rail>.ri[data-section="maptool"],
-#app.idle.shrink #rail>.ri[data-section="notes"]{display:none}
-/* the pill with the timers only: handle, timers (and lock while it runs), settings and quit */
-#app.idle.shrink.timersonly #rail>.ri:not([data-section="settings"]):not(#btnQuit){display:none}
+#app.idle.shrink #rail>.sp{display:none}
+/* what is switched off for the pill (settings.pillHide) – the handle and the lock tag always stay */
+#app.idle.shrink #rail>.pillhide{display:none!important}
 
 /* ---------------- Panel ---------------- */
 #panel{position:relative;flex:1 1 auto;width:100%;min-width:0;display:flex;flex-direction:column;background:var(--bg);
@@ -941,11 +937,10 @@ svg.para.drag g.board, svg.tree.drag .sk, svg.tree.drag .md{cursor:grabbing}
 .lockrow .kname{min-width:30px;font:700 15px var(--head);color:var(--fg)}
 .lockrow .kwhat{flex:1;min-width:0;font-size:12.5px;color:var(--faint)}
 .lockrow .klock{display:flex;align-items:center;gap:6px;font:600 12.5px var(--ui);color:var(--dim)}
-.lockrow .range{width:140px}
-.lockrow .range:disabled,.lockrow.held .val{opacity:.35}
-.lockrow .range:disabled{filter:grayscale(1);cursor:not-allowed}
+.lockrow .ksec{width:96px}
+.lockrow .ksec:disabled{opacity:.35;cursor:not-allowed}
 .lockrows .ghint{margin:4px 2px 0}
-@container (max-width:460px){.lockrow{flex-wrap:wrap}.lockrow .range{flex:1;min-width:100px}}
+@container (max-width:460px){.lockrow{flex-wrap:wrap}.lockrow .ksec{flex:1;min-width:80px}}
 /* a switched-off row: what it holds stays, just greyed */
 .opt.off{opacity:.4}
 /* compare two builds: a move from the open build to the other one */
@@ -999,17 +994,6 @@ svg.para.drag g.board, svg.tree.drag .sk, svg.tree.drag .md{cursor:grabbing}
 #updDot{position:absolute;top:5px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--ok);
   box-shadow:0 0 0 2px var(--bg)}
 #updDot[hidden]{display:none}
-
-/* ---------- notes per season: a checklist and free text */
-#main.notes{padding:0;display:flex;flex-direction:column;overflow:hidden}
-.notesbody{flex:1;min-height:0;overflow-y:auto;padding:16px 18px 22px;display:flex;flex-direction:column;gap:10px;max-width:760px}
-.nbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.nbar select{min-width:150px}
-.nbar input{flex:1;min-width:140px}
-.nlist{display:flex;flex-direction:column;gap:6px}
-#noteAdd{width:100%;max-width:none}
-.nclr{align-self:flex-start}
-.ntext{width:100%;min-height:160px;resize:vertical;font:15px/1.5 var(--ui);user-select:text}
 
 /* the own timer's time: hh:mm:ss, red for a moment when it is no time */
 input.clock{width:110px;text-align:center;font-variant-numeric:tabular-nums}

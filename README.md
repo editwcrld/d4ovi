@@ -16,17 +16,19 @@ A narrow icon rail (48 px) that can be expanded to show labels, and switched bet
 
 | Icon | Section | What it does |
 |---|---|---|
-| 🔍 | **Search** | One box for everything: items, boss loot, crafting recipes, activities |
+| 🔍 | **Search** | One box for everything: items, boss loot, crafting recipes, activities (six maxroll guides: Secret Cow Level, Dark Citadel, Artificer's Tower, Echoing Hatred, Gathering Legions, World Events) |
 | 📋 | **Builds** | *My builds*: your farm list – cheat sheet, gear, where each piece drops, skills, paragon. *Find a build*: pick a class and a skill, every site's guides for it explained, or build it yourself — see below |
 | 🗺 | **Map tool** | The maxroll map tool, embedded — see below |
-| ⚑ | **Activities** | Six maxroll guides: Secret Cow Level, Dark Citadel, Artificer's Tower, Echoing Hatred, Gathering Legions, World Events |
 | 🛍 | **diablo.trade** | Your listings with your own login — the chat is one click away there; unread messages show a red badge |
 | ⚙ | **Settings** | Behaviour · Appearance · Hotkeys · Macros · diablo.trade · Data |
 
 **Closing and pinning.** A click into the game closes the open panel and the bar goes back to the
 small pill — no Esc needed. **Pin** (top right of every panel, next to ✕) keeps it open: pinned,
 it fades back while you play and the mouse over it brings it forward. Nothing pins itself; pinned builds do
-not fade (*Settings → Behaviour*). The first time it opens, a short hint explains this. The open
+not fade (*Settings → Behaviour*). The first time it opens, a short hint explains this.
+**The game keeps the focus:** clicking around in the overlay leaves Diablo IV in front (lock keeps
+running). The overlay takes the keyboard only while you type — the search, a text field, a key to
+record, an embedded page you clicked into — and gives it back right after. The open
 panel can be dragged by its header row as well as by the ⠿ handle.
 
 `Ctrl+F` opens the search from inside the game, `Esc` closes everything and clears the field.
@@ -62,8 +64,9 @@ still has) and red for its last 3 minutes, grey while there is none (when the ne
 It needs no data source — a Helltide starts on every full hour and runs 55 minutes, then 5
 minutes pass. It never blinks.
 
-Then **your own timer**. Set its name (*Timer* by default) and its time as `hh:mm:ss` (5:00 by
-default, up to 99:59:59 — `45:00`, `1:30:00` or plain seconds like `90`) in the settings, and
+Then **your own timer**. Set its name (*Timer* by default) and its time (5:00 by
+default, up to 99:59:59 — `90` (seconds), `1:12` (m:ss), `1:30:00`, `15m10s` or `1h`; lock's timed keys take
+the same, with tenths: `5.2`, `5,2`) in the settings, and
 whether it counts **down** from that time or **up** from 0:00 to it. A click starts it, another click starts it over, a right click
 clears it; for its last 30 seconds it turns red and blinks, at 0 it turns green and says
 **ready**. Clicking it never opens the panel. Handy for a boss without a schedule — the Fields
@@ -81,9 +84,10 @@ timers: how many items, aspects, charms and gems of the active build are not tic
 
 Everything about the timers is in *Settings → Behaviour → Timers*: each one can be switched off
 on its own (*World boss timer*, *Helltide timer*, *Own timer*). *Settings → Appearance → Pill →
-Show only timers* (the very first switch there) leaves just the handle, the timers, the
-settings button and ✕ (quit) (and the Lock tag while it runs) in the pill — a click on the world boss or
-Helltide opens the panel.
+What it shows* (the very first row there) switches each thing in the pill on or off: search,
+builds, map tool, diablo.trade, the world boss, Helltide and own timer, to farm, settings and ✕
+(quit). The handle (and the Lock tag while it runs) always stays; the open bar keeps everything.
+By default all but the map tool show.
 
 Alerts punch through the fade and blink **on their own element only**: the timer when the world
 boss is closer than your warning threshold, the diablo.trade icon when a message arrives.
@@ -92,26 +96,19 @@ Each of the two states keeps its own place on the screen: drag the pill where yo
 it is idle, drag the bar while it is open. Both are saved as `posIdle` and `posOpen`, and
 *Settings → Appearance → Places* resets them.
 
-## Notes
-
-The **Notes** icon opens a page per season: a checklist (type a point, Enter; tick it off, ✕
-removes it, *Remove the ticked ones* clears up) and free text that is saved while you type.
-*+ Season* starts a new one, the list on top switches between them. *Copy* puts the season on
-the clipboard as Markdown (for Discord), *Save as file …* writes every season into one `.md` file.
-
 ## Backup
 
 *Settings → Data → Backup*: choose a folder (one that OneDrive or Dropbox syncs keeps a copy off
 the PC), then *Back up now* — or switch on *Every day* for one backup a day when the overlay
-starts. Each backup is a folder of its own (`D4-Overlay-Backup-<date>_<time>`) with your settings
-(the notes included), builds and map progress; the newest 10 are kept. The login is never part of
+starts. Each backup is a folder of its own (`D4-Overlay-Backup-<date>_<time>`) with your settings,
+builds and map progress; the newest 10 are kept. The login is never part of
 it. To restore, copy the files back into the data folder while the overlay is closed.
 
 ## Tray and updates
 
 The icon in the Windows tray (its menu starts with *D4ovi*) shows or hides the overlay (a click,
 or the menu), starts Diablo IV (the path from *Settings → Data → Advanced*), opens Search,
-Builds, Notes or Settings and quits. Hidden from the tray, the overlay stays hidden until it is
+Builds or Settings and quits. Hidden from the tray, the overlay stays hidden until it is
 shown there again.
 
 When switched on (*Settings → Data → Updates*, off by default), the overlay asks GitHub once a day for the latest release of this repository. A newer version
@@ -169,9 +166,11 @@ lock lets go of everything and waits; a quarter second after you let go it carri
 overlay tells your own clicks from the ones it sends (a low level mouse hook sees the flag
 Windows puts on sent input), so a locked Mouse 1 does not pause itself.
 
-**The map pauses it:** Tab opens the map — lock waits until Tab (or Esc) closes it again, however
-long you look. The tag in the bar reads **Map** meanwhile. Pressing lock's toggle key starts it
-fresh, with the map counted as closed.
+**The map and the chat pause it:** Tab opens the map, Enter the chat — lock waits until the same
+key (or Esc) closes it again, however long you look or type. The tag in the bar reads **Map** or
+**Chat** meanwhile. Pressing lock's toggle key starts it fresh, with both counted as closed.
+**The town portal pauses it too:** T makes lock wait 5 seconds so the portal is not broken off
+(tag **Portal**); a left click by hand goes on at once. Not watched when T is one of lock's keys.
 
 While it runs, a green **Lock** tag sits next to the world boss timer; it turns amber and reads
 **Wait** while a left click pauses it, **Map** while the map is open.
@@ -565,7 +564,7 @@ get more room than a result list.
 
 The corner at the bottom right of the panel sets your own size (*Settings → Appearance → Your own
 size* resets it); the corner stays under the mouse while you drag. Made narrow, everything goes to
-one column: the search shows the list, then the picked result with *← Results*; activities, the
+one column: the search shows the list, then the picked result with *← Results*; the
 route, the slots and the settings rearrange the same way, at the same text size.
 
 | Screen | Search / settings | Map / chat / database |

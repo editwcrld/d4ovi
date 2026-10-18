@@ -74,3 +74,13 @@ r = load({ macroRev: 2, holdOn: true, holdBind: 'F6', holdKeys: ['Shift'], skill
 assert.ok(r.settings.lockOn && r.settings.lockBind === 'F6');
 assert.deepStrictEqual(r.settings.lockKeys, [{ key: '4', lock: false, sec: 1 }, { key: 'Shift', lock: true, sec: 1 }]);
 console.log('ok  macros: rev 1 → 3');
+
+// "only timers" in the pill became a choice for each thing in it; the notes page is gone
+r = load({ macroRev: 3, pillTimersOnly: true });
+assert.ok(r.changed && !('pillTimersOnly' in r.settings));
+assert.deepStrictEqual(r.settings.pillHide, ['search', 'farm', 'maptool', 'listings'], 'only timers: the icons left out');
+assert.deepStrictEqual(load({ macroRev: 3, pillTimersOnly: false }).settings.pillHide, ['maptool'], 'off: as before');
+assert.deepStrictEqual(load({}).settings.pillHide, ['maptool'], 'by default all but the map tool');
+r = load({ macroRev: 3, notes: { active: 0, seasons: [{ name: 'S1' }] } });
+assert.ok(r.changed && !('notes' in r.settings), 'the notes go');
+console.log('ok  pill choice, notes gone');

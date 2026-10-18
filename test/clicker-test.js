@@ -59,7 +59,7 @@ console.log('ok  window titles are escaped');
 assert.strictEqual(c.loopMsFor(1.5), 1500);
 assert.strictEqual(c.loopMsFor(0), 1000, 'falls back to one second');
 assert.strictEqual(c.loopMsFor(0.01), 100, 'not faster than ten rounds a second');
-assert.strictEqual(c.loopMsFor(500), 60000, 'at most a minute');
+assert.strictEqual(c.loopMsFor(5000), 3600000, 'at most an hour');
 assert.deepStrictEqual(c.keyOf('Q'), [81, 0]);
 assert.deepStrictEqual(c.keyOf('Mouse2'), [0x02, 2], 'mouse buttons with their number');
 assert.deepStrictEqual(c.keyOf('Space'), [0x20, 0]);
@@ -87,26 +87,34 @@ assert.ok(/finally \{\s*if \(pressed\) Release/.test(ls), 'lets go when it ends'
 assert.ok(ls.includes('Console.In.ReadLine()') && ls.includes('quit = true'), 'stdin closing stops it');
 assert.ok(ls.includes('inGame = Active(title, proc)'), 'only while the game is in front');
 assert.ok(/repeatAt = now \+ 300/.test(ls) && /repeatAt = now \+ 33/.test(ls), 'a held key repeats like a real one');
+assert.ok(/bool cycle = n > 1;/.test(ls) && /HOLD_MS = 600, GAP_MS = 50/.test(ls) && /flipAt\[i\] = now \+ \(isUp\[i\] \? GAP_MS : HOLD_MS\);/.test(ls),
+  'more than one entry: a held one is let go for a moment and pressed again – the game keeps only the last press going');
+assert.ok(/k\+\+ \* \(HOLD_MS \+ GAP_MS\) \/ held/.test(ls), 'spread over one round, never all up at once');
 // a left click by hand or left click spam pauses it
 assert.ok(ls.includes('SetWindowsHookEx(14') && /\(s\.flags & 1\) == 0/.test(ls), 'a mouse hook tells a hand click from a sent one');
-assert.ok(/bool hand = handLeft \|\| map \|\| \(spam && l\)/.test(ls), 'left click by hand, the map, or left click spam');
-// the map: Tab opens and closes it, Esc closes it – polled like the toggle key, no keyboard hook
+assert.ok(/bool hand = handLeft \|\| open != 0 \|\| \(spam && l\)/.test(ls), 'left click by hand, the map or chat open, or left click spam');
+// the map (Tab) and the chat (Enter): the same key or Esc closes them – polled like the toggle key, no keyboard hook
 assert.ok(!ls.includes('SetWindowsHookEx(13'), 'no keyboard hook');
-assert.ok(/bool t = Down\(0x09\), e = Down\(0x1B\);/.test(ls) && /if \(t && !tab && active\) mapOpen = !mapOpen;/.test(ls), 'Tab toggles the map, a held Tab once, only in the game with lock on');
-assert.ok(/if \(e && !esc\) mapOpen = false;/.test(ls), 'Esc closes it');
-assert.ok(/if \(mapOpen\) break;/.test(ls), 'the timed keys stop at once when the map opens');
-assert.ok(/mapOpen = false;[^\n]*\n\s*paused = false; pausedMap = false;/.test(ls), 'switched off while it waits: no "goes on" afterwards');
-assert.ok(ls.includes('\\"map\\":true'), 'tells the overlay it waits for the map');
+assert.ok(/bool t = Down\(0x09\), n = Down\(0x0D\), e = Down\(0x1B\);/.test(ls)
+  && /if \(t && !tab && active && waiting != CHAT\) waiting = waiting == MAP \? 0 : MAP;/.test(ls), 'Tab toggles the map, a held Tab once, only in the game with lock on – not while typing in the chat');
+assert.ok(/if \(n && !enter && active && waiting != MAP\) waiting = waiting == CHAT \? 0 : CHAT;/.test(ls), 'Enter toggles the chat the same way');
+assert.ok(/if \(e && !esc\) waiting = 0;/.test(ls), 'Esc closes either');
+assert.ok(/bool p = watchPortal && Down\(0x54\);/.test(ls) && /PORTAL_MS = 5000/.test(ls) && /if \(handLeft\) portalAt = 0;/.test(ls),
+  'T (town portal) waits 5 seconds, a left click by hand goes on at once');
+assert.ok(ls.includes('\\"why\\":\\"portal\\"') && /watchPortal = Array.IndexOf\(vk, 0x54\) < 0/.test(ls), 'says so; not watched when T is a lock key itself');
+assert.ok(/if \(waiting != 0 \|\| PortalWaits\(\)\) break;/.test(ls), 'the timed keys stop at once when the map, chat or portal comes in between');
+assert.ok(/waiting = 0; portalAt = 0;[^\n]*\n\s*paused = false; pausedFor = 0;/.test(ls), 'switched off while it waits: no "goes on" afterwards');
+assert.ok(ls.includes('\\"why\\":\\"map\\"') && ls.includes('\\"why\\":\\"chat\\"'), 'tells the overlay what it waits for');
 assert.ok(/< 250\)/.test(ls) && /locking && inGame && !paused/.test(ls), 'waits until let go, and a moment more');
 assert.ok(ls.includes('"{\\"pause\\":true}"'), 'tells the overlay it waits');
 assert.strictEqual(c.plan({ ...lock, lockOn: false }, '').vkLock, 0, 'off switch');
 assert.strictEqual(c.plan({ ...lock, lockKeys: [] }, '').vkLock, 0, 'an empty list -> nothing');
-assert.strictEqual(c.plan({ ...lock, lockKeys: [{ key: '1', sec: 999, lock: false }] }, '').lockItems[0][2], 60000, 'clamped per key');
+assert.strictEqual(c.plan({ ...lock, lockKeys: [{ key: '1', sec: 9999, lock: false }] }, '').lockItems[0][2], 3600000, 'clamped per key (an hour)');
 assert.ok(!c.script(c.plan(def, '')).includes("'49:"), 'click spam alone: no lock keys');
-// what goes on the command line stays under the Windows limit (32767), with room to spare
+// what goes in the environment variable stays under the Windows limit (32767), with room to spare
 const big = c.plan({ ...lock, clickSpam: true, d4WindowTitle: 'Diablo IV', lockKeys: c.KEY_CHOICES.map((k, i) => ({ key: k, lock: i % 2 === 0, sec: 1 })) }, 'Diablo IV');
-assert.ok(c.encoded(big).length < 30000, 'encoded helper fits the command line: ' + c.encoded(big).length);
-const plain = Buffer.from(c.encoded(big), 'base64').toString('utf16le');
+assert.ok(c.compact(big).length < 30000, 'the helper fits an environment variable: ' + c.compact(big).length);
+const plain = c.compact(big);
 assert.ok(!/^\s*\/\//m.test(plain) && plain.includes('[Clicker]::Run(') && /^"@$/m.test(plain), 'comments gone, the here-string end still on its own line');
 console.log('ok  lock: held or timed per key, timed first in order, left click and the map pause, toggle, off switch');
 
