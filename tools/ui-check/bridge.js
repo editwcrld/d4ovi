@@ -55,7 +55,7 @@ const answers = {
 // sent without an answer (fire and forget in preload.js)
 const SENDS = new Set(['keyboard', 'resize', 'setIdle', 'viewHide', 'viewShow', 'viewBounds', 'hoverWatch', 'copyText', 'refreshStatus', 'resizeDrag', 'hotkeyCapture']);
 
-/** The bridge for the API the website asks over HTTP (web-check.js). */
+/** What the bridge answers, by the name of the call. */
 const answer = (name, ...a) => (answers[name] ? answers[name](...a) : null);
 
 if (typeof window !== 'undefined') {

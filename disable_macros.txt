@@ -1,15 +1,15 @@
-MACROS – mit oder ohne bauen
-============================
+MACROS – building with or without them
+=====================================
 
-Die Macros (Lock, Click spam) senden Eingaben an das Spiel. Das erlauben Blizzards
-Nutzungsbedingungen nicht – deshalb sind sie standardmaessig NICHT in der .exe.
+The macros (lock, click spam) send input to the game. Blizzard's terms do not allow that,
+so they are NOT in the .exe by default.
 
-  npm run dist        .exe OHNE Macros   (die zum Teilen / zum Download)
-  npm run dist --m    .exe MIT Macros    (nur fuer dich selbst)
-  npm start --m       aus dem Quellcode starten, mit Macros
+  npm run dist        .exe WITHOUT the macros   (the one to share / the download)
+  npm run dist --m    .exe WITH the macros      (for yourself only, at your own risk)
+  npm start --m       run from source, with the macros
 
-Ohne Macros: kein Reiter "Macros" in den Einstellungen, und der Hintergrund-Helfer
-(der Klicks und Tasten sendet) wird nie gestartet.
+Without the macros there is no "Macros" tab in the settings, and the helper that sends
+clicks and key presses is never started.
 
-Wie es funktioniert: tools/dist.js schreibt die Wahl beim Bauen in lib/build-flags.json
-(wird danach wieder geloescht), lib/features.js liest sie.
+How it works: tools/dist.js writes the choice into lib/build-flags.json while building
+(and deletes it again afterwards); lib/features.js reads it.

@@ -1,4 +1,4 @@
-// parseCookies ohne Electron testen
+// parseCookies, tested without Electron
 const Module = require('module'); const orig = Module._load;
 Module._load = function (r, ...a) { if (r === 'electron') return { session: {} }; return orig.call(this, r, ...a); };
 const { parseCookies } = require('../lib/auth');

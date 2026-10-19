@@ -11,10 +11,8 @@
     "test": "node test/run.js",
     "test:ui": "node test/renderer-smoke.js",
     "test:search": "node test/search-test.js",
-    "web": "node web/server.js",
     "css": "node tools/build-css.js",
-    "ui-check": "electron tools/ui-check/ui-check.js",
-    "web-check": "electron tools/ui-check/web-check.js"
+    "ui-check": "electron tools/ui-check/ui-check.js"
   },
   "dependencies": {},
   "devDependencies": {

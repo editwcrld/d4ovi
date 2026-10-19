@@ -1,4 +1,4 @@
-// Prüft die Scraper-Heuristik gegen ein nachgebautes Maxroll-Layout (jsdom liegt außerhalb des Projekts)
+// The scraper's heuristics against a rebuilt maxroll layout (jsdom may live outside the project)
 const { JSDOM } = require(process.env.JSDOM_PATH || 'jsdom');
 const { extract } = require('../lib/maxroll');
 const html = `<body><nav><ul><li>Nav</li></ul></nav><main>
