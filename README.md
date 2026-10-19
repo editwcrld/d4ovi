@@ -96,7 +96,8 @@ opacity you set:
 ⠿ │ WORLD BOSS 2:15:40 │ HELLTIDE 13:47 │ TIMER 05:00 │ LOCK ◆◆◆◇      (mouse over: … │ 🔍 📋 🗺 🛍 │ ⚙ ⏻)
 ```
 
-The timers keep their full strength; in the warning time it turns red, grows
+The timers keep their full strength; in the warning time (*Warn before the spawn*, 5:00 by default — typed
+like every time here: `10` is 10 seconds, `15:15` 15 min 15 s, `30m`, `1h`) the world boss timer turns red, grows
 the closer the spawn gets and blinks — a click stops the blinking. Otherwise a click on the timer
 opens again whatever was open last (builds, diablo.trade, a guide …), the search if nothing was.
 Moving the mouse over the strip only takes the fade off — it keeps its shape and its place, so you
@@ -110,16 +111,21 @@ minutes pass. It never blinks.
 Then **your own timer**. Set its name (*Timer* by default) and its time (5:00 by
 default, up to 99:59:59 — `90` (seconds), `1:12` (m:ss), `1:30:00`, `15m10s` or `1h`; lock's timed keys take
 the same, with tenths: `5.2`, `5,2`) in the settings, and
-whether it counts **down** from that time or **up** from 0:00 to it. A click starts it, another click starts it over, a right click
-clears it; for its last 30 seconds it turns red and blinks, at 0 it turns green and says
-**ready**. Clicking it never opens the panel. Handy for a boss without a schedule — the Fields
+whether it counts **down** from that time, **up** from 0:00 to it, or is a **stopwatch**. Counting down or up, a click
+starts it, another click starts it over, a right click clears it; for its last 30 seconds it turns red and blinks, at 0 it turns green and says
+**ready**. As a stopwatch it just counts the time: a click starts it, the next stops it, the next puts
+it back to 0:00 (a right click too). Clicking it never opens the panel. Handy for a boss without a schedule — the Fields
 of Hatred boss is back about five minutes after it died.
+
+Then a **counter** (*Runs* by default, the name is yours): a click adds one, a right click starts it
+at 0 again; it keeps its count over a restart. *Settings → Hotkeys → Counter: +1* adds one without
+taking the focus from the game. Like the timers it can be left out of the closed bar.
 
 *Settings → Hotkeys → Build: skills* / *Build: paragon* open the active build straight on that
 page (pressed again, it closes).
 
-*Settings → Hotkeys → Start the own timer* gives it a hotkey (a single F-key works) — it starts
-the timer over without taking the focus from the game.
+*Settings → Hotkeys → Start the own timer* gives it a hotkey (a single F-key works) — it works like
+a click on it, without taking the focus from the game.
 
 *Settings → Behaviour → Bar → What your build still needs* adds a **To farm** count next to the
 timers: how many items, aspects, charms and gems of the active build are not ticked off yet

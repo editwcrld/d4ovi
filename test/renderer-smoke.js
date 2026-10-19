@@ -84,7 +84,7 @@ let settings = {
   d4Path: 'C:\\x.exe', d4WindowTitle: 'Diablo IV', visibility: 'focused',
   orientation: 'vertical', railWide: false, windowSize: 'mittel', opacity: 1,
   tradeOpenMode: 'internal', pressEnter: false, hotkeySearch: 'Control+F',
-  wbWarnMin: 5, wbBlink: true, favorites: [], recent: [],
+  wbWarnSec: 300, wbBlink: true, favorites: [], recent: [],
   fadeOpacity: 0.35, fadeAfterSec: 1, idleShrink: true, pillHide: ['maptool'], wbBright: true, msgBlink: true,
   clickSpam: false, clickLeftBind: 'Mouse5', clickRightBind: 'Mouse4', clickCps: 15,
   lockOn: false, lockKeys: [], lockBind: 'F9', macroChars: [], macroChar: 0,
@@ -1087,7 +1087,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   // counting up: from 0:00 to its time, red for the last 30 seconds, ready at the end
   [...w.document.querySelectorAll('.opt')].find((o) => o.querySelector('.txt b').textContent === 'Counting')
     .querySelectorAll('.seg button')[1].click(); await sleep(30);
-  assert.ok(settings.ctUp === true && $('ctTime').textContent === '00:00', 'counting up starts at 0:00');
+  assert.ok(settings.ctMode === 'up' && $('ctTime').textContent === '00:00', 'counting up starts at 0:00');
   const upNow = Date.now;
   ct.click(); await sleep(20);
   w.Date.now = Date.now = () => upNow() + 20000;
@@ -1104,7 +1104,39 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   [...w.document.querySelectorAll('.opt')].find((o) => o.querySelector('.txt b').textContent === 'Counting')
     .querySelectorAll('.seg button')[0].click(); await sleep(30);
   tin().value = '5:00'; tin().dispatchEvent(new w.Event('change')); await sleep(30);
-  assert.ok(settings.ctUp === false && settings.ctSecs === 300, 'back to 5:00, counting down');
+  assert.ok(settings.ctMode === 'down' && settings.ctSecs === 300, 'back to 5:00, counting down');
+  // a stopwatch: click starts, click stops, click back to 0:00 – its time does not matter then
+  const countSeg = () => [...w.document.querySelectorAll('.opt')].find((o) => o.querySelector('.txt b').textContent === 'Counting').querySelectorAll('.seg button');
+  countSeg()[2].click(); await sleep(30);
+  assert.ok(settings.ctMode === 'watch' && $('ctTime').textContent === '00:00' && ct.classList.contains('idle'), 'stopwatch: 0:00');
+  assert.ok(tin().closest('.opt').classList.contains('off'), 'its time is not used');
+  const swNow = Date.now;
+  ct.click(); await sleep(20);
+  w.Date.now = Date.now = () => swNow() + 75000;
+  await sleep(1100);
+  assert.ok(/^01:1[4-6]$/.test($('ctTime').textContent) && ct.classList.contains('run') && !ct.classList.contains('soon'), 'it counts: ' + $('ctTime').textContent);
+  ct.click(); await sleep(20);
+  const stopped = $('ctTime').textContent;
+  w.Date.now = Date.now = () => swNow() + 200000;
+  await sleep(1100);
+  assert.ok($('ctTime').textContent === stopped && !ct.classList.contains('run') && !ct.classList.contains('idle'), 'second click: it stops there');
+  ct.click(); await sleep(20);
+  assert.ok($('ctTime').textContent === '00:00' && ct.classList.contains('idle'), 'third click: back to 0:00');
+  w.Date.now = Date.now = swNow;
+  countSeg()[0].click(); await sleep(30);
+  assert.ok(settings.ctMode === 'down' && !tin().closest('.opt').classList.contains('off'), 'counting down again');
+  // the world boss warning: a time as everywhere – 15:15 is 15 min 15 s, 10 is 10 s
+  const win = () => w.document.getElementById('wbWarnIn');
+  assert.strictEqual(win().value, '05:00', 'the warning as a clock');
+  win().value = '15:15'; win().dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.strictEqual(settings.wbWarnSec, 915, '15:15');
+  win().value = '10'; win().dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.strictEqual(settings.wbWarnSec, 10, '10 seconds');
+  win().value = '30min'; win().dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.strictEqual(settings.wbWarnSec, 1800, '30min');
+  win().value = 'x'; win().dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.ok(settings.wbWarnSec === 1800 && win().value === '30:00', 'no time: the old one back');
+  win().value = '5:00'; win().dispatchEvent(new w.Event('change')); await sleep(30);
   w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
   // what the pill shows: each thing switched on or off
   assert.ok(rail('maptool').classList.contains('pillhide') && !rail('search').classList.contains('pillhide'), 'by default all but the map tool');
@@ -1112,7 +1144,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
     rail('settings').click(); await sleep(30);
     anchors()[1].click(); await sleep(30);
     assert.strictEqual(grp('appearance').querySelector('.plate').dataset.card, 'Closed bar', 'Appearance starts with the closed bar');
-    assert.strictEqual($('pillPick').querySelectorAll('button').length, 10, 'search, builds, map tool, diablo.trade, the four timers, settings, quit');
+    assert.strictEqual($('pillPick').querySelectorAll('button').length, 11, 'search, builds, map tool, diablo.trade, the four timers, the counter, settings, quit');
     $('pillPick').querySelector('[data-pill="' + k + '"]').click(); await sleep(30);
     w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
   };
@@ -1188,6 +1220,29 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   hk.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'F10', code: 'F10', bubbles: true })); await sleep(30);
   assert.strictEqual(settings.hotkeyTimer, 'F10', 'an F-key alone is taken');
   console.log('ok  own timer: hotkey');
+
+  // --- the counter: a click adds one, a right click starts it at 0, its hotkey adds one too
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  const rc = $('rc');
+  assert.ok(!rc.hidden && $('rcN').textContent === '0' && rc.classList.contains('idle') && rc.querySelector('b').textContent === 'Runs', 'in the bar: Runs 0');
+  rc.click(); await sleep(20); rc.click(); await sleep(20);
+  assert.ok(settings.rcCount === 2 && $('rcN').textContent === '2' && !rc.classList.contains('idle') && $('panel').hidden, 'a click adds one, nothing opens');
+  handlers.onCounterAdd(); await sleep(20);
+  assert.ok(settings.rcCount === 3 && $('rcN').textContent === '3', 'the hotkey adds one');
+  rc.dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true })); await sleep(20);
+  assert.ok(settings.rcCount === 0 && $('rcN').textContent === '0', 'a right click: back to 0');
+  rail('settings').click(); await sleep(30);
+  const rcName = w.document.getElementById('rcName');
+  rcName.value = 'Pits'; rcName.dispatchEvent(new w.Event('change')); await sleep(30);
+  assert.ok(settings.rcName === 'Pits' && rc.querySelector('b').textContent === 'Pits', 'its name');
+  rcName.value = ''; rcName.dispatchEvent(new w.Event('change')); await sleep(30);
+  const rcSw = () => [...w.document.querySelectorAll('.opt')].find((o) => o.querySelector('.txt b').textContent === 'Counter').querySelector('.sw');
+  rcSw().click(); await sleep(30);
+  handlers.onCounterAdd(); await sleep(20);
+  assert.ok(settings.rcCounter === false && rc.hidden && settings.rcCount === 0, 'switched off: gone, the hotkey does nothing');
+  rcSw().click(); await sleep(30);
+  assert.ok(w.document.querySelector('.hk[data-key=hotkeyCounter]'), 'its hotkey field');
+  console.log('ok  counter: click +1, right click 0, hotkey');
 
   // --- "to farm": off by default, switched on it shows what the active build still needs
   assert.ok($('miss').hidden, 'off by default');

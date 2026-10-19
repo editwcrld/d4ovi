@@ -26,7 +26,11 @@ r = load({ macroRev: 3, fohTimers: false, fohMin: 7 });
 assert.ok(r.changed && r.settings.ctTimer === false && r.settings.ctSecs === 420, 'switch and minutes carry over');
 r = load({ macroRev: 3, ctMin: 12 });
 assert.ok(r.changed && r.settings.ctSecs === 720 && !('ctMin' in r.settings), 'the slider\'s minutes become seconds');
-assert.ok(load({}).settings.ctSecs === 300 && load({}).settings.ctUp === false, '5:00, counting down by default');
+assert.ok(load({}).settings.ctSecs === 300 && load({}).settings.ctMode === 'down', '5:00, counting down by default');
+{
+  const m = load({ wbWarnMin: 7, ctUp: true }).settings;
+  assert.ok(m.wbWarnSec === 420 && m.ctMode === 'up' && !('wbWarnMin' in m) && !('ctUp' in m), 'old warning minutes and counting up carried over');
+}
 assert.ok(!('fohTimers' in r.settings) && !('fohMin' in r.settings), 'old keys gone');
 console.log('ok  Fields of Hatred -> own timer');
 

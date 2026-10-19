@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld('d4api', {
   onClickSpam: on('click-spam'),
   onLock: on('lock-state'),
   onTimerRestart: on('timer-restart'),
+  onCounterAdd: on('counter-add'),
   onOpenBuildView: on('open-build-view'),
   onBackupDone: on('backup-done'),
   onUpdateInfo: on('update-info'),

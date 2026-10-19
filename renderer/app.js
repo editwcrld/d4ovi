@@ -138,6 +138,7 @@ function renderTimers() {
   renderWb(wide);
   renderHt(wide);
   renderCt(wide);
+  renderRc(wide);
   renderMissing(wide);
 }
 
@@ -152,8 +153,8 @@ function renderWb(wide) {
   const left = Math.max(0, wb.secs - (Date.now() - wb.at) / 1000);
   e.textContent = fmtClock(Math.round(left));
   box.title = 'World boss' + (wb.text ? ' — ' + wb.text : '') + ' — in ' + fmtClock(Math.round(left));
-  const warn = Number(settings && settings.wbWarnMin);
-  const window_ = (isNaN(warn) ? 5 : warn) * 60;
+  const warn = Number(settings && settings.wbWarnSec);
+  const window_ = warn > 0 ? warn : 300;
   const soon = left < window_;
   box.classList.toggle('soon', soon);
   box.classList.toggle('blink', soon && !(settings && settings.wbBlink === false) && wbAck !== spawnOf());
@@ -183,13 +184,17 @@ function renderHt(wide) {
   box.title = h.on ? 'Helltide is on — ends in ' + fmtMin(h.left) : 'No Helltide — the next one starts in ' + fmtMin(h.left);
 }
 
-// ---- your own timer: a click starts it (again), a right click clears it; red and blinking
-// for the last 30 seconds, "ready" at the end. It counts down from its time – or, counting up,
-// from 0:00 to its time.
+// ---- your own timer, three ways (settings.ctMode):
+//   down / up – a click starts it (again), a right click clears it; red and blinking for the last
+//               30 seconds, "ready" at the end. Down from its time, or up from 0:00 to it.
+//   watch     – a stopwatch: a click starts it, the next stops it, the next puts it back to 0:00.
 const CT_WARN = 30, CT_MAX = 99 * 3600 + 59 * 60 + 59;
 let ctEnd = 0;                                       // when it runs out (0 = not counting)
+let watchFrom = 0, watchAcc = 0;                     // stopwatch: running since (0 = stopped), ms counted before
 const ctSecs = () => Math.max(1, Math.min(CT_MAX, Math.round(Number(settings && settings.ctSecs) || 300)));
-const ctUp = () => !!(settings && settings.ctUp);
+const ctMode = () => (['up', 'watch'].includes(settings && settings.ctMode) ? settings.ctMode : 'down');
+const ctUp = () => ctMode() === 'up';
+const watchSecs = () => Math.min(CT_MAX, Math.floor((watchAcc + (watchFrom ? Date.now() - watchFrom : 0)) / 1000));
 const ctName = () => String((settings && settings.ctName) || '').trim() || 'Timer';
 /** 5:00, 45:10, 1:30:00 – hours only when there are any. */
 const fmtClock = (s) => (s >= 3600 ? Math.floor(s / 3600) + ':' + pad2((s % 3600) / 60) : pad2(s / 60)) + ':' + pad2(s % 60);
@@ -238,6 +243,17 @@ function renderCt(wide) {
   const box = $('ct');
   box.hidden = settings && settings.ctTimer === false;
   if (box.hidden) return;
+  box.querySelector('b').textContent = wide ? ctName() : ctName().slice(0, 8);
+  if (ctMode() === 'watch') {
+    const secs = watchSecs(), state = watchFrom ? 'run' : secs || watchAcc ? 'stopped' : 'idle';
+    box.classList.remove('ready', 'soon', 'blink');
+    box.classList.toggle('idle', state === 'idle');
+    box.classList.toggle('run', state === 'run');
+    $('ctTime').textContent = fmtClock(secs);
+    box.title = ctName() + ' — ' + (state === 'run' ? 'running, ' + fmtClock(secs) : state === 'stopped' ? 'stopped at ' + fmtClock(secs) : 'stopwatch')
+      + '\nClick: ' + (state === 'run' ? 'stop' : state === 'stopped' ? 'back to 0:00' : 'start') + ' · right click: back to 0:00';
+    return;
+  }
   const total = ctSecs(), up = ctUp();
   const left = ctEnd ? Math.ceil((ctEnd - Date.now()) / 1000) : null;
   const state = left == null ? 'idle' : left > 0 ? 'run' : 'ready';
@@ -246,13 +262,27 @@ function renderCt(wide) {
   box.classList.toggle('ready', state === 'ready');
   box.classList.toggle('soon', state === 'run' && left <= CT_WARN);
   box.classList.toggle('blink', state === 'run' && left <= CT_WARN);
-  box.querySelector('b').textContent = wide ? ctName() : ctName().slice(0, 8);
   const shown = state === 'run' ? (up ? total - left : left) : up ? 0 : total;
   $('ctTime').textContent = state === 'ready' ? 'ready' : fmtClock(shown);
   box.title = ctName() + ' — ' + (state === 'run' ? (up ? fmtClock(total - left) + ' of ' + fmtClock(total) + ', ' : '') + 'done in ' + fmtClock(left)
     : state === 'ready' ? 'done' : 'not running')
     + '\nClick: start ' + (up ? 'counting up to ' : '') + fmtClock(total) + ' (again) · right click: clear';
 }
+// ---- a counter (runs, kills, whatever you count): a click adds one, a right click starts it at 0
+// again – kept in the settings, so a restart does not lose it
+const rcName = () => String((settings && settings.rcName) || '').trim() || 'Runs';
+const rcCount = () => Math.max(0, Math.floor(Number(settings && settings.rcCount) || 0));
+function renderRc(wide) {
+  const box = $('rc');
+  box.hidden = settings && settings.rcCounter === false;
+  if (box.hidden) return;
+  const n = rcCount();
+  box.classList.toggle('idle', n === 0);
+  box.querySelector('b').textContent = wide ? rcName() : rcName().slice(0, 8);
+  $('rcN').textContent = String(n);
+  box.title = rcName() + ': ' + n + '\nClick: +1 · right click: back to 0';
+}
+function countRc(add) { save({ rcCount: add ? Math.min(99999, rcCount() + 1) : 0 }).then(() => renderRc(timersWide())); }
 // ---- what the active build still needs: switched on in the settings; a click opens the build
 async function updateMissing() {
   if (!settings || settings.pillMissing !== true || !window.FarmView) missing = null;
@@ -272,6 +302,16 @@ function renderMissing(wide) {
 }
 
 function startCt(on) { ctEnd = on ? Date.now() + ctSecs() * 1000 : 0; renderCt(timersWide()); }
+/** A click on the own timer (or its hotkey): starts it over – the stopwatch goes start, stop, 0:00. */
+function clickCt() {
+  if (ctMode() !== 'watch') return startCt(true);
+  if (watchFrom) { watchAcc += Date.now() - watchFrom; watchFrom = 0; }
+  else if (watchAcc) watchAcc = 0;
+  else watchFrom = Date.now();
+  renderCt(timersWide());
+}
+/** A right click: cleared, the stopwatch back to 0:00. */
+function clearCt() { watchFrom = 0; watchAcc = 0; startCt(false); }
 
 // ---------------------------------------------------------------- sections
 function openSection(name, url, heading) {
@@ -1119,13 +1159,14 @@ function setBehaviour(root) {
   b = sect(root, 'Timers').body;
   opt(b, 'World boss timer', 'In the bar, closed and open',
     sw(settings.wbTimer !== false, (v) => save({ wbTimer: v }).then(applyLayout)));
-  opt(b, 'Warn before the spawn', 'The world boss timer turns red and grows from here on',
-    slider(1, 30, settings.wbWarnMin == null ? 5 : settings.wbWarnMin, ' min', (v) => save({ wbWarnMin: v })));
+  const warn = timeField('wbWarnIn', Number(settings.wbWarnSec) > 0 ? Number(settings.wbWarnSec) : 300, fmtClock, parseClock, (v) => save({ wbWarnSec: v }).then(renderTimers));
+  warn.title = 'e.g. 90 (seconds), 5:00, 15:15, 30m or 1h';
+  opt(b, 'Warn before the spawn', 'The world boss timer turns red and grows from here on — 90, 5:00 (m:ss), 15m10s or 1h', warn);
   opt(b, 'Blink while it warns', 'A click on the timer stops it',
     sw(settings.wbBlink !== false, (v) => save({ wbBlink: v })));
   opt(b, 'Helltide timer', 'How long the Helltide still runs (red for its last 3 minutes), or when the next one starts',
     sw(settings.helltide !== false, (v) => save({ helltide: v }).then(applyLayout)));
-  opt(b, 'Own timer', 'A click starts it, another click starts it over, a right click clears it — red and blinking for the last 30 seconds',
+  opt(b, 'Own timer', 'A timer or a stopwatch of your own in the bar — a right click clears it',
     sw(settings.ctTimer !== false, (v) => save({ ctTimer: v }).then(applyLayout)));
   const name = el('input');
   name.type = 'text'; name.id = 'ctName'; name.value = ctName(); name.maxLength = 16; name.spellcheck = false;
@@ -1134,9 +1175,20 @@ function setBehaviour(root) {
   const time = timeField('ctTimeIn', ctSecs(), fmtClock, parseClock, (v) => save({ ctSecs: v }).then(renderTimers));
   time.title = 'e.g. 90 (seconds), 5:00, 1:30:00, 15m, 15m10s or 1h';
   const cm = opt(b, 'Its time', 'Up to 99:59:59 — 90, 1:12 (m:ss), 1:30:00, 15m10s or 1h — what a click on it starts', time);
-  const cu = opt(b, 'Counting', 'Down from its time, or up from 0:00 to its time',
-    seg([['down', 'Down'], ['up', 'Up']], ctUp() ? 'up' : 'down', (v) => save({ ctUp: v === 'up' }).then(renderTimers)));
+  const cu = opt(b, 'Counting', 'Down from its time or up to it (a click starts it over, red for the last 30 seconds) — or a stopwatch: click starts, click stops, click back to 0:00',
+    seg([['down', 'Down'], ['up', 'Up'], ['watch', 'Stopwatch']], ctMode(), (v) => {
+      watchFrom = 0; watchAcc = 0; ctEnd = 0;
+      save({ ctMode: v }).then(() => { cm.classList.toggle('off', settings.ctTimer === false || v === 'watch'); renderTimers(); });
+    }));
   [cn, cm, cu].forEach((o) => o.classList.toggle('off', settings.ctTimer === false));
+  if (ctMode() === 'watch') cm.classList.add('off');
+  opt(b, 'Counter', 'Counts your runs (or anything) in the bar — a click adds one, a right click starts it at 0',
+    sw(settings.rcCounter !== false, (v) => save({ rcCounter: v }).then(() => { rn.classList.toggle('off', !v); applyLayout(); })));
+  const rname = el('input');
+  rname.type = 'text'; rname.id = 'rcName'; rname.value = rcName(); rname.maxLength = 16; rname.spellcheck = false;
+  rname.onchange = () => save({ rcName: rname.value.trim() }).then(renderTimers);
+  const rn = opt(b, 'Its name', 'Shown above the count', rname);
+  rn.classList.toggle('off', settings.rcCounter === false);
   opt(b, 'Timers always bright', 'They ignore the closed bar\'s fade',
     sw(settings.wbBright !== false, (v) => save({ wbBright: v }).then(applyLayout)));
   b = sect(root, 'Messages').body;
@@ -1185,7 +1237,8 @@ function setHotkeys(root) {
   opt(b, 'Show / hide the overlay', 'Without quitting', hkField('hotkeyToggle'));
   opt(b, 'Build: skills', 'Opens the active build on its skills — again closes it', hkField('hotkeySkills'));
   opt(b, 'Build: paragon', 'Opens the active build on its paragon boards', hkField('hotkeyParagon'));
-  opt(b, 'Start the own timer', 'Starts it over as well — the game keeps the focus. A single F-key works here too', hkField('hotkeyTimer'));
+  opt(b, 'Counter: +1', 'Adds one to the counter — the game keeps the focus. A single F-key works here too', hkField('hotkeyCounter'));
+  opt(b, 'Start the own timer', 'Like a click on it (the stopwatch: start, stop, 0:00) — the game keeps the focus. A single F-key works here too', hkField('hotkeyTimer'));
 }
 
 // ---- Macros: click spam and lock – both off until switched on past a warning.
@@ -1255,7 +1308,7 @@ const SECTIONS = {
   Panel: ['What the open panel does while you play', 'build'],
   Bar: ['The bar – closed a strip, open the panel\'s spine', 'list'],
   'Closed bar': ['Timers and lock – the mouse over it slides out the rest', 'list'],
-  Timers: ['World boss, Helltide and your own timer', 'timer'],
+  Timers: ['World boss, Helltide, your own timer and the counter', 'timer'],
   Messages: ['diablo.trade chat', 'trade'],
   Size: ['How big the text and the panel are', 'fit'],
   Look: ['How much of the game shows through, and where things sit', 'eye'],
@@ -1674,7 +1727,7 @@ async function openTrade(name) {
 }
 // What the small pill shows – each one can be switched off (settings.pillHide lists those).
 const PILL_ITEMS = [['search', 'Search'], ['farm', 'Builds'], ['maptool', 'Map tool'], ['listings', 'diablo.trade'],
-  ['wb', 'World boss'], ['ht', 'Helltide'], ['ct', 'Own timer'], ['miss', 'To farm'], ['settings', 'Settings'], ['quit', 'Quit']];
+  ['wb', 'World boss'], ['ht', 'Helltide'], ['ct', 'Own timer'], ['rc', 'Counter'], ['miss', 'To farm'], ['settings', 'Settings'], ['quit', 'Quit']];
 const pillHide = () => (Array.isArray(settings.pillHide) ? settings.pillHide : []);
 const pillEl = (k) => (k === 'quit' ? $('btnQuit') : $('rail').querySelector('[data-section="' + k + '"]') || $(k));
 function applyLayout() {
@@ -1760,8 +1813,11 @@ async function init() {
   $('ht').onclick = openFromTimer;
   $('miss').onclick = () => openSection('farm');
   // your own timer: a click starts it (over), a right click clears it – the panel stays shut
-  $('ct').onclick = (e) => { e.stopPropagation(); startCt(true); };
-  $('ct').oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); startCt(false); };
+  $('ct').onclick = (e) => { e.stopPropagation(); clickCt(); };
+  $('ct').oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); clearCt(); };
+  // the counter: a click adds one, a right click starts it at 0 – the panel stays shut
+  $('rc').onclick = (e) => { e.stopPropagation(); countRc(true); };
+  $('rc').oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); countRc(false); };
   $('panelClose').onclick = closeAll;
   $('btnPin').onclick = () => { setPinned(!pinned); setGhost(false); };
   $('coachOk').onclick = () => { save({ coachSeen: true }); $('coach').hidden = true; };
@@ -1831,7 +1887,8 @@ async function init() {
     fv.setView(v);
     if (section === 'farm') render(); else openSection('farm');
   });
-  api.onTimerRestart(() => { if (settings.ctTimer !== false) startCt(true); });
+  api.onTimerRestart(() => { if (settings.ctTimer !== false) clickCt(); });
+  api.onCounterAdd(() => { if (settings.rcCounter !== false) countRc(true); });
   api.onUpdateInfo(onUpdate);
   api.onBackupDone((t) => { backupAt = Number(t) || Date.now(); if (section === 'settings') render(); });
   api.onLock(({ on, paused, why }) => {

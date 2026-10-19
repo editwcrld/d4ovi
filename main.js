@@ -343,6 +343,7 @@ function registerHotkeys() {
   reg(settings.hotkeyFarm, () => { front(); send('open-section', 'farm'); }, 'Builds');
   // the own timer starts (over) without taking the focus from the game
   reg(settings.hotkeyTimer, () => send('timer-restart'), 'Own timer');
+  reg(settings.hotkeyCounter, () => send('counter-add'), 'Counter');
   reg(settings.hotkeySkills, () => { front(); send('open-build-view', 'skills'); }, 'Build skills');
   reg(settings.hotkeyParagon, () => { front(); send('open-build-view', 'paragon'); }, 'Build paragon');
   return errors;

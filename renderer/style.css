@@ -272,6 +272,7 @@ input.clock.bad{border-color:var(--red);color:var(--red-fg)}
 #ct.idle span{color:var(--dim)}
 #ct.run span{color:var(--gold2)}
 #ct.ready{background:var(--ok-soft)} #ct.ready b{color:var(--ok)} #ct.ready span{color:#b9e39d}
+#rc span{color:var(--gold2);font-variant-numeric:tabular-nums} #rc.idle span{color:var(--dim)}
 #miss span{color:var(--gold)}
 #miss.done b{color:var(--ok)} #miss.done span{color:#b9e39d}
 .tmr.soon b{color:var(--red-fg)}
