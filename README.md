@@ -242,8 +242,8 @@ npm run ui-check   # every page at every size: screenshots and an overlap check
 
 ```
 npm run dist       # the .exe without the macros: the one to share (also the download above)
-npm run dist --m   # the .exe with the macros (lock, click spam): build it for yourself
-npm start --m      # run from source with the macros
+npm run dist:m     # the .exe with the macros (lock, click spam): build it for yourself
+npm run start:m    # run from source with the macros
 ```
 
 ### How the code is laid out
@@ -272,4 +272,4 @@ until switched on in *Settings → Macros*, each one past a "use at your own ris
 - **Lock:** a toggle key (F9) holds the keys you list down, or presses each on its own timer. The
   map, the chat, the town portal and your own left click pause it. Key lists per character.
 
-Both only send input while Diablo IV is the window in front. Build it with `npm run dist --m`.
+Both only send input while Diablo IV is the window in front. Build it with `npm run dist:m`.

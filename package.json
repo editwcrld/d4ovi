@@ -7,7 +7,9 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
+    "start:m": "electron . --m",
     "dist": "node tools/dist.js",
+    "dist:m": "node tools/dist.js --m",
     "test": "node test/run.js",
     "test:ui": "node test/renderer-smoke.js",
     "test:search": "node test/search-test.js",

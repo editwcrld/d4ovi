@@ -5,8 +5,8 @@ The macros (lock, click spam) send input to the game. Blizzard's terms do not al
 so they are NOT in the .exe by default.
 
   npm run dist        .exe WITHOUT the macros   (the one to share / the download)
-  npm run dist --m    .exe WITH the macros      (for yourself only, at your own risk)
-  npm start --m       run from source, with the macros
+  npm run dist:m      .exe WITH the macros      (for yourself only, at your own risk)
+  npm run start:m     run from source, with the macros
 
 Without the macros there is no "Macros" tab in the settings, and the helper that sends
 clicks and key presses is never started.
