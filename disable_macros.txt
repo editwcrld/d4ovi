@@ -1,45 +1,15 @@
-MACROS AUSBLENDEN – vor dem Bauen der .exe
-==========================================
+MACROS – mit oder ohne bauen
+============================
 
-Datei:  lib/features.js
-        (im Projektordner: d4ovi\lib\features.js)
+Die Macros (Lock, Click spam) senden Eingaben an das Spiel. Das erlauben Blizzards
+Nutzungsbedingungen nicht – deshalb sind sie standardmaessig NICHT in der .exe.
 
-Dort stehen drei Schalter. 1 = drin, 0 = komplett raus:
+  npm run dist        .exe OHNE Macros   (die zum Teilen / zum Download)
+  npm run dist --m    .exe MIT Macros    (nur fuer dich selbst)
+  npm start --m       aus dem Quellcode starten, mit Macros
 
-  module.exports = {
-    MACROS: 1,        // der ganze Reiter "Macros" – 0 schaltet auch beide unten ab
+Ohne Macros: kein Reiter "Macros" in den Einstellungen, und der Hintergrund-Helfer
+(der Klicks und Tasten sendet) wird nie gestartet.
 
-    LOCK: 1,          // Lock (Tasten halten oder im Takt drücken)
-    CLICK_SPAM: 1,    // Click spam
-  };
-
-
-Was 0 bewirkt
--------------
-MACROS: 0       Kein Reiter "Macros" in den Einstellungen, und der Hintergrund-Helfer
-                (der Klicks und Tasten sendet) wird nie gestartet – egal was in den
-                gespeicherten Einstellungen steht.
-
-LOCK: 0         Die Karte "Lock" fehlt, Lock wird nie ausgeführt.
-                Damit verschwindet auch die Karte "Character" (sie speichert nur die
-                Lock-Tasten).
-CLICK_SPAM: 0   Die Karte "Click spam" fehlt, click spam wird nie ausgeführt.
-
-Stehen beide auf 0, ist es dasselbe wie MACROS: 0 (kein Reiter).
-
-
-Beispiele
----------
-Alles raus:                       MACROS: 0
-Nur Click spam behalten:          LOCK: 0
-Nur Lock behalten:                CLICK_SPAM: 0
-
-
-Danach bauen
-------------
-  npm run dist
-
-Die neue .exe liegt in dist\D4-Overlay-<version>-portable.exe.
-Die Schalter werden in die .exe eingebaut – ändern danach geht nur durch neu bauen.
-Gespeicherte Einstellungen (dist\D4-Overlay-Data) bleiben erhalten; schaltest du
-etwas später wieder auf 1, sind die alten Tasten wieder da.
+Wie es funktioniert: tools/dist.js schreibt die Wahl beim Bauen in lib/build-flags.json
+(wird danach wieder geloescht), lib/features.js liest sie.

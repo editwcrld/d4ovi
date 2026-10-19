@@ -5,3 +5,4 @@ D4-Overlay-Data/
 *.log
 .claude/
 tools/ui-check/out/
+lib/build-flags.json

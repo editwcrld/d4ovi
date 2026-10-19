@@ -1,13 +1,19 @@
 # D4 Overlay
 
-A small always-on-top companion for Diablo IV (windowed mode, Windows). It does not read or
-change the game's memory or files — it reads public web pages and shows them next to it.
+[![Download here](https://img.shields.io/badge/Download%20here-latest%20release-c8322b?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/editwcrld/d4ovi/releases/latest)
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-Ko--fi-ff5e5b?style=for-the-badge&logo=kofi&logoColor=white)](https://ko-fi.com/itsun)
 
-The optional *Macros* (click spam and lock — below) are the exception:
-they send mouse clicks and key presses to the game window. Blizzard's terms do not allow
-automating game input, so using them can put your account at risk. They are all **off** until
-switched on in *Settings → Macros*, each one past a "use at your own risk" warning — and a build
-can leave them out entirely (`lib/features.js`, see *Building*).
+A small always-on-top companion for Diablo IV (windowed mode, Windows): item search, boss loot,
+crafting, your builds and what is still to farm, a build finder, the map tool, diablo.trade and
+the world boss, Helltide and your own timers — next to the game, without alt-tabbing.
+
+It does not read or change the game's memory or files — it reads public web pages and shows
+them next to the game. Download the portable `.exe` above and start it; nothing to install.
+
+**A hobby project**, made with [Claude](https://claude.ai). It is free and only meant to help
+people play — everything it shows comes from the sites listed under *Credits* at the end, and
+without them and the work they put in it would not be possible. All credit goes to them.
+If it helps you, a [coffee](https://ko-fi.com/itsun) is welcome — it stays free either way.
 
 ## The look
 
@@ -53,7 +59,7 @@ hotkey – the panel grows out of it; closing, it folds back into that corner an
 at its place. Open, the bar is the panel's spine. The strip and the panel each keep their place
 (dragged by hand); being kept on the screen for a moment never moves it.
 
-**Lock** shows its keys while it runs, as they are pressed ("1234"), in red and still – hover
+**Lock** (only in a build with the macros, see the end) shows its keys while it runs, as they are pressed ("1234"), in red and still – hover
 for which are held and which are timed. While it waits (map, chat, town portal, a left click) they
 turn gold, and the label says why. Each icon opens one
 section:
@@ -64,7 +70,7 @@ section:
 | 📋 | **Builds** | *My builds*: your farm list – cheat sheet, gear, where each piece drops, skills, paragon. *Find a build*: pick a class and a skill, every site's guides for it explained, or build it yourself — see below |
 | 🗺 | **Map tool** | The maxroll map tool, embedded — see below |
 | 🛍 | **diablo.trade** | Your listings with your own login — the chat is one click away there; unread messages show a red badge |
-| ⚙ | **Settings** | One page: Behaviour · Appearance · Hotkeys · Macros · diablo.trade · Data – the chips on top jump to a group |
+| ⚙ | **Settings** | One page: Behaviour · Appearance · Hotkeys · Macros (in a build with them) · diablo.trade · Data – the chips on top jump to a group |
 
 **Closing and pinning.** A click into the game closes the open panel and the bar goes back to the
 strip — no Esc needed. **Pin** (top right of every panel, next to ✕) keeps it open: pinned,
@@ -75,7 +81,7 @@ running). The overlay takes the keyboard only while you type — the search, a t
 record, an embedded page you clicked into — and gives it back right after. The open
 panel can be dragged by its spine and its head as well as by the ⠿ handle.
 
-`Ctrl+F` opens the search from inside the game, `Esc` closes everything and clears the field.
+`Ctrl+Shift+F` opens the search from inside the game, `Esc` closes everything and clears the field.
 Three more hotkeys can be assigned (show/hide, open map tool, open builds — `Ctrl+Shift+B` by default).
 
 Boss loot and crafting have no icon of their own — typing `boss loot` or `crafting` brings up the
@@ -96,7 +102,7 @@ Closed — by a click into the game, ✕ or Esc — the bar is the strip right a
 opacity you set:
 
 ```
-⠿ │ WORLD BOSS 2:15:40 │ HELLTIDE 13:47 │ TIMER 05:00 │ LOCK ◆◆◆◇      (mouse over: … │ 🔍 📋 🗺 🛍 │ ⚙ ⏻)
+⠿ │ WORLD BOSS 2:15:40 │ HELLTIDE 13:47 │ TIMER 05:00 │ RUNS 9      (mouse over: … │ 🔍 📋 🗺 🛍 │ ⚙ ⏻)
 ```
 
 The timers keep their full strength; in the warning time (*Warn before the spawn*, 5:00 by default — typed
@@ -167,80 +173,6 @@ When switched on (*Settings → Data → Updates*, off by default), the overlay 
 puts a green dot on Settings; *Settings → Data → Updates* links to it. Nothing is downloaded or
 installed by itself, and the check can be switched off there. (It needs published releases in a
 public repository — otherwise it says "no release published yet".)
-
-## Macros
-
-*Settings → Macros* holds two input helpers. Both are **off** by default; switching one
-on first shows a *Use at your own risk* warning (Cancel keeps it off). They only send input while
-**Diablo IV is the window in front** — alt-tab or minimise and they pause, and anything held is
-let go.
-
-### Click spam
-
-Hold a button down and the overlay keeps clicking.
-
-| Default | Does |
-|---|---|
-| Mouse 4 (thumb, back) | repeats **right** clicks |
-| Mouse 5 (thumb, forward) | repeats **left** clicks |
-
-Both can be rebound: click the field and press the button or key you want (the two thumb
-buttons, the wheel button, or a single key — the plain left and right mouse buttons stay free so
-the field remains clickable). *Del* clears a binding, the speed runs from 1 to 40 clicks per
-second (default 15). Each click holds the button for 20–40 ms — a game reads the mouse once per
-frame, and a click that goes down and up inside one frame is dropped.
-
-### Lock
-
-Press the toggle key (default **F9**) in the game and the overlay works through the listed keys
-until you press it once more. The keys sit as tiles — `[1] [2] [Q] [+]`; at first there is only
-`[+]`. Click it and press a key (digits, letters, Space, Shift) or a mouse button (left, right,
-wheel, the two thumb buttons) and it becomes a tile; × on a tile takes it out, a key is in the
-list only once.
-
-Every key gets a row: **grip · on/off · key · Lock switch · seconds**. The on/off button switches
-a key off for now — it stays in the list with its settings, greyed and left out, until you
-switch it on again. Otherwise it is one or the other:
-
-- **Lock on** (the default) — the key is held down, as if you kept it pressed; the seconds
-  slider is grey. A held key behaves like one on a real keyboard: it goes down, and after 0.3 s
-  it repeats about 30 times a second. Mouse buttons just stay down.
-- **Lock off** — the key is pressed again after its own number of seconds (0.2–30 s); switched
-  on, the timed keys go out at once, after that each keeps its own pace.
-
-**Priority:** timed keys always go out on time — pressed on top of the held keys, which stay down
-(letting go and pressing again would break off a held skill every time). Each tap lasts 60 ms, a
-few frames, so a slow frame cannot swallow it. Several timed keys due at once go out top to bottom; drag a row by its
-grip to change the order. The row says *timed · 1.*, *timed · 2.* …
-
-**Left click pauses it:** while you hold the left mouse button yourself, or left click spam runs,
-lock lets go of everything and waits; a quarter second after you let go it carries on. The
-overlay tells your own clicks from the ones it sends (a low level mouse hook sees the flag
-Windows puts on sent input), so a locked Mouse 1 does not pause itself.
-
-**The map and the chat pause it:** Tab opens the map, Enter the chat — lock waits until the same
-key (or Esc) closes it again, however long you look or type. The tag in the bar reads **Map** or
-**Chat** meanwhile. Pressing lock's toggle key starts it fresh, with both counted as closed.
-**The town portal pauses it too:** T makes lock wait 5 seconds so the portal is not broken off
-(tag **Portal**); a left click by hand goes on at once. Not watched when T is one of lock's keys.
-
-While it runs, a green **Lock** tag sits next to the world boss timer; it turns amber and reads
-**Wait** while a left click pauses it, **Map** while the map is open.
-
-### Per character
-
-The lock tiles belong to a **character**: pick one in the
-*Character* row and its keys load right away; **+ New** starts a copy of the current one, the
-name can be changed, *Delete* removes the one picked (one always stays). The toggle key, the
-click spam and the on switches are shared.
-
-### How it works
-
-Windows has no way to read a held mouse button or send input from Node, and a native module
-would break the portable build, so a small PowerShell helper does it (`lib/clicker.js`), the
-same way the game window is detected. Keys go out as scan codes, so the game sees them as real
-key presses. The helper lets go of everything it holds when it is stopped, and it watches the
-overlay's process id and ends by itself if the overlay is gone.
 
 ## Search
 
@@ -691,7 +623,7 @@ with the signed in one.
 ```
 npm install
 npm start          # run from source
-npm run dist       # build dist\D4-Overlay-<version>-portable.exe
+npm run dist       # build dist\D4-Overlay-<version>-portable.exe (without the macros, see Building)
 npm test           # all offline tests
 npm run css        # build renderer/style.css from styles/ (never edit style.css itself)
 npm run ui-check   # every page at every size: screenshots + overlap check (tools/ui-check/out)
@@ -701,64 +633,55 @@ node test/builder-live.js   # the builder against the real sites (needs the inte
 
 ### Building
 
-`lib/features.js` holds the build switches, read when the overlay starts — set them before
-`npm run dist`:
+```
+npm run dist       # the .exe without the macros – the one to share (also the download above)
+npm run dist --m   # the .exe with the macros (lock, click spam) – build it for yourself
+npm start --m      # run from source with the macros
+```
 
-| Switch | 1 | 0 |
-|---|---|---|
-| `MACROS` | *Settings → Macros* is there | no Macros tab, and the input helper is never started |
-| `LOCK` | lock is there | its card is gone and it never runs |
-| `CLICK_SPAM` | click spam is there | its card is gone and it never runs |
+`tools/dist.js` bakes the choice into the build; without the macros there is no *Macros* tab and
+the helper that sends input is never started (`lib/features.js`).
 
-Both at 0 is the same as `MACROS: 0`. `disable_macros.txt` in the project folder repeats this
-in German, to find it quickly.
+### How the code is laid out
 
-## Tests
-
-The overlay's page is split by area – `renderer/app.js` (state, opening and closing,
-start-up), `strip.js` (the bar's motions: sliding out, growing, folding away), `timers.js`, `searchview.js`, `settingspage.js` – classic scripts sharing one scope,
-loaded before `app.js`, which starts the page. Names are compared everywhere with `lib/text.js`.
-The main process keeps hotkeys and data loading in `main.js`; where the window goes and how big is
-`lib/windowplace.js` (played through in `test/windowplace-test.js`); what the pages ask for
-is served by area: `lib/searchipc.js` (search, pictures), `lib/buildsipc.js` (farm list, builds,
-builder – with `lib/builderipc.js`). Every request goes through `lib/netfetch.js`: no answer within
-15 s (offline, a firewall) and it fails – the page says which site did not answer – and that site is
-not asked again for a minute.
-
-**Layout check** (`npm run ui-check [size] [page]`): the real renderer in an offscreen window at
-every panel size down to a phone (393 × 850), every page, with the data from the app's own data
-folder (`D4DATA` for another one). Text spilling out of its box, out of the window or lying on
-other text is reported; the screenshots are in `tools/ui-check/out/`.
-
-`npm test` runs twenty-five files and prints one summary:
-
-| File | Covers |
-|---|---|
-| `backup-test.js` | backup: which files go along, folder names, only the newest kept |
-| `updates-test.js` | update check: version numbers, GitHub's answers |
-| `settings-test.js` | settings: defaults, every migration of an older settings file |
-| `search-test.js` | boss loot search, keyword narrowing |
-| `extract-test.js` | maxroll page extraction |
-| `cookie-test.js` | cookie parsing (header, dev tools rows, JSON) |
-| `timer-test.js` | world boss countdown: parsing, kept while the page reloads |
-| `activities-test.js` | guide parsing and search |
-| `mapstore-test.js` | map progress: save, restore, never overwrite newer |
-| `d4guides-test.js` | database list parsing (name, icon, link, columns) |
-| `mythics-test.js` | iconic mythics: the list, the acquisition text, bad pages |
-| `windowplace-test.js` | the window's whole flow: start, open, close, sliding out at the right edge, dragging, the next start – each step one that once went wrong |
-| `place-test.js` | where the window goes: a place moves only by hand, what is shown stays on screen, sliding out at the right edge grows to the left |
-| `clicker-test.js` | macros: bindings, speed limits, key lists, off by default, what the helper is told |
-| `maxbuild-test.js` | maxroll import: links, guide page, planner variant → build, dual wield |
-| `infinitybuilds-test.js` | infinitybuilds import: links and variants, English names, stat values like the site's tooltips, command skills, paragon, charms |
-| `builder-test.js` | builder: the damage formula (d4guides' example), reading item texts (multipliers, whose skill, conditions, splinters, souls), the optimizer, proven build lists and their consensus, mechanics (loops and breakpoints, uptime, the pool, tags, tempers), the resource budget, cooldown chains, buffs by their uptime, stats picked for the build |
-| `sitebuilds-test.js` | d4builds + d2core import: links, variants, slots, aspects by game id, Chinese titles |
-| `farm-test.js` | farm list: slots, sources, aspect tooltips, merged variants; builds: save, ticks, code, import |
-| `compare-test.js` | comparing two builds: partner variant, gear, skills, charms, paragon, what is left to farm |
-| `renderer-smoke.js` | the whole UI in jsdom: every section (incl. farm list, builds, compare, builder), settings and macros, the plates and lines in each view, strip and spine, panel sizes, hotkeys, Esc, idle fade |
-| `icons-test.js` | a picture for every thing by name: catalog, game data, d2core, aspects by category, trophies, sets; the page keys names as `lib/text.js` does |
-| `netfetch-test.js` | a site that does not answer fails after 15 s instead of hanging, and is left alone for a minute |
-| `ipc-test.js` | every channel `preload.js` uses is served by main.js or a `lib/*ipc.js`, nothing extra; only build sites open |
-| `css-test.js` | renderer/style.css is what `styles/` makes (`npm run css`) |
+The overlay's page is split by area – `renderer/app.js` (state, opening and closing, start-up),
+`strip.js` (the bar's motions), `timers.js`, `searchview.js`, `settingspage.js` – classic
+scripts sharing one scope, loaded before `app.js`, which starts the page. The stylesheet is
+written in `styles/` and built into `renderer/style.css` (`npm run css`). The main process keeps
+hotkeys and data loading in `main.js`; where the window goes is `lib/windowplace.js`; what the
+pages ask for is served by area (`lib/searchipc.js`, `lib/buildsipc.js`, `lib/builderipc.js`).
+Every request goes through `lib/netfetch.js`: a site that does not answer within 15 s fails
+instead of hanging, and is left alone for a minute.
 
 If something misbehaves at runtime, `overlay-log.txt` in the data folder records cookie changes,
 view navigation, zoom and data loading.
+
+## Macros (not in the download)
+
+The optional *Macros* (click spam and lock) are the exception to "it only reads web pages": they
+send mouse clicks and key presses to the game window. Blizzard's terms do not allow automating game
+input, so using them can put your account at risk. They are all **off** until switched on in
+*Settings → Macros*, each one past a "use at your own risk" warning — and a build can leave them
+out entirely (`lib/features.js`, see *Building*).
+
+**The committed build and the `.exe` to download come without them.** If you want them anyway,
+download the code and build it yourself with `npm run dist --m` — at your own risk.
+
+- **Click spam** – hold Mouse 4 / Mouse 5 (or a key of your choice) and it keeps clicking right /
+  left, 1–40 clicks a second.
+- **Lock** – a toggle key (F9) holds the keys you list down, or presses each on its own timer; the
+  map, the chat, the town portal and your own left click pause it. Key lists per character.
+
+Both only send input while Diablo IV is the window in front, and let go of everything when it is not.
+
+## Credits
+
+Without these cool websites this overlay would not be possible <3:
+
+- [maxroll.gg](https://maxroll.gg) – game data, boss loot, crafting, activities, the iconic mythics, build guides and the tier list
+- [d4guides.gg](https://d4guides.gg) – item database, icons, in-game tooltips, the farm list's items and aspects
+- [d4builds.gg](https://d4builds.gg) – build guides
+- [d2core.com](https://www.d2core.com) – skill trees, paragon boards, stat texts, build planner and proven builds
+- [infinitybuilds.gg](https://infinitybuilds.gg) – builds and their guides
+- [diablo.trade](https://diablo.trade) – trading, chat and the world boss timer
+- [sunderarmor.com](https://sunderarmor.com) – pictures of the uniques, bosses and classes

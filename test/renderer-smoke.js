@@ -86,7 +86,7 @@ let importNo = 0;
 let settings = {
   d4Path: 'C:\\x.exe', d4WindowTitle: 'Diablo IV', visibility: 'focused',
   orientation: 'vertical', railWide: false, windowSize: 'mittel', opacity: 1,
-  tradeOpenMode: 'internal', pressEnter: false, hotkeySearch: 'Control+F',
+  tradeOpenMode: 'internal', pressEnter: false, hotkeySearch: 'Control+Shift+F',
   wbWarnSec: 300, wbBlink: true, favorites: [], recent: [],
   fadeOpacity: 0.35, fadeAfterSec: 1, idleShrink: true, pillHide: ['maptool'], wbBright: true, msgBlink: true,
   clickSpam: false, clickLeftBind: 'Mouse5', clickRightBind: 'Mouse4', clickCps: 15,

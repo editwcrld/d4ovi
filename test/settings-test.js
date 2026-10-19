@@ -54,6 +54,10 @@ console.log('ok  old place, unused keys');
 assert.strictEqual(load({ macroRev: 3, hotkeyFarm: '' }).settings.hotkeyFarm, DEFAULTS.hotkeyFarm);
 assert.strictEqual(load({ macroRev: 3, hotkeyRev: 1, hotkeyFarm: 'F7' }).settings.hotkeyFarm, 'F7');
 assert.strictEqual(load({ macroRev: 3, hotkeyRev: 2, hotkeyFarm: '' }).settings.hotkeyFarm, '', 'cleared on purpose later: stays empty');
+assert.strictEqual(load({}).settings.hotkeySearch, 'Control+Shift+F', 'the search: Ctrl+Shift+F');
+assert.strictEqual(load({ macroRev: 3, hotkeyRev: 2, hotkeySearch: 'Control+F' }).settings.hotkeySearch, 'Control+Shift+F', 'the old default follows');
+assert.strictEqual(load({ macroRev: 3, hotkeyRev: 2, hotkeySearch: 'F8' }).settings.hotkeySearch, 'F8', 'a key picked by hand stays');
+assert.strictEqual(load({ macroRev: 3, hotkeyRev: 3, hotkeySearch: 'Control+F' }).settings.hotkeySearch, 'Control+F', 'picked again later: stays');
 console.log('ok  builds hotkey');
 
 // macros from before they had their own tab: off, keys carried over into lock

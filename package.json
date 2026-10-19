@@ -7,7 +7,7 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win portable",
+    "dist": "node tools/dist.js",
     "test": "node test/run.js",
     "test:ui": "node test/renderer-smoke.js",
     "test:search": "node test/search-test.js",
