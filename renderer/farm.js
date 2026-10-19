@@ -33,6 +33,7 @@ let view = 'gear';                 // guide | gear | skills | paragon | compare
 let layout = 'route';              // route (where to go, what you get) | list (all at once) | slots (as in the game)
 try { const l = localStorage.getItem('farm.layout'); if (l === 'list' || l === 'slots') layout = l; } catch (_) { /* private storage */ }
 let routeAt = null;                // the stop picked in the route
+let routeJump = null;              // … just clicked: it goes to the top of the list once drawn
 let onlyMissing = false;           // hide what is farmed already
 let menuOpen = false;              // the build menu
 let gearAt = { key: '', top: 0 };  // where the gear list was scrolled to (kept across redraws)
@@ -207,6 +208,13 @@ function render(main, c) {
   // a redraw (a tick, a row folded out) keeps the place in the list – same build, same view
   const at = b.id + '|' + layout;
   if (gearAt.key === at) gear.scrollTop = gearAt.top;
+  // a stop clicked on the route: it moves to the top, what you get there right under it – the
+  // stop above may have folded in, so where it was is no help
+  if (routeJump && layout === 'route') {
+    const wp = [...gear.querySelectorAll('.wp')].find((x) => x.dataset.stop === routeJump);
+    if (wp) gear.scrollTop = Math.max(0, gear.scrollTop + wp.getBoundingClientRect().top - gear.getBoundingClientRect().top - 8);
+  }
+  routeJump = null;
   gearAt = { key: at, top: gear.scrollTop };
   gear.addEventListener('scroll', () => { gearAt.top = gear.scrollTop; });
   if (pickOpen) placePicker();
@@ -780,7 +788,7 @@ function routeView(el, b) {
     head.appendChild(tx);
     head.appendChild(el('span', 'wn', s.blank ? s.things.length + ' empty' : got + '/' + s.things.length));
     head.title = s.title + (s.place ? ' — ' + s.place : '');
-    head.onclick = () => { routeAt = s.key; pickOpen = false; ctx.rerender(); };
+    head.onclick = () => { routeAt = s.key; routeJump = s.key; pickOpen = false; ctx.rerender(); };
     wt.appendChild(head);
     if (s === cur) {
       const c = UI.plate({ title: s.blank ? 'Choose what goes in' : 'Here you get', badge: s.blank ? '' : got + ' / ' + s.things.length, cls: 'here rdetail' });

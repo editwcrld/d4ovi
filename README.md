@@ -50,10 +50,9 @@ your own timer · (to farm) · (lock). The mouse over it slides the section icon
 out to the right (those switched on for it); leaving, they slide back in. Opening a section – by a
 click, a timer or a hotkey – the panel grows out of it. Open, the bar is the panel's spine.
 
-**Lock** shows one diamond per key while it runs, as in the game's own UI: a held key is lit – with
-more than one they blink with the re-press, one after the other – a timed key is an outline that
-flashes on its time. While it waits (map, chat, town portal, a left click) the diamonds turn gold
-and stand still, and the label says why. Each icon opens one
+**Lock** shows its keys while it runs, as they are pressed ("1234"), in red and still – hover
+for which are held and which are timed. While it waits (map, chat, town portal, a left click) they
+turn gold, and the label says why. Each icon opens one
 section:
 
 | Icon | Section | What it does |
@@ -347,10 +346,10 @@ its skill) or in the slots view — zooms the tree in on it and lights it and it
 land on the same drawing — infinitybuilds.gg too, it keeps the game's node ids as well. d4builds.gg serves its skill tree data encrypted; for its builds the bar
 is shown and a button opens d4builds' own tree inside the overlay.
 
-**Paragon.** The boards as a film strip on top (name, glyph and its rank), the first one shown
-big to start with, *All* for the whole chain. Beside it the board's glyph as a medallion and its
+**Paragon.** The boards as a film strip on top (name, the glyph's round picture and its rank), the first one shown
+big to start with, *All* for the whole chain. Beside it the board's glyph as the game draws it (green while rare, orange from rank 46) and its
 legendary node (showing all: every glyph). The boards sit on their grid, turned as in the build,
-the nodes taken lit up by rarity, the glyph in its socket — as plain squares (*Minimal*) or with the
+the nodes taken lit up by rarity, the glyph's picture in its socket — as plain squares (*Minimal*) or with the
 game's node icons (*Icons*); switching keeps where you zoomed to. The names sit in the gap above
 each board, gates that touch are joined by a line. A click on a board — in the strip or in the
 drawing — lights it up and moves the view to it (again: all back). All sites land on
@@ -417,7 +416,7 @@ their own build. A `builds.json` from before takes every aspect ticked anywhere 
 
 ## Builder
 
-*Builds → Find a build.* For players who follow guides and want to make a build of their own. Pick a **class**, then the
+*Builds → Find a build.* Drawn like the rest of the overlay: where you are, its views and *Save* in the page's tab row, the page scrolls as one (only the skill tree and the boards move inside). For players who follow guides and want to make a build of their own. Pick a **class**, then the
 **skill** that should do the damage: the skills with guides come first — S-Tier, A-Tier … by
 maxroll's tier list, then the ones with guides only on the other sites — each with how many guides
 there are, the rest after them by kind. The build opens on one sheet: skill bar on top, the gear as the game shows

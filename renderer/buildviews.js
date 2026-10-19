@@ -380,6 +380,14 @@ function select(ui, i) {
   sidePlates(ui);
 }
 
+/** A glyph as the game draws it – round, green while rare, orange from rank 46; the diamond until its picture is known. */
+function glyphImg(el, name, rank, cls) {
+  const box = el('span', cls);
+  const url = UI.glyphPic(name, rank);
+  if (url) { box.classList.add('pic-on'); box.appendChild(UI.img(url, () => box.classList.remove('pic-on'))); }
+  return box;
+}
+
 /** The board's legendary node, when the build takes it. */
 function legendaryOf(bd, d) {
   const g = d.boards[bd.k];
@@ -405,7 +413,9 @@ function filmStrip(ui) {
     b.title = 'Click to show this board';
     b.appendChild(el('b', null, (i + 1) + '. ' + (g ? g.name : bd.k)));
     const gl = bd.glyph && d.glyphs[bd.glyph];
-    b.appendChild(el('small', 'gl', gl ? '◈ ' + gl.name + (bd.glyphRank ? ' · ' + bd.glyphRank : '') : bd.nodes.length + ' nodes'));
+    const sm = el('small', 'gl', gl ? gl.name + (bd.glyphRank ? ' · ' + bd.glyphRank : '') : bd.nodes.length + ' nodes');
+    if (gl) sm.prepend(glyphImg(el, gl.name, bd.glyphRank, 'gi'));
+    b.appendChild(sm);
     b.onclick = () => select(ui, i);
     film.appendChild(b);
   });
@@ -422,7 +432,7 @@ function sidePlates(ui) {
     const gl = bd.glyph && d.glyphs[bd.glyph];
     if (!gl) return;
     const m = el('div', 'gmed');
-    m.appendChild(el('span', 'gm'));
+    m.appendChild(glyphImg(el, gl.name, bd.glyphRank, 'gm'));
     const t = el('div', 'gtx');
     t.appendChild(el('b', null, gl.name));
     t.appendChild(el('span', null, bd.glyphRank ? 'Rank ' + bd.glyphRank : 'Glyph'));
@@ -515,6 +525,8 @@ function drawParagon(area, el, P, d, at) {
           shape = svg('rect', { x: x - s / 2, y: y - s / 2, width: s, height: s, rx: 1.2, class: cls }, grp);
         }
         if (glyph) shape.classList.add('glyph');
+        const gp = glyph && UI.glyphPic(glyph.name, bd.glyphRank);
+        if (gp) svg('image', { href: gp, x: x - 6, y: y - 6, width: 12, height: 12, class: 'gimg' }, grp);
       }
       hover(shape, (e) => (glyph
         ? tip(e, glyph.name, 'Glyph' + (bd.glyphRank ? ' · rank ' + bd.glyphRank : ''), [glyph.desc, glyph.bonus])

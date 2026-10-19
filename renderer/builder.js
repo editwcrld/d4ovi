@@ -237,7 +237,7 @@ function render(main, c) {
     save.onclick = () => saveBuild(p);
     head.appendChild(save);
   }
-  main.appendChild(head);
+  (ctx.tabs || main).appendChild(head);
   const body = E('div', 'body');
   main.appendChild(body);
   if (S.step === 'class') stepClass(body);
@@ -277,6 +277,7 @@ function stepClass(body) {
   const g = E('div', 'classes');
   for (const c of catalog) {
     const b = E('button', 'cls');
+    if (window.UI) b.appendChild(window.UI.pic(c.cls, { kind: 'class', cls: 'pic bd-cpic' }));
     b.appendChild(E('b', null, c.cls));
     b.appendChild(E('span', null, c.main + ' · ' + c.resource));
     const n = c.skills.filter((s) => s.tier === 'S' || s.tier === 'A').length;
@@ -469,7 +470,7 @@ function provenView(body, p, b) {
     // said in the lines below where it matters, not as a tile of its own
     [[p.skill.dot || noCrit || !T.crit ? null : 'Crit chance', T.crit + '%'], [p.skill.dot || noCrit || !T.crit ? null : 'A crit hits', '×' + T.critX], [T.vulnX > 1 ? 'Vulnerable' : null, '×' + T.vulnX],
       [T.ranks > 0 ? 'Skill ranks' : null, '+' + T.ranks], [T.dr > 0 ? 'Damage reduction' : null, T.dr + '%'], [T.cdr > 0 ? 'Cooldown red.' : null, T.cdr + '%'], [T.teleport ? 'Evade' : null, 'Teleport']]
-      .filter(([a]) => a).forEach(([a, v]) => { const d = E('div'); d.appendChild(E('b', null, v)); d.appendChild(E('span', null, a)); tot.appendChild(d); });
+      .filter(([a]) => a).forEach(([a, v]) => { const d = E('div'); const vb = E('b', null, v); vb.title = v; d.appendChild(vb); d.appendChild(E('span', null, a)); tot.appendChild(d); });
     sec.appendChild(tot);
     const ul = E('ul', 'adv');
     const LABEL = { damage: 'Damage', crit: 'Crits', vuln: 'Vulnerable', loop: 'How it runs', tough: 'Survival', speed: 'Speed', leoric: 'Helm', splinter: 'Splinters', cond: 'Relies on', other: 'Not counted' };

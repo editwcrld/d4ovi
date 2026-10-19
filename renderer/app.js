@@ -60,6 +60,7 @@ function reportSize() {
 function setOpen(on) {
   const was = $('app').classList.contains('open');
   $('app').classList.remove('peek');
+  watchCursor();
   $('app').classList.toggle('open', !!on);
   $('panel').hidden = !on;
   if (on && !was) {
@@ -91,7 +92,7 @@ function setIdle(on) {
   clearTimeout(setIdle.t);
   setIdle.t = setTimeout(() => rail.classList.remove('morph'), 140);
   $('app').classList.toggle('idle', on);
-  if (!on) $('app').classList.remove('peek');
+  if (!on) { $('app').classList.remove('peek'); watchCursor(); }
   api.setIdle(on);
   renderTimers();
   setTimeout(reportSize, 40);
@@ -100,12 +101,17 @@ function setIdle(on) {
 // The closed bar shows the timers and lock only. The mouse over it takes the fade off and slides
 // the sections out (those switched on for it): the window takes their width first – keeping its
 // place – then they slide in; leaving, they slide back and the window follows once they are in.
+// Leaving is told by the main process (where the cursor is, against the window): the strip is a
+// drag area between its buttons, and Windows reports the mouse there as gone from the page – the
+// page's own mouseleave would fold it in and out while the mouse only moves along it.
 let peekT = null;
+const PEEK_ROOM = 24;                      // a little more than the sections' gaps and border, never less
 function peek(on) {
   clearTimeout(peekT);
   if (!on || !idle || $('app').classList.contains('open')) {
     if (!$('app').classList.contains('peek')) return;
     $('app').classList.remove('peek');
+    watchCursor();
     peekT = setTimeout(reportSize, 360);
     return;
   }
@@ -113,8 +119,9 @@ function peek(on) {
   const s = $('secs'), y = $('sys'), r = $('rail').getBoundingClientRect();
   s.style.setProperty('--w', s.scrollWidth + 'px');
   y.style.setProperty('--w', y.scrollWidth + 'px');
-  api.resize(Math.ceil(r.width + s.scrollWidth + y.scrollWidth + 12), Math.ceil(r.height), false, true);
+  api.resize(Math.ceil(r.width + s.scrollWidth + y.scrollWidth + PEEK_ROOM), Math.ceil(r.height), false, true);
   $('app').classList.add('peek');
+  watchCursor();
 }
 
 // ---------------------------------------------------------------- timers
@@ -333,7 +340,13 @@ function onClickOutside() {
 function setGhost(on) {
   $('app').classList.toggle('ghost', !!on);
   if (!on) $('app').classList.remove('near');
-  api.hoverWatch(!!on);
+  watchCursor();
+}
+/** Where the cursor is, told by the main process, is needed by two at once – the fade (ghost) and the
+ * sections slid out (peek): it runs while either needs it, so ending one never blinds the other. */
+function watchCursor() {
+  const on = $('app').classList.contains('ghost') || $('app').classList.contains('peek');
+  if (on !== !!watchCursor.on) { watchCursor.on = on; api.hoverWatch(on); }
 }
 // ---- the keyboard stays with the game (main.js setKeyboard): the overlay asks for it only while
 // something is typed into – a text field, a key to record – and gives it back once that lost the focus
@@ -491,6 +504,7 @@ function renderSection() {
 // What the builder (builder.js) may use from here – it keeps where you scrolled to when it redraws
 const builderCtx = {
   get api() { return api; },
+  get tabs() { return $('chips'); },
   rerender: () => {
     if (section !== 'builder') return;
     const y = $('main').scrollTop;
@@ -618,6 +632,7 @@ function renderSearch(main, side) {
       title: r.name + (r.src ? ' — ' + r.src : ''),
       onClick: () => { pick = r.key; render(); $('main').scrollTop = 0; } });
     row.dataset.key = r.key;
+    if (r.key.startsWith('i:') && window.FarmView) window.FarmView.tip(row, r.name);
     side.appendChild(row);
   });
   if (!area) {
@@ -681,6 +696,7 @@ function itemCard(it) {
   const rar = rarityOf(it.name, it);
   const top = el('div', 'entry');
   const art = UI.pic(it.name, { url: it.icon, kind: kindOf(it), cls: 'pic art r-' + rar });
+  if (window.FarmView) window.FarmView.tip(art, it.name);          // the in-game tooltip, as in the gear
   top.appendChild(art);
   const tx = el('div', 'etx');
   tx.appendChild(el('h2', 'r-' + rar, it.name));
@@ -713,7 +729,6 @@ function itemCard(it) {
     c.appendChild(g);
   }
   dropsFrom(it.name, c);
-  if (it.flavor) c.appendChild(el('p', 'flav', it.flavor));
   const fields = it.fields || [];
   if (fields.length) {
     const g = el('div', 'fields');
@@ -1450,25 +1465,11 @@ function lockList() {
     return true;
   }).map((e) => Object.assign({ key: e.key, lock: e.lock !== false, sec: Number(e.sec) > 0 ? Number(e.sec) : 1 }, e.off === true ? { off: true } : {}));
 }
-/**
- * Lock's keys as the game's diamonds, one per key switched on. Held ones are lit – with more than
- * one they are re-pressed in turn (lib/clicker.js: 600 ms down, 50 ms up, staggered), and blink
- * with it; timed ones flash on their time. Waiting (map, chat, portal, a left click): gold, still.
- */
-function lockDias(paused) {
-  const box = el('span', 'dias');
+/** Lock's keys switched on, as they are pressed ("1234") – red while it runs, gold while it waits; nothing moves. */
+function lockKeys(paused) {
   const keys = lockList().filter((e) => !e.off);
-  const held = keys.filter((e) => e.lock).length;
-  let k = 0;
-  keys.forEach((e) => {
-    const d = el('i', 'ld ' + (e.lock ? 'held' : 'timed') + (e.lock && held > 1 ? ' cyc' : ''));
-    d.title = keyLabel(e.key) + (e.lock ? ' — held' : ' — every ' + fmtSec(e.sec));
-    d.appendChild(el('em', null, keyName(e.key)));
-    if (!paused && e.lock && held > 1) d.style.animationDelay = -Math.round(k++ * 650 / held) + 'ms';
-    if (!paused && !e.lock) d.style.animationDuration = Math.max(200, Math.round(e.sec * 1000)) + 'ms';
-    box.appendChild(d);
-  });
-  if (!keys.length) box.textContent = '–';
+  const box = el('span', 'lkeys', keys.map((e) => keyName(e.key)).join('') || '–');
+  box.title = keys.map((e) => keyLabel(e.key) + (e.lock ? ' — held' : ' — every ' + fmtSec(e.sec))).join('\n') + (paused ? '\n(waiting)' : '');
   return box;
 }
 
@@ -1767,7 +1768,10 @@ async function init() {
   api.onClickOutside(onClickOutside);
   watchKeyboard();
   // faded: the main process says when the cursor is over the window – :hover misses a quick exit
-  api.onCursorInside((inside) => $('app').classList.toggle('near', !!inside));
+  api.onCursorInside((inside) => {
+    $('app').classList.toggle('near', !!inside);
+    if (!inside) peek(false);                        // the mouse left the strip (see peek)
+  });
   $('qClear').onclick = () => { $('q').value = ''; itemHits = []; itemQuery = ''; onQuery(); render(); typeIn($('q')); };
   $('q').addEventListener('input', onQuery);
   $('q').addEventListener('keydown', (e) => {
@@ -1785,7 +1789,6 @@ async function init() {
   });
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAll(); });
   $('rail').addEventListener('pointerenter', () => peek(true));
-  $('rail').addEventListener('pointerleave', () => peek(false));
 
   api.onLoot((l) => { loot = useLoot(l) || loot; loadIcons(); render(); });
   api.onCraft((c) => { craft = c || craft; render(); });
@@ -1840,7 +1843,7 @@ async function init() {
         : why === 'chat' ? 'Lock waits — the chat is open, Enter or Esc closes it'
         : why === 'portal' ? 'Lock waits — town portal (T), 5 seconds or a left click' : 'Lock waits — goes on when you let go of the left button';
     t.firstChild.textContent = !paused ? 'Lock' : ({ map: 'Map', chat: 'Chat', portal: 'Portal' })[why] || 'Wait';
-    t.lastChild.replaceWith(lockDias(!!paused));
+    t.lastChild.replaceWith(lockKeys(!!paused));
   });
   api.onChatUnread((n) => {
     const b = $('chatBadge');

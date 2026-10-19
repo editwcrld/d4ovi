@@ -451,7 +451,7 @@ function iconsNow() {
   const cat = farm.catalog(loot, craft);
   const key = [items.count(), items.age(), d4g.count(), d4g.age(), cat.items.length, cat.aspects.length, d2 ? d2.fetchedAt : 0].join('|');
   if (iconMap.key !== key) {
-    iconMap = { key, map: icons.build({ catalog: cat.items, aspects: cat.aspects, guides: d4g.all(), items: items.all(), d2: (d2 && d2.icons) || {} }) };
+    iconMap = { key, map: icons.build({ catalog: cat.items, aspects: cat.aspects, guides: d4g.all(), items: items.all(), d2: (d2 && d2.icons) || {}, glyphs: items.glyphIcons() }) };
   }
   return iconMap.map;
 }

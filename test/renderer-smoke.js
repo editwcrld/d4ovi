@@ -91,6 +91,7 @@ let settings = {
 };
 
 const calls = [];
+let hoverWatchOn = false;                              // the main process watching the cursor (overlay:hover-watch)
 let backupMade = 0, copied = null;
 const handlers = {};
 const on = (n) => (cb) => { handlers[n] = cb; };
@@ -99,6 +100,7 @@ w.d4api = new Proxy({}, { get: (_, k) => {
   if (k === 'builderFull') return undefined;          // the website's call – the overlay asks for plan and proven builds apart
   return (...a) => {
     calls.push(k);
+    if (k === 'hoverWatch') hoverWatchOn = !!a[0];
     if (k === 'getSettings') return Promise.resolve(settings);
     if (k === 'getFeatures') return Promise.resolve({ macros: true, clickSpam: true, lock: true });
     if (k === 'getLoot') return Promise.resolve(loot);
@@ -932,8 +934,9 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok($('lockTag').hidden, 'no tag while it is off');
   handlers.onLock({ on: true, paused: false });
   assert.ok(!$('lockTag').hidden && $('lockTag').textContent.includes('Q2M1') && !$('lockTag').classList.contains('paused'), 'tag in the bar while it runs');
-  assert.ok($('lockTag').querySelectorAll('.ld').length === 3 && $('lockTag').querySelectorAll('.ld.timed').length === 2 && $('lockTag').querySelectorAll('.ld.held').length === 1, 'one diamond per key: held ones lit, timed ones outlined');
-  assert.ok(/ms$/.test($('lockTag').querySelector('.ld.timed').style.animationDuration), 'a timed one flashes on its own time');
+  const lk = $('lockTag').querySelector('.lkeys');
+  assert.ok(lk && lk.textContent === 'Q2M1' && !lk.getAnimations?.().length && !lk.style.animationDuration, 'the keys as they are pressed, still – nothing blinks');
+  assert.ok(/held/.test(lk.title) && /every/.test(lk.title), 'held and timed ones told on hover');
   handlers.onLock({ on: true, paused: true });
   assert.ok($('lockTag').classList.contains('paused') && $('lockTag').textContent.includes('Wait'), 'it says when a left click pauses it');
   handlers.onLock({ on: true, paused: false });
@@ -1127,8 +1130,16 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok($('app').classList.contains('idle'), 'hovering does not wake it');
   assert.ok($('app').classList.contains('peek'), 'hovering takes the fade off – and slides the sections out');
   assert.ok($('secs').style.getPropertyValue('--w'), 'as wide as they are, the window first');
+  assert.ok(calls.includes('hoverWatch'), 'where the cursor is comes from the main process');
+  // the strip is a drag area between its buttons: the page thinks the mouse left – it did not
   $('rail').dispatchEvent(new w.PointerEvent('pointerleave', { bubbles: true })); await sleep(20);
-  assert.ok(!$('app').classList.contains('peek'), 'leaving fades it again');
+  assert.ok($('app').classList.contains('peek'), 'moving along the strip does not fold it in');
+  // a click on it (here the own timer) must not stop the watch – it would never fold in again
+  $('ct').dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true })); $('ct').click(); await sleep(20);
+  assert.ok($('app').classList.contains('peek') && hoverWatchOn, 'clicked: still out, the cursor still watched');
+  handlers.onCursorInside(false); await sleep(20);
+  assert.ok(!$('app').classList.contains('peek'), 'leaving it (the main process says so) fades it again');
+  assert.ok(!hoverWatchOn, 'and the watch ends with it');
   rail('search').click(); await sleep(40);
   assert.ok(!$('app').classList.contains('idle'), 'a click on the magnifier wakes it up');
   assert.ok($('app').classList.contains('grow') && !$('app').classList.contains('peek'), 'the panel grows out of the bar');

@@ -110,6 +110,8 @@ const classPic = (cls) => PICS + 'Classes/2/' + String(cls).toLowerCase() + '.pn
 const skillPic = (id) => (id ? 'https://cloudstorage.d2core.com/data_img/d4/skill/' + id + '.png' : '');
 const isUrl = (u) => /^https?:/.test(u || '');
 
+/** A paragon glyph's round picture – legendary (orange) from rank 46 on, rare (green) before. */
+const glyphPic = (name, rank) => iconMap[((Number(rank) || 0) >= 46 ? 'glyph+:' : 'glyph:') + norm(name)] || iconMap['glyph:' + norm(name)] || '';
 /** The picture the map knows for a name – a boss trophy ("Duriel: Shard of Agony") by its item. */
 function iconOf(name, kind) {
   const k = norm(name);
@@ -336,7 +338,7 @@ if (doc) doc.addEventListener('mousemove', (e) => { if (tipEl && !tipEl.hidden &
 
 root.UI = {
   el, icon, ICONS, pic, img, line, tick, plate, btn, iconBtn, seg, tabs, rcls, norm,
-  uniquePic, bossPic, classPic, skillPic, iconOf,
+  uniquePic, bossPic, classPic, skillPic, iconOf, glyphPic,
   setIcons: (m) => { iconMap = m && typeof m === 'object' ? m : {}; },
   tip: { show: tipShow, move: tipMove, hide: tipHide, bind: tipBind },
 };
