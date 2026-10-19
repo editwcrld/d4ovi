@@ -74,6 +74,9 @@ svg.i{width:17px;height:17px;flex:0 0 auto;stroke:currentColor;fill:none;stroke-
 .btn.ghost{background:transparent;border-color:transparent;color:var(--dim)}
 .btn.ghost:hover{color:var(--fg);background:var(--hover);border-color:var(--edge)}
 .btn.danger{color:var(--red-fg)}
+/* where a build comes from: green, to open its guide (the build's head, the cheat sheet's foot) */
+.btn.src{color:var(--ok);border-color:var(--ok-line);background:var(--ok-soft)}
+.btn.src:hover{color:#cdeab4;border-color:var(--ok);background:var(--ok-soft)}
 .btn.sm{height:26px;padding:0 9px;font-size:12px}
 .btn.sm.icon{width:26px;padding:0}
 .btn[disabled]{opacity:.4;cursor:default;pointer-events:none}

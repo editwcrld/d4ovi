@@ -21,7 +21,7 @@ const d2db = require('./lib/d2coredb');
 const builder = require('./lib/builder');
 const searchipc = require('./lib/searchipc');
 const buildsipc = require('./lib/buildsipc');
-const place = require('./lib/place');
+const windowplace = require('./lib/windowplace');
 const clicker = require('./lib/clicker');
 const features = require('./lib/features');
 const Settings = require('./lib/settings');
@@ -64,11 +64,10 @@ function zoomFor(wa) {
   return Math.round(fromScreen * wish * 100) / 100;
 }
 let curZoom = 1;
-function applyZoom() {
-  if (!overlay || overlay.isDestroyed()) return curZoom;
-  const wa = screen.getDisplayMatching({ x: barX, y: barY, width: curW, height: curH }).workArea;
+/** The zoom for this screen, applied to the page and the embedded views when it changes. */
+function applyZoom(wa) {
   const z = zoomFor(wa);
-  if (z !== curZoom) {
+  if (z !== curZoom && overlay && !overlay.isDestroyed()) {
     curZoom = z;
     overlay.webContents.setZoomFactor(z);
     views.setZoom(z);
@@ -77,15 +76,6 @@ function applyZoom() {
   return curZoom;
 }
 
-const BAR_WIDTH = 300;                   // until the overlay reports its real size
-const BAR_HEIGHT = 52;
-// The open panel is made for the room left of the game's inventory, skill tree and paragon:
-// 820 × 600 at 1080p (CSS pixels – the zoom grows it with the screen), smaller or larger by the
-// "Panel size" setting – or tall and narrow like a phone (393 × 850, "mobile") – or the size
-// dragged by hand. Every page works down to the phone's width.
-const PANEL_SIZES = { small: { w: 700, h: 510 }, medium: { w: 820, h: 600 }, large: { w: 985, h: 720 }, mobile: { w: 393, h: 850 } };
-const PANEL_MIN = { w: 360, h: 400 };
-
 let settings = Settings.load({}).settings;
 let overlay = null;
 let lastState = { title: '', proc: '', pid: 0, running: false };
@@ -93,18 +83,7 @@ let stopWatcher = null;
 let hideTicks = 0;
 let loot = { sections: [], fetchedAt: 0 };
 let craft = { tables: [], fetchedAt: 0 };
-// The place of the state shown (barX, barY) – where it was put, changed only by a drag by hand –
-// and where the window is shown (placedAt): the place kept on the screen (lib/place.js)
-let barX = 0, barY = 0, curH = BAR_HEIGHT, curW = BAR_WIDTH;
-let strip = { w: BAR_WIDTH, h: BAR_HEIGHT };   // the closed bar's last reported size (CSS pixels)
 let capturing = false;                   // a hotkey is being recorded in the settings
-let isIdle = false;                      // the overlay reported "nothing open" – the bar is a strip
-// the strip slid out (hold): where it was shown and how wide before – it grows from there, and at the
-// right edge to the left, its right end staying put
-let peekHome = null;
-let shownOpen = null;                    // what the window shows: the panel (true) or the strip (false)
-let placedAt = { x: NaN, y: NaN };       // where the window is shown (set by us – not a move by hand)
-let centreIdle = true;                   // no place dragged for the pill yet -> keep it centred
 let hiddenByHand = false;               // hidden from the tray – stays hidden until shown there again
 
 const userFile = (n) => path.join(app.getPath('userData'), n);
@@ -195,107 +174,25 @@ function onWindowState(st) {
   send('status', { d4Active: d4Focused, running: st.running, title: st.title });
 }
 
-// ---------- window & layout ----------
-// Two places are remembered: where the closed bar sits (by default centred at the top, out of
-// the way) and where the open panel sits (by default top left – the room left of the game's
-// inventory). Dragging the window always writes to the place of the state it is in.
-const onScreen = (p) => place.onScreen(p, screen.getAllDisplays());
-
-function defaultPlace(idle) {
-  const wa = screen.getPrimaryDisplay().workArea;
-  return idle
-    ? { x: Math.round(wa.x + (wa.width - strip.w * curZoom) / 2), y: wa.y + 8 }
-    : { x: wa.x + 16, y: wa.y + 64 };
-}
-function checkCentre() { centreIdle = !onScreen(settings.posIdle); }
-function placeFor(idle) {
-  const p = idle ? settings.posIdle : settings.posOpen;
-  return onScreen(p) ? { x: p.x, y: p.y } : defaultPlace(idle);
-}
-/** Folding in (or opening) from slid out: back to the strip's own place. */
-function endPeek() {
-  if (!peekHome) return;
-  curW = peekHome.w;
-  peekHome = null;
-}
-function rememberPlace() {
-  // the window shows the other state's look (at start-up: the strip, while the state is still
-  // "open" until the page says otherwise) – where it is now is no place of this state
-  if (shownOpen === null || shownOpen === isIdle) return;
-  const p = { x: barX, y: barY };
-  if (isIdle) settings.posIdle = p; else settings.posOpen = p;
-}
-
-/** Switches between the two states and moves the window to that state's place. */
-function setIdleState(on) {
-  if (on === isIdle || !overlay || overlay.isDestroyed()) return;
-  endPeek();                             // opened from slid out: the strip's place is its own
-  rememberPlace();                       // keep the place of the state we are leaving
-  isIdle = on;
-  checkCentre();
-  const p = placeFor(on);
-  barX = p.x; barY = p.y;
-  dlog(on ? 'Closed: the strip' : 'Open: the panel', '→', barX + ',' + barY);
-  applySize(strip.w, strip.h, !on);
-  saveSettingsFile();
-}
-
-/** The open panel in screen pixels: the size dragged by hand, else 820 × 600 by "Panel size" – on the screen. */
-function panelBox(z, wa) {
-  const m = settings.panelSize && settings.panelSize.w > 0 ? settings.panelSize : null;
-  const p = PANEL_SIZES[settings.windowSize] || PANEL_SIZES.medium;
-  const w = m ? m.w : p.w, h = m ? m.h : p.h;
-  return { w: Math.min(Math.round(w * z), wa.width), h: Math.min(Math.round(h * z), wa.height), manual: !!m };
-}
-
-/** The strip's width in screen pixels for a width reported by the page (CSS pixels). */
-const stripWidth = (cssW, z, wa) => Math.max(44, Math.min(Math.round(cssW * z), wa.width));
-/** Where the strip is shown slid out to width w: from where it is shown now (lib/place.js slideOut). */
-function slidX(w, wa) {
-  return place.slideOut(peekHome || { x: placedAt.x, w: curW }, w, wa);
-}
-
-// Closed, the window is the strip at its place (a strip never put anywhere stays centred while its
-// width changes); sliding out under the mouse (hold) it grows from where it is shown. Open, it is
-// the panel at the open place. Only what is shown is kept on the screen – the place stays.
-function applySize(barW, barH, open, hold) {
-  if (!overlay || overlay.isDestroyed()) return;
-  const wa = screen.getDisplayMatching({ x: barX, y: barY, width: curW, height: curH }).workArea;
-  const z = applyZoom();
-  let w, h, x, manual = false;
-  if (!hold) endPeek();
-  if (open) {
-    const p = panelBox(z, wa);
-    w = p.w; h = p.h; manual = p.manual;
-    x = barX;
-  } else {
-    strip = { w: barW, h: barH };
-    w = stripWidth(barW, z, wa);
-    h = Math.max(36, Math.min(Math.round(barH * z), wa.height));
-    if (hold) {
-      if (!peekHome) peekHome = { x: placedAt.x, w: curW };
-      x = slidX(w, wa);
-    } else {
-      if (centreIdle) barX = place.centred(w, wa);
-      x = barX;
-    }
-  }
-  const at = place.shown({ x, y: barY }, w, h, wa);
-  // noted before the move: Windows may tell it as 'moved' while setBounds is still running
-  placedAt = at;
-  overlay.setBounds({ x: at.x, y: at.y, width: w, height: h });
-  shownOpen = !!open;
-  curW = w; curH = h;
-  rememberPlace();
-  // grown to the left (slid out at the right edge): the strip sits at the window's right side
-  send('layout', { manual, toLeft: !!peekHome && at.x < peekHome.x });
-}
+// ---------- window & layout – lib/windowplace.js ----------
+const win = windowplace.create({
+  settings: () => settings,
+  screen: {
+    matching: (rect) => screen.getDisplayMatching(rect).workArea,
+    primary: () => screen.getPrimaryDisplay().workArea,
+    displays: () => screen.getAllDisplays(),
+  },
+  zoom: applyZoom,
+  setBounds: (b) => { if (overlay && !overlay.isDestroyed()) overlay.setBounds(b); },
+  layout: (m) => send('layout', m),
+  save: () => saveSettingsFile(),
+  log: (...a) => dlog(...a),
+});
 
 function createOverlay() {
-  const pos = placeFor(false);
-  barX = pos.x; barY = pos.y;
+  const pos = win.start();
   overlay = new BrowserWindow({
-    width: BAR_WIDTH, height: BAR_HEIGHT, x: pos.x, y: pos.y,
+    width: pos.width, height: pos.height, x: pos.x, y: pos.y,
     frame: false, transparent: true, resizable: false, hasShadow: false, skipTaskbar: true, show: false, focusable: false,
     alwaysOnTop: true, title: 'D4 Overlay', backgroundColor: '#00000000',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
@@ -303,21 +200,7 @@ function createOverlay() {
   overlay.setAlwaysOnTop(true, 'screen-saver');
   overlay.setOpacity(Number(settings.opacity) || 1);
   overlay.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  overlay.on('moved', () => {
-    const [x, y] = overlay.getPosition();
-    // Windows tells our own setBounds as a move too – only a drag by hand is a new place
-    if (Math.abs(x - placedAt.x) <= 2 && Math.abs(y - placedAt.y) <= 2) return;   // (scaled screens round)
-    dlog('Moved by hand to', x + ',' + y, peekHome ? '(while slid out)' : '');
-    if (peekHome) {
-      // dragged while slid out: the place moves along – folding in, it lands where it was dragged
-      const dx = x - placedAt.x, dy = y - placedAt.y;
-      barX += dx; barY += dy; peekHome.x += dx;
-    } else { barX = x; barY = y; }
-    placedAt = { x, y };
-    rememberPlace();
-    if (isIdle) centreIdle = false;       // dragged by hand -> keep exactly this spot
-    saveSettingsFile();
-  });
+  overlay.on('moved', () => { const [x, y] = overlay.getPosition(); win.moved(x, y); });
   // the focus went elsewhere (alt-tab, another window): the keyboard is the game's again
   overlay.on('blur', () => setKeyboard(null));
   if (settings.visibility === 'always') overlay.once('ready-to-show', () => overlay.showInactive());
@@ -462,7 +345,7 @@ ipcMain.handle('settings:save', (_e, patch) => {
   const before = JSON.stringify([settings.d4Path, settings.tradeUrl]);
   const clickBefore = JSON.stringify(CLICK_KEYS.map((k) => settings[k]));
   settings = { ...settings, ...patch };
-  checkCentre();
+  win.checkCentre();
   saveSettingsFile();
   const errors = registerHotkeys();
   if (JSON.stringify([settings.d4Path, settings.tradeUrl]) !== before) {
@@ -471,7 +354,7 @@ ipcMain.handle('settings:save', (_e, patch) => {
   }
   if (JSON.stringify(CLICK_KEYS.map((k) => settings[k])) !== clickBefore) restartClicker();
   if (overlay && !overlay.isDestroyed()) overlay.setOpacity(Number(settings.opacity) || 1);
-  applyZoom();
+  win.rezoom();                           // the text size may have changed
   if (lastState) onWindowState(lastState);
   return { settings, errors };
 });
@@ -514,24 +397,12 @@ buildsipc.register(ipcMain, {
   documents: () => app.getPath('documents'),
 });
 
-ipcMain.on('overlay:resize', (_e, barW, h, open, hold) => applySize(barW, h, !!open, !!hold));
+ipcMain.on('overlay:resize', (_e, barW, h, open, hold) => win.applySize(barW, h, !!open, !!hold));
 // which way the strip will grow sliding out to this width (CSS px) – asked before, so the page can
-// set itself to the window's right side first and hide the move (renderer/app.js peek)
-ipcMain.handle('overlay:slide-plan', (_e, cssW) => {
-  if (!overlay || overlay.isDestroyed()) return { toLeft: false };
-  const wa = screen.getDisplayMatching({ x: placedAt.x, y: placedAt.y, width: curW, height: curH }).workArea;
-  const x = slidX(stripWidth(Number(cssW) || 0, curZoom || 1, wa), wa);
-  return { toLeft: x < (peekHome ? peekHome.x : placedAt.x) };
-});
-ipcMain.on('overlay:idle', (_e, on) => setIdleState(!!on));
-ipcMain.on('overlay:panel-size', (_e, size) => {
-  if (!size || !size.w) { settings.panelSize = null; }
-  else {
-    settings.panelSize = { w: Math.max(PANEL_MIN.w, Math.round(size.w)), h: Math.max(PANEL_MIN.h, Math.round(size.h)) };
-  }
-  saveSettingsFile();
-  applySize(strip.w, strip.h, true);
-});
+// set itself to the window's right side first and hide the move (renderer/strip.js peek)
+ipcMain.handle('overlay:slide-plan', (_e, cssW) => win.slidePlan(cssW));
+ipcMain.on('overlay:idle', (_e, on) => win.setIdle(!!on));
+ipcMain.on('overlay:panel-size', (_e, size) => { win.panelSize(size); saveSettingsFile(); });
 // Dragging the panel's corner: the top left stays, the corner follows the cursor (read here, in
 // screen pixels – the renderer's own coordinates move with the window).
 let sizeDrag = null;
@@ -542,12 +413,11 @@ ipcMain.on('overlay:resize-drag', (_e, phase) => {
   if (phase === 'start') { sizeDrag = { ox: b.x + b.width - p.x, oy: b.y + b.height - p.y }; return; }
   if (!sizeDrag) return;
   if (phase === 'end') { sizeDrag = null; saveSettingsFile(); return; }
-  const z = curZoom || 1;
+  const z = win.zoom() || 1;
   const wa = screen.getDisplayMatching(b).workArea;
   const w = Math.min(p.x + sizeDrag.ox - b.x, wa.x + wa.width - b.x);
   const h = Math.min(p.y + sizeDrag.oy - b.y, wa.y + wa.height - b.y);
-  settings.panelSize = { w: Math.max(PANEL_MIN.w, Math.round(w / z)), h: Math.max(PANEL_MIN.h, Math.round(h / z)) };
-  applySize(strip.w, strip.h, true);
+  win.panelSize({ w: w / z, h: h / z });
 });
 let hoverWatch = null, hoverIn = null;
 ipcMain.on('overlay:hover-watch', (_e, on) => {

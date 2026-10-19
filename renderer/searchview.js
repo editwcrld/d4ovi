@@ -32,6 +32,38 @@ function pushRecent(q) {
 }
 
 // ---- search -------------------------------------------------------------
+// ---- the results' chips: two rows – what does not fit is not hidden behind a scrollbar but
+// counted on a last chip ("+4 more"), which opens them all (and "less" folds them again)
+const hits = { all: false, for: '' };
+function fitHits(side) {
+  if (!side.classList.contains('hits') || side.querySelector('h5')) return;   // favourites and recent: all shown
+  side.querySelectorAll('.more').forEach((x) => x.remove());
+  const rows = [...side.querySelectorAll('.hit')];
+  rows.forEach((r) => r.classList.remove('over'));
+  side.classList.toggle('all', hits.all);
+  const toggle = (label, title) => {
+    const b = el('button', 'hit more', label);
+    b.title = title;
+    b.onclick = () => { hits.all = !hits.all; fitHits(side); };
+    side.appendChild(b);
+    return b;
+  };
+  if (hits.all) { toggle('less ▴', 'Show two rows again'); return; }
+  if (side.scrollHeight <= side.clientHeight + 1) return;                  // everything fits
+  const more = toggle('', 'Show all ' + rows.length + ' results');
+  // from the end, the ones that do not fit go into the count – the picked one always stays
+  let n = 0;
+  for (let i = rows.length - 1; i >= 0 && side.scrollHeight > side.clientHeight + 1; i--) {
+    if (rows[i].classList.contains('on')) continue;
+    rows[i].classList.add('over');
+    more.textContent = '+' + (++n) + ' more ▾';
+  }
+}
+if (typeof ResizeObserver === 'function') {
+  // narrower or wider: counted again
+  new ResizeObserver(() => requestAnimationFrame(() => fitHits($('side')))).observe(document.getElementById('side'));
+}
+
 function renderSearch(main, side) {
   const q = $('q').value.trim();
   const { term, kinds } = S.parseQuery(q);
@@ -129,6 +161,8 @@ function renderSearch(main, side) {
     const tl = UI.line({ tag: 'button', name: 'Search “' + q + '” on diablo.trade', pic: UI.pic('', { kind: 'trade' }), cls: 'hit trade', onClick: () => openTrade(q) });
     side.appendChild(tl);
   }
+  if (hits.for !== q + '|' + chip) { hits.for = q + '|' + chip; hits.all = false; }   // a new search starts folded
+  requestAnimationFrame(() => fitHits(side));
 
   if (!R.length) {
     main.appendChild(el('div', 'empty', loot.sections.length ? 'No matches.' : 'Data is still loading …'));

@@ -1,10 +1,15 @@
 
 /* ---------------------------------------------------------------- search
-   The results as chips over the picked one, as in the mockup – two rows at most, the rest
-   scrolls; the picked one in full below them. */
+   The results as chips over the picked one, as in the mockup – two rows, what does not fit is
+   counted on a last chip ("+4 more") that opens them all; the picked one in full below them. */
 #cols.withside{flex-direction:column}
-#side.hits{width:auto;max-height:78px;flex:0 0 auto;display:flex;flex-wrap:wrap;align-content:flex-start;gap:5px;padding:10px 20px 8px;
-  border-right:0;border-bottom:1px solid var(--edge);overflow-y:auto}
+#side.hits{width:auto;max-height:83px;flex:0 0 auto;display:flex;flex-wrap:wrap;align-content:flex-start;gap:5px;padding:10px 20px 8px;
+  border-right:0;border-bottom:1px solid var(--edge);overflow:hidden}
+/* two rows exactly: 10 + 30 + 5 + 30 + 8 px (padding, chips, gap) */
+#side.hits.all{max-height:none}
+#side.hits .hit.over{display:none}
+#side.hits .hit.more{padding:0 12px;border-style:dashed;border-color:var(--edge3);background:none;color:var(--gold);font:700 12px/1 var(--sc);letter-spacing:.06em;white-space:nowrap}
+#side.hits .hit.more:hover{border-color:var(--gold-line);background:var(--gold-soft)}
 #side.hits .hit{width:auto;max-width:100%;flex:0 1 auto;height:30px;gap:7px;padding:0 10px 0 3px;border:1px solid var(--edge);background:var(--plate)}
 #side.hits .hit.on{border-color:var(--red);background:var(--red-soft);box-shadow:none}
 #side.hits .hit .pic{width:24px;height:24px;border:0;background:none}

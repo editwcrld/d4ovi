@@ -16,6 +16,7 @@ const TESTS = [
   ['d4guides parsing', 'd4guides-test.js'],
   ['iconic mythics', 'mythics-test.js'],
   ['bar placement', 'place-test.js'],
+  ['window flow', 'windowplace-test.js'],
   ['click spam', 'clicker-test.js'],
   ['farm list + builds', 'farm-test.js'],
   ['compare builds', 'compare-test.js'],

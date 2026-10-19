@@ -23,6 +23,7 @@ const SCREENS = [
   ['search-item', `open('search'); typeQ('harlequin')`],
   ['search-boss', `open('search'); typeQ('butcher')`],
   ['bossloot', `open('search'); typeQ('boss loot')`],
+  ['bossloot-all', `open('search'); typeQ('boss loot'); clickSel('#side .hit.more')`],   // "+N more" opened
   ['crafting', `open('search'); typeQ('crafting')`],
   ['route', `open('farm'); layout('route')`],
   ['list', `open('farm'); layout('list')`],
@@ -33,6 +34,7 @@ const SCREENS = [
   ['skills', `open('farm'); tab('skills')`],
   ['paragon', `open('farm'); tab('paragon')`],
   ['guide', `open('farm'); tab('guide')`],
+  ['guide-end', `open('farm'); tab('guide'); scrollEnd()`],             // its foot
   ['compare', `open('farm'); tab('compare')`],
   ['builder', FIND],
   ['bd-skillpick', `${FIND}; clickHas('.bd-cls', 'Rogue')`],
@@ -55,6 +57,7 @@ const HELPERS = `(() => {
   window.tab = (t) => { const b = document.querySelector('#chips .ptab[data-tab="' + t + '"], .anchors [data-group="' + t + '"]'); if (b) b.click(); };
   window.clickSel = (s) => { const b = document.querySelector(s); if (b) b.click(); };
   window.clickHas = (s, t) => { const b = [...document.querySelectorAll(s)].find((x) => x.textContent.includes(t)); if (b) b.click(); };
+  window.scrollEnd = () => document.querySelectorAll('#main, #main *').forEach((e) => { if (e.scrollHeight > e.clientHeight + 4) e.scrollTop = e.scrollHeight; });
   window.clickText = (s, t) => { const b = [...document.querySelectorAll(s)].find((x) => x.textContent.trim() === t); if (b) b.click(); };
 })()`;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

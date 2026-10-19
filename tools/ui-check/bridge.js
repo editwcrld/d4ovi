@@ -16,7 +16,13 @@ const answers = {
   getActivities: () => [{ name: 'Season Journey', n: 'season journey', slug: 'sj', url: 'https://maxroll.gg/d4', desc: 'What the season asks of you.', sections: ['Part 1 – Start', 'Part 2 – Grind', 'Rewards'] }],
   getRunewords: () => [{ name: 'Enigma', icon: '', url: 'https://d4guides.gg', fields: [{ label: 'Recipe', value: 'Tal + Eth' }] }],
   getFarm: () => D.catalog,
-  getBuilds: () => D.builds,
+  // the active build with a source, as an imported one has – its link and the cheat sheet's foot show
+  getBuilds: () => {
+    const d = copy(D.builds);
+    const b = (d.builds || []).find((x) => x.id === d.active) || (d.builds || [])[0];
+    if (b && !b.source) b.source = { site: 'd4builds.gg', url: 'https://d4builds.gg/builds/preview', title: b.name };
+    return d;
+  },
   farmCss: () => D.css,
   farmTooltip: () => '<div style="padding:10px;background:#111;color:#ddd;width:300px">Tooltip</div>',
   // the search: the catalog's items by their first word, with a power and stats to show
@@ -28,7 +34,12 @@ const answers = {
     }));
   },
   icons: () => D.icons,
-  authStatus: () => ({ loggedIn: false }), lastBackup: () => 0, getVersion: () => '1.0.0', lastUpdate: () => null, guideSheet: () => null,
+  authStatus: () => ({ loggedIn: false }), lastBackup: () => 0, getVersion: () => '1.0.0', lastUpdate: () => null, guideSheet: (q) => {
+    const g = require('../../lib/guideinfo');
+    const s = (q && q.url && g.sheetFor(q.url)) || g.sheetsForSkill((q && q.cls) || '', (q && q.skill) || '')[0]
+      || g.sheetsForSkill('Rogue', 'Rain of Arrows')[0];        // any build: a sheet to look at
+    return s ? Object.assign({}, s, { own: true }) : null;
+  },
   buildTree: (cls) => (D.d2 ? D.d2db.treeFor(D.d2, cls) : { error: 'no d2core data' }),
   buildParagon: (keys) => (D.d2 ? D.d2db.paragonFor(D.d2, keys) : { error: 'no d2core data' }),
   builderCatalog: () => D.builder.catalog,

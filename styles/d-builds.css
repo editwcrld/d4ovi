@@ -19,6 +19,12 @@
 .prog .bar{width:96px;height:5px;background:#2a221d;position:relative;box-shadow:inset 0 0 0 1px #000}
 .prog .bar i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#8e1f1a,var(--red2))}
 .prog.done .bar i{background:linear-gradient(90deg,#4f7a35,var(--ok))}
+/* in the tab row: at its end, small */
+.ptabs:has(>.prog){flex:1 1 auto}
+.ptabs>.prog{margin-left:auto;align-self:center;padding-left:14px;gap:8px}
+.ptabs>.prog .num{font-size:15px}
+.ptabs>.prog .num small{font-size:11.5px}
+.ptabs>.prog .bar{width:72px;height:4px}
 /* the build menu: every build, this one's name and class, more */
 #head{position:relative}
 .bmenu{position:absolute;top:calc(100% - 4px);left:20px;z-index:20;width:min(320px,calc(100% - 40px));max-height:min(460px,72vh);overflow-y:auto;
@@ -170,8 +176,9 @@
 .treeplate .canvas{height:clamp(320px,58vh,640px)}
 .fskills .note-soft{padding:0 0 12px}
 .fview .canvas{flex:1;min-height:0;position:relative;background:radial-gradient(#1a1513,#0b0908 75%)}
-.fview svg{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
-.fview svg.drag{cursor:grabbing}
+/* the drawings – only they fill their box (an icon elsewhere on the page keeps its own size) */
+svg.tree,svg.para{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+svg.tree.drag,svg.para.drag{cursor:grabbing}
 .pz{position:absolute;right:12px;bottom:12px;display:flex;gap:4px;padding:4px;background:rgba(22,18,16,.95);border:1px solid var(--edge2);border-radius:20px}
 .pz .btn{width:30px;height:30px;padding:0;border-radius:15px;font-size:16px;border:0;background:none}
 .pz .btn:hover{background:var(--raise)}

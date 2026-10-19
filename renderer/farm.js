@@ -174,6 +174,8 @@ function render(main, c) {
     return;
   }
   const tb = toolbar(el, b);
+  const pr = progressBar(el, b);
+  if (pr) tb.appendChild(pr);
   if (ctx.tabs) ctx.tabs.appendChild(tb); else wrap.appendChild(tb);
   if (view === 'guide' && window.BuildGuide) {
     const box = el('div', 'fview');
@@ -271,8 +273,9 @@ function extraStops(b) {
 
 /**
  * The build's head: the kicker (class · site · how many builds), its name – a click opens the
- * menu – and on the right how far you are, the source and Import. In the overlay it is the page's
- * head (ctx.head), on the website the top of the farm list.
+ * menu – and on the right its source (green: open the guide) and Import, side by side. How far you
+ * are sits at the end of the tab row (progressBar). In the overlay it is the page's head (ctx.head),
+ * on the website the top of the farm list.
  */
 function header(el, b, wrap) {
   const host = ctx.head || wrap.appendChild(el('div', 'fhead'));
@@ -292,21 +295,8 @@ function header(el, b, wrap) {
   if (menuOpen) host.appendChild(buildMenu(el, b));            // hangs under the head (position: absolute)
 
   const right = el('div', 'tright');
-  const p = progress(b);
-  if (p.total) {
-    const pr = el('div', 'prog' + (p.got === p.total ? ' done' : ''));
-    pr.title = p.got + ' of ' + p.total + ' items and aspects farmed';
-    const n = el('span', 'num', String(p.got));
-    n.appendChild(el('small', null, ' / ' + p.total));
-    pr.appendChild(n);
-    const bar = el('span', 'bar');
-    const fill = el('i'); fill.style.width = Math.round(p.got / p.total * 100) + '%';
-    bar.appendChild(fill);
-    pr.appendChild(bar);
-    right.appendChild(pr);
-  }
   if (b.source && b.source.url) {
-    const go = UI.btn(b.source.site || 'Source', () => api.openBuildSource(b.source.url), 'ghost src', 'external');
+    const go = UI.btn(b.source.site || 'Source', () => api.openBuildSource(b.source.url), 'src', 'external');
     go.title = 'Open the original build in your browser' + (b.source.title ? '\n' + b.source.title : '');
     go.dataset.url = b.source.url;
     right.appendChild(go);
@@ -315,6 +305,22 @@ function header(el, b, wrap) {
   imb.title = 'Load a build from maxroll, d4builds, infinitybuilds or d2core – or a build code';
   right.appendChild(imb);
   host.appendChild(right);
+}
+
+/** How far you are: farmed of all, and a bar – at the end of the tab row. */
+function progressBar(el, b) {
+  const p = progress(b);
+  if (!p.total) return null;
+  const pr = el('div', 'prog' + (p.got === p.total ? ' done' : ''));
+  pr.title = p.got + ' of ' + p.total + ' items and aspects farmed';
+  const n = el('span', 'num', String(p.got));
+  n.appendChild(el('small', null, ' / ' + p.total));
+  pr.appendChild(n);
+  const bar = el('span', 'bar');
+  const fill = el('i'); fill.style.width = Math.round(p.got / p.total * 100) + '%';
+  bar.appendChild(fill);
+  pr.appendChild(bar);
+  return pr;
 }
 
 /** The build menu: every build to switch to, then what can be done with this one. */

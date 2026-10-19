@@ -246,8 +246,10 @@ overlay's process id and ends by itself if the overlay is gone.
 
 Type a name and you get the item with its icon, rarity, type, required level and power, plus
 which boss drops it and which recipes use it. The card shows what the item does as the game's
-tooltip does (power, effects, flavour); three small icons favourite it, copy its name or search it
+tooltip does (power and effects); three small icons favourite it, copy its name or search it
 on **diablo.trade** (the search field is filled in for you).
+The results sit above it as chips in two rows – what does not fit is counted on a last chip
+("+5 more"), which opens them all ("less" folds them again), so no result hides behind a scrollbar.
 The results are a list on the left — tile, name in its rarity colour, what it is and where it
 comes from (the boss, the loot pool) — and the picked one in full on the right, the first one
 until you pick another; ↑ ↓ walk the list. A narrow panel shows the list, then the picked one
@@ -290,9 +292,9 @@ itself — **Pin** is always your own click; pinned builds stay fully visible wh
 
 On top: the build (a click opens the build menu in three parts — *Builds* with how many there are,
 *This build* to name it and pick the class, *More* for *+ New farm list*, *Copy build code*,
-*Export all to file …*, duplicate, delete), the link to its source (opens the
-original page in your browser), how much of it is farmed, and *Import*. Below: **Cheat sheet · Gear ·
-Skills · Paragon · Compare**.
+*Export all to file …*, duplicate, delete); on the right its source as a green button (opens the
+original guide in your browser – the cheat sheet's foot has the same) and *Import*. Below: **Cheat sheet · Gear ·
+Skills · Paragon · Compare**, and at the end of that row how much of it is farmed.
 
 **Cheat sheet** — the build on one page, before the gear: the **breakpoints** the guide's author
 names as big numbers (300 Maximum Energy, ≤ 20 s cooldown, 23 ranks …), **Set up once** (the class
@@ -713,10 +715,11 @@ in German, to find it quickly.
 
 ## Tests
 
-The overlay's page is split by area – `renderer/app.js` (state, the bar, opening and closing,
-start-up), `timers.js`, `searchview.js`, `settingspage.js` – classic scripts sharing one scope,
+The overlay's page is split by area – `renderer/app.js` (state, opening and closing,
+start-up), `strip.js` (the bar's motions: sliding out, growing, folding away), `timers.js`, `searchview.js`, `settingspage.js` – classic scripts sharing one scope,
 loaded before `app.js`, which starts the page. Names are compared everywhere with `lib/text.js`.
-The main process keeps the window, hotkeys and data loading in `main.js`; what the pages ask for
+The main process keeps hotkeys and data loading in `main.js`; where the window goes and how big is
+`lib/windowplace.js` (played through in `test/windowplace-test.js`); what the pages ask for
 is served by area: `lib/searchipc.js` (search, pictures), `lib/buildsipc.js` (farm list, builds,
 builder – with `lib/builderipc.js`). Every request goes through `lib/netfetch.js`: no answer within
 15 s (offline, a firewall) and it fails – the page says which site did not answer – and that site is
@@ -727,7 +730,7 @@ every panel size down to a phone (393 × 850), every page, with the data from th
 folder (`D4DATA` for another one). Text spilling out of its box, out of the window or lying on
 other text is reported; the screenshots are in `tools/ui-check/out/`.
 
-`npm test` runs twenty-four files and prints one summary:
+`npm test` runs twenty-five files and prints one summary:
 
 | File | Covers |
 |---|---|
@@ -742,6 +745,7 @@ other text is reported; the screenshots are in `tools/ui-check/out/`.
 | `mapstore-test.js` | map progress: save, restore, never overwrite newer |
 | `d4guides-test.js` | database list parsing (name, icon, link, columns) |
 | `mythics-test.js` | iconic mythics: the list, the acquisition text, bad pages |
+| `windowplace-test.js` | the window's whole flow: start, open, close, sliding out at the right edge, dragging, the next start – each step one that once went wrong |
 | `place-test.js` | where the window goes: a place moves only by hand, what is shown stays on screen, sliding out at the right edge grows to the left |
 | `clicker-test.js` | macros: bindings, speed limits, key lists, off by default, what the helper is told |
 | `maxbuild-test.js` | maxroll import: links, guide page, planner variant → build, dual wield |

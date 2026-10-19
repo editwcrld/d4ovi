@@ -5,7 +5,7 @@
 (function () {
 'use strict';
 const mk = UI.el;
-const SITE = { maxroll: 'maxroll', d4builds: 'd4builds', infinitybuilds: 'infinitybuilds', d2core: 'd2core' };
+const SITE = { maxroll: 'maxroll.gg', d4builds: 'd4builds.gg', infinitybuilds: 'infinitybuilds.gg', d2core: 'd2core.com' };
 const sheets = new Map();          // key -> sheet | null (none) | 'wait'
 
 // ---- the author's words on hover – in the overlay's one card (renderer/ui.js) ----
@@ -147,7 +147,7 @@ function sheetPage(s, setup, charms, o) {
     const foot = mk('div', 'gd-foot');
     foot.appendChild(mk('span', null, 'From the author\'s notes' + (s.variant ? ' · ' + s.variant : '') + ' · hover a line for their own words'));
     if (s.url) {
-      const a = UI.btn('Open the guide on ' + (SITE[s.site] || s.site), null, '', 'external');
+      const a = UI.btn('Open on ' + (SITE[s.site] || s.site), null, 'src', 'external');   // as in the head
       a.onclick = () => o.api.openBuildSource(s.url);
       foot.appendChild(a);
     }

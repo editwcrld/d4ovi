@@ -377,7 +377,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   const opts = () => [...w.document.querySelectorAll('.popt')];
   const opt = (name) => opts().find((o) => o.querySelector('.ln').textContent === name);
   const menu = async () => { w.document.querySelector('.bname').click(); await sleep(20); return w.document.querySelector('.bmenu'); };
-  const progressText = () => (w.document.querySelector('#title .prog .num') || {}).textContent;
+  const progressText = () => (w.document.querySelector('#chips .ptabs .prog .num') || {}).textContent;
 
   // class filter (in the build menu) narrows what the slots offer
   choose('Weapon'); await sleep(30);
@@ -478,7 +478,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.strictEqual(w.document.querySelector('.bmenu .mhd .badge').textContent, '2', 'how many builds');
   w.document.body.click(); await sleep(20);
   assert.ok(!w.document.querySelector('.bmenu'), 'a click elsewhere closes the menu');
-  assert.ok(!w.document.querySelector('#title .prog') && !w.document.querySelector('.fgear .thing:not(.blank)'), 'new farm list starts empty');
+  assert.ok(!w.document.querySelector('#chips .ptabs .prog') && !w.document.querySelector('.fgear .thing:not(.blank)'), 'new farm list starts empty');
   (await menu()).querySelectorAll('.mrow')[0].click(); await sleep(30);
   assert.ok(slot('Weapon').textContent.includes('Orsivane'), 'switching back shows the first build');
   // import: one field – it knows the site from the link and loads the variants by itself

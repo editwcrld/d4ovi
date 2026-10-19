@@ -39,3 +39,18 @@ const net = {
   await assert.rejects(web.fetch('https://broken.test/'), /ERR_CONNECTION_REFUSED/, '… and is not held back');
   console.log('ok  a site that does not answer fails after a while, and is left alone for a minute');
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// nothing asks the internet past it: who takes Electron's net wraps it (main.js hands the wrapped one on)
+{
+  const fs = require('fs');
+  const path = require('path');
+  const root = path.join(__dirname, '..');
+  const files = ['main.js', ...fs.readdirSync(path.join(root, 'lib')).filter((f) => f.endsWith('.js')).map((f) => 'lib/' + f)];
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(root, f), 'utf8');
+    const m = src.match(/\{([^}]*)\}\s*=\s*require\('electron'\)/);
+    if (!m || !/\bnet\b/.test(m[1])) continue;
+    assert.ok(/\bnet:\s*electronNet\b/.test(m[1]) && /wrap\(electronNet\)/.test(src), f + ' takes Electron\'s net without lib/netfetch.js');
+  }
+  console.log('ok  every request goes through lib/netfetch.js');
+}
