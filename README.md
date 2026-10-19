@@ -47,8 +47,11 @@ page's head.
 
 Closed, the bar is a strip with the timers and lock only: drag handle · world boss · Helltide ·
 your own timer · (to farm) · (lock). The mouse over it slides the section icons, settings and quit
-out to the right (those switched on for it); leaving, they slide back in. Opening a section – by a
-click, a timer or a hotkey – the panel grows out of it. Open, the bar is the panel's spine.
+out to the right (those switched on for it) – at the right edge of the screen to the left, its
+right end staying put; leaving, they slide back in. Opening a section – by a click, a timer or a
+hotkey – the panel grows out of it; closing, it folds back into that corner and the strip fades in
+at its place. Open, the bar is the panel's spine. The strip and the panel each keep their place
+(dragged by hand); being kept on the screen for a moment never moves it.
 
 **Lock** shows its keys while it runs, as they are pressed ("1234"), in red and still – hover
 for which are held and which are timed. While it waits (map, chat, town portal, a left click) they
@@ -713,13 +716,18 @@ in German, to find it quickly.
 The overlay's page is split by area – `renderer/app.js` (state, the bar, opening and closing,
 start-up), `timers.js`, `searchview.js`, `settingspage.js` – classic scripts sharing one scope,
 loaded before `app.js`, which starts the page. Names are compared everywhere with `lib/text.js`.
+The main process keeps the window, hotkeys and data loading in `main.js`; what the pages ask for
+is served by area: `lib/searchipc.js` (search, pictures), `lib/buildsipc.js` (farm list, builds,
+builder – with `lib/builderipc.js`). Every request goes through `lib/netfetch.js`: no answer within
+15 s (offline, a firewall) and it fails – the page says which site did not answer – and that site is
+not asked again for a minute.
 
 **Layout check** (`npm run ui-check [size] [page]`): the real renderer in an offscreen window at
 every panel size down to a phone (393 × 850), every page, with the data from the app's own data
 folder (`D4DATA` for another one). Text spilling out of its box, out of the window or lying on
 other text is reported; the screenshots are in `tools/ui-check/out/`.
 
-`npm test` runs twenty-two files and prints one summary:
+`npm test` runs twenty-four files and prints one summary:
 
 | File | Covers |
 |---|---|
@@ -734,7 +742,7 @@ other text is reported; the screenshots are in `tools/ui-check/out/`.
 | `mapstore-test.js` | map progress: save, restore, never overwrite newer |
 | `d4guides-test.js` | database list parsing (name, icon, link, columns) |
 | `mythics-test.js` | iconic mythics: the list, the acquisition text, bad pages |
-| `place-test.js` | where the bar lands: the strip never drifts, places stay on screen, sliding out at the right edge grows to the left |
+| `place-test.js` | where the window goes: a place moves only by hand, what is shown stays on screen, sliding out at the right edge grows to the left |
 | `clicker-test.js` | macros: bindings, speed limits, key lists, off by default, what the helper is told |
 | `maxbuild-test.js` | maxroll import: links, guide page, planner variant → build, dual wield |
 | `infinitybuilds-test.js` | infinitybuilds import: links and variants, English names, stat values like the site's tooltips, command skills, paragon, charms |
@@ -744,6 +752,8 @@ other text is reported; the screenshots are in `tools/ui-check/out/`.
 | `compare-test.js` | comparing two builds: partner variant, gear, skills, charms, paragon, what is left to farm |
 | `renderer-smoke.js` | the whole UI in jsdom: every section (incl. farm list, builds, compare, builder), settings and macros, the plates and lines in each view, strip and spine, panel sizes, hotkeys, Esc, idle fade |
 | `icons-test.js` | a picture for every thing by name: catalog, game data, d2core, aspects by category, trophies, sets; the page keys names as `lib/text.js` does |
+| `netfetch-test.js` | a site that does not answer fails after 15 s instead of hanging, and is left alone for a minute |
+| `ipc-test.js` | every channel `preload.js` uses is served by main.js or a `lib/*ipc.js`, nothing extra; only build sites open |
 | `css-test.js` | renderer/style.css is what `styles/` makes (`npm run css`) |
 
 If something misbehaves at runtime, `overlay-log.txt` in the data folder records cookie changes,

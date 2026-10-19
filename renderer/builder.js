@@ -114,6 +114,7 @@ function adoptProven(key, pr) {
   const plan = PLANS[key], st = STATE[key];
   if (pr && !pr.error) {
     plan.proven = pr.proven; plan.consensus = pr.consensus;
+    plan.unreachable = pr.unreachable || [];
     for (const c of plan.engine.cands) c.used = pr.usage[c.name] || 0;
     seedFromConsensus(plan, st);
     if (S.key === key && S.src === 'own' && !S.touched && pr.proven.length) S.src = 0;
@@ -300,7 +301,7 @@ function stepSkill(body) {
     if (s.guides) b.appendChild(E('span', 'gcount', s.guides + (s.guides === 1 ? ' guide' : ' guides')));
     if (s.tier) b.appendChild(E('span', 'tier ' + s.tier, s.tier));
     hover(b, s.name, (s.el ? s.el + ' · ' : '') + s.desc);
-    b.onclick = () => { untip(); S.touched = false; go({ step: 'plan', key: s.key, view: 'build', src: 'own', slot: null, skill: null, q: '' }); if (!PLANS[s.key] || PLANS[s.key].error) loadPlan(s.key); };
+    b.onclick = () => { untip(); S.touched = false; go({ step: 'plan', key: s.key, view: 'build', src: 'own', slot: null, skill: null, q: '' }); if (!PLANS[s.key] || PLANS[s.key].error || (PLANS[s.key].unreachable || []).length) loadPlan(s.key); };
     return b;
   };
   const section = (title, list) => {
@@ -622,7 +623,10 @@ function ownView(body, p, st) {
     b.onclick = () => { st.forced = {}; st.seeded = false; seedFromConsensus(p, st); rerender(); };
     start.appendChild(b);
   } else {
-    start.appendChild(E('span', null, p.provenLoaded ? 'No proven builds for this skill – the model\'s pick (experimental). Change anything; every option says what it adds.' : 'Looking for proven builds … until then the model\'s pick.'));
+    // the sites could not be asked (offline, a firewall): said so – "no proven builds" would be wrong
+    const off = p.provenLoaded && (p.unreachable || []).length;
+    start.appendChild(E('span', null, off ? p.unreachable.join(', ') + ' did not answer (offline or a firewall?) – the model\'s pick for now (experimental). Open the skill again to ask once more.'
+      : p.provenLoaded ? 'No proven builds for this skill – the model\'s pick (experimental). Change anything; every option says what it adds.' : 'Looking for proven builds … until then the model\'s pick.'));
   }
   body.appendChild(start);
 

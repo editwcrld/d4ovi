@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, globalShortcut, ipcMain, screen, dialog, shell, clipboard, net } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, screen, dialog, shell, clipboard, net: electronNet } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { startWatcher } = require('./lib/winwatch');
@@ -16,13 +16,11 @@ const mapstore = require('./lib/mapstore');
 const farm = require('./lib/farm');
 const builds = require('./lib/builds');
 const maxbuild = require('./lib/maxbuild');
-const buildimport = require('./lib/buildimport');
-const guideinfo = require('./lib/guideinfo');
 const zhdict = require('./lib/zhdict');
 const d2db = require('./lib/d2coredb');
-const icons = require('./lib/icons');
 const builder = require('./lib/builder');
-const builderipc = require('./lib/builderipc');
+const searchipc = require('./lib/searchipc');
+const buildsipc = require('./lib/buildsipc');
 const place = require('./lib/place');
 const clicker = require('./lib/clicker');
 const features = require('./lib/features');
@@ -30,6 +28,8 @@ const Settings = require('./lib/settings');
 const tray = require('./lib/tray');
 const updates = require('./lib/updates');
 const backup = require('./lib/backup');
+// every request of every module: a site that does not answer fails after a while (lib/netfetch.js)
+const net = require('./lib/netfetch').wrap(electronNet);
 const VERSION = require('./package.json').version;   // app.getVersion() is Electron's when started from elsewhere
 // what this build has: MACROS leaves out the whole tab, the others each macro on its own
 const MACROS = {
@@ -37,7 +37,6 @@ const MACROS = {
   lock: !!(features.MACROS && features.LOCK),
 };
 MACROS.any = MACROS.clickSpam || MACROS.lock;
-const S = require('./renderer/search');          // same search logic the overlay uses
 const userscript = require('./lib/userscript');
 
 // ---------- where data lives ----------
@@ -94,17 +93,19 @@ let stopWatcher = null;
 let hideTicks = 0;
 let loot = { sections: [], fetchedAt: 0 };
 let craft = { tables: [], fetchedAt: 0 };
-// Layout: position of the bar itself plus the direction things open in
+// The place of the state shown (barX, barY) – where it was put, changed only by a drag by hand –
+// and where the window is shown (placedAt): the place kept on the screen (lib/place.js)
 let barX = 0, barY = 0, curH = BAR_HEIGHT, curW = BAR_WIDTH;
 let strip = { w: BAR_WIDTH, h: BAR_HEIGHT };   // the closed bar's last reported size (CSS pixels)
 let capturing = false;                   // a hotkey is being recorded in the settings
 let isIdle = false;                      // the overlay reported "nothing open" – the bar is a strip
-// the strip's place before its sections slid out (hold): sliding out at a screen edge pushes the
-// window back onto the screen – folding in, it goes back exactly here
+// the strip slid out (hold): where it was shown and how wide before – it grows from there, and at the
+// right edge to the left, its right end staying put
 let peekHome = null;
+let shownOpen = null;                    // what the window shows: the panel (true) or the strip (false)
+let placedAt = { x: NaN, y: NaN };       // where the window is shown (set by us – not a move by hand)
 let centreIdle = true;                   // no place dragged for the pill yet -> keep it centred
 let hiddenByHand = false;               // hidden from the tray – stays hidden until shown there again
-let placeLock = 0;                       // size reports that must not move the bar (just placed)
 
 const userFile = (n) => path.join(app.getPath('userData'), n);
 const send = (ch, payload) => { if (overlay && !overlay.isDestroyed()) overlay.webContents.send(ch, payload); };
@@ -211,18 +212,27 @@ function placeFor(idle) {
   const p = idle ? settings.posIdle : settings.posOpen;
   return onScreen(p) ? { x: p.x, y: p.y } : defaultPlace(idle);
 }
+/** Folding in (or opening) from slid out: back to the strip's own place. */
+function endPeek() {
+  if (!peekHome) return;
+  curW = peekHome.w;
+  peekHome = null;
+}
 function rememberPlace() {
-  const p = peekHome ? { x: peekHome.x, y: peekHome.y } : { x: barX, y: barY };   // slid out: its own place
+  // the window shows the other state's look (at start-up: the strip, while the state is still
+  // "open" until the page says otherwise) – where it is now is no place of this state
+  if (shownOpen === null || shownOpen === isIdle) return;
+  const p = { x: barX, y: barY };
   if (isIdle) settings.posIdle = p; else settings.posOpen = p;
 }
 
 /** Switches between the two states and moves the window to that state's place. */
 function setIdleState(on) {
   if (on === isIdle || !overlay || overlay.isDestroyed()) return;
+  endPeek();                             // opened from slid out: the strip's place is its own
   rememberPlace();                       // keep the place of the state we are leaving
   isIdle = on;
   checkCentre();
-  placeLock = 3;                         // the next size reports keep this place
   const p = placeFor(on);
   barX = p.x; barY = p.y;
   dlog(on ? 'Closed: the strip' : 'Open: the panel', '→', barX + ',' + barY);
@@ -238,38 +248,47 @@ function panelBox(z, wa) {
   return { w: Math.min(Math.round(w * z), wa.width), h: Math.min(Math.round(h * z), wa.height), manual: !!m };
 }
 
-// Closed, the window is just the bar – a strip, where it was put (a strip never put anywhere stays
-// centred while its width changes – but not while its sections slide out under the mouse, hold).
-// Open, it is the panel at the open place. Either way it is kept on the screen and the place
-// follows that.
+/** The strip's width in screen pixels for a width reported by the page (CSS pixels). */
+const stripWidth = (cssW, z, wa) => Math.max(44, Math.min(Math.round(cssW * z), wa.width));
+/** Where the strip is shown slid out to width w: from where it is shown now (lib/place.js slideOut). */
+function slidX(w, wa) {
+  return place.slideOut(peekHome || { x: placedAt.x, w: curW }, w, wa);
+}
+
+// Closed, the window is the strip at its place (a strip never put anywhere stays centred while its
+// width changes); sliding out under the mouse (hold) it grows from where it is shown. Open, it is
+// the panel at the open place. Only what is shown is kept on the screen – the place stays.
 function applySize(barW, barH, open, hold) {
   if (!overlay || overlay.isDestroyed()) return;
   const wa = screen.getDisplayMatching({ x: barX, y: barY, width: curW, height: curH }).workArea;
   const z = applyZoom();
-  let w, h, manual = false;
-  if (peekHome && !hold) {
-    barX = peekHome.x; barY = peekHome.y; curW = peekHome.w;
-    peekHome = null;
-  }
+  let w, h, x, manual = false;
+  if (!hold) endPeek();
   if (open) {
     const p = panelBox(z, wa);
     w = p.w; h = p.h; manual = p.manual;
+    x = barX;
   } else {
     strip = { w: barW, h: barH };
-    w = Math.max(44, Math.min(Math.round(barW * z), wa.width));
+    w = stripWidth(barW, z, wa);
     h = Math.max(36, Math.min(Math.round(barH * z), wa.height));
-    if (hold && !peekHome) peekHome = { x: barX, y: barY, w: curW };
-    if (hold) barX = place.slideOut(peekHome, w, wa);
-    else barX = place.barLeft({ barX, bw: w, prevBw: curW, wa, idle: true, centre: centreIdle, fixed: placeLock > 0 });
+    if (hold) {
+      if (!peekHome) peekHome = { x: placedAt.x, w: curW };
+      x = slidX(w, wa);
+    } else {
+      if (centreIdle) barX = place.centred(w, wa);
+      x = barX;
+    }
   }
-  barX = Math.max(wa.x, Math.min(barX, wa.x + wa.width - w));
-  barY = Math.max(wa.y, Math.min(barY, wa.y + wa.height - h));
-  if (placeLock > 0) placeLock--;
-  overlay.setBounds({ x: barX, y: barY, width: w, height: h });
+  const at = place.shown({ x, y: barY }, w, h, wa);
+  // noted before the move: Windows may tell it as 'moved' while setBounds is still running
+  placedAt = at;
+  overlay.setBounds({ x: at.x, y: at.y, width: w, height: h });
+  shownOpen = !!open;
   curW = w; curH = h;
   rememberPlace();
   // grown to the left (slid out at the right edge): the strip sits at the window's right side
-  send('layout', { manual, toLeft: !!peekHome && barX < peekHome.x });
+  send('layout', { manual, toLeft: !!peekHome && at.x < peekHome.x });
 }
 
 function createOverlay() {
@@ -286,8 +305,15 @@ function createOverlay() {
   overlay.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   overlay.on('moved', () => {
     const [x, y] = overlay.getPosition();
-    barX = x; barY = y;
-    peekHome = null;                      // moved while slid out: this is its place now
+    // Windows tells our own setBounds as a move too – only a drag by hand is a new place
+    if (Math.abs(x - placedAt.x) <= 2 && Math.abs(y - placedAt.y) <= 2) return;   // (scaled screens round)
+    dlog('Moved by hand to', x + ',' + y, peekHome ? '(while slid out)' : '');
+    if (peekHome) {
+      // dragged while slid out: the place moves along – folding in, it lands where it was dragged
+      const dx = x - placedAt.x, dy = y - placedAt.y;
+      barX += dx; barY += dy; peekHome.x += dx;
+    } else { barX = x; barY = y; }
+    placedAt = { x, y };
     rememberPlace();
     if (isIdle) centreIdle = false;       // dragged by hand -> keep exactly this spot
     saveSettingsFile();
@@ -456,79 +482,8 @@ ipcMain.handle('activities:get', () => acts.all());
 ipcMain.handle('runewords:get', () => d4g.byLabel('Runeword'));
 ipcMain.handle('data:refresh', () => refreshAll(true));
 
-// Every picture by name (lib/icons.js) – built again only when one of its sources changed
-let iconMap = { key: '', map: {} };
-function iconsNow() {
-  const d2 = d2db.cached();
-  const cat = farm.catalog(loot, craft);
-  const key = [items.count(), items.age(), d4g.count(), d4g.age(), cat.items.length, cat.aspects.length, d2 ? d2.fetchedAt : 0].join('|');
-  if (iconMap.key !== key) {
-    iconMap = { key, map: icons.build({ catalog: cat.items, aspects: cat.aspects, guides: d4g.all(), items: items.all(), d2: (d2 && d2.icons) || {}, glyphs: items.glyphIcons() }) };
-  }
-  return iconMap.map;
-}
-ipcMain.handle('icons:get', () => iconsNow());
-
-// Search across both sources: maxroll supplies power/level/description (local, instant),
-// d4guides supplies icon, rarity, category and the detail page.
-ipcMain.handle('items:search', async (_e, q) => {
-  const { term, kinds } = S.parseQuery(String(q || ''));
-  const out = [], seen = new Set();
-  const hayOf = (e) => [e.type, e.rarity, e.cat, e.catLabel, e.url, e.set].filter(Boolean).join(' ');
-  const useful = (fields, hasPower) => (fields || []).filter((x) =>
-    !/rarity/i.test(x.label) && !/^([-–—]|n\/a)$/i.test(x.value.trim()) && !(hasPower && /effect/i.test(x.label)));
-  const pickRarity = (g) => { const f = (g.fields || []).find((x) => /rarity/i.test(x.label)); return f ? f.value : ''; };
-
-  // One entry for the overlay: game data + d4guides extras + (for mythics) how to obtain it.
-  const decorate = (it, g) => {
-    const e = Object.assign({}, it, g ? {
-      icon: g.icon || it.icon, url: g.url,
-      fields: useful(g.fields, !!it.power),
-      rarity: it.rarity || g.rarity || pickRarity(g),
-    } : {});
-    const my = mythics.info(e.name, e.rarity);
-    if (my) Object.assign(e, { rarity: my.label, obtain: my.obtain, obtainNote: my.note, iconic: my.iconic });
-    return e;
-  };
-
-  if (!S.showItems(kinds)) return [];
-
-  // "iconic" (or "iconic mythic") without a name: the complete list from maxroll's equipment page
-  if (!term && kinds.indexOf('iconic') >= 0) {
-    const rest = kinds.filter((k) => k !== 'iconic' && k !== 'mythic' && k !== 'unique' && k !== 'item');
-    for (const name of mythics.names()) {
-      const e = decorate(items.get(name) || { name, type: '', rarity: 'Mythic Unique', level: 0, power: '', effects: [], desc: '', set: '' }, d4g.get(name));
-      if (S.matchesKinds(hayOf(e), rest)) out.push(e);
-    }
-    return out;
-  }
-
-  const guides = await d4g.searchLive(net, term, 'en').catch(() => []);
-  const gByName = new Map(guides.map((g) => [g.n, g]));
-
-  for (const it of items.search(term, 25)) {
-    const key = items.norm(it.name);
-    const e = decorate(it, gByName.get(key) || d4g.get(it.name));
-    if (!S.matchesKinds(hayOf(e), kinds)) continue;
-    seen.add(key);
-    out.push(e);
-  }
-  for (const g of guides) {
-    if (seen.has(g.n)) continue;
-    const e = decorate({
-      name: g.name, type: g.catLabel, rarity: g.rarity || pickRarity(g),
-      level: 0, power: '', effects: [], desc: '', set: '',
-    }, g);
-    if (!S.matchesKinds(hayOf(e), kinds)) continue;
-    seen.add(g.n);
-    out.push(e);
-  }
-  // Exact name first, across both sources
-  const qn = items.norm(term);
-  const rank = (e) => { const n = items.norm(e.name); return n === qn ? 0 : n.startsWith(qn) ? 1 : 2; };
-  out.sort((a, b) => rank(a) - rank(b));
-  return out.slice(0, 25);   // the overlay shows everything, no "N more"
-});
+// the search and the pictures by name – lib/searchipc.js
+searchipc.register(ipcMain, { net, catalog: () => farm.catalog(loot, craft) });
 
 ipcMain.handle('trade:open', async (_e, name) => {
   try { return await trade.openTrade(String(name || ''), settings); }
@@ -551,76 +506,23 @@ ipcMain.on('clipboard:write', (_e, t) => clipboard.writeText(String(t || '')));
 ipcMain.on('data:open-dir', () => shell.openPath(app.getPath('userData')));
 ipcMain.handle('map:restore', () => views.withMap((wc) => mapstore.restore(wc, true)));
 
-// ---------- farm list & builds ----------
-ipcMain.handle('farm:get', () => farm.catalog(loot, craft));
-ipcMain.handle('farm:tooltip', (_e, type, id) => farm.tooltip(net, String(type || ''), String(id || '')));
-ipcMain.handle('farm:css', () => farm.tooltipCss());
-ipcMain.handle('builds:get', () => builds.load());
-// the game data the builder keeps: names of class mechanics and mercenaries, the uniques' own affixes
-const builderData = () => builder.current() || builder.load(net, () => d2db.currentBuild(net), dlog);
-// A build link (maxroll guide / planner, d4builds.gg, infinitybuilds.gg, d2core.com) -> its variants, ready to be added as builds
-ipcMain.handle('builds:link', async (_e, url) => {
-  try { return await buildimport.load(net, String(url || ''), farm.catalog(loot, craft), dlog, builderData); }
-  catch (e) { dlog('build import failed:', e.message); return { error: e.message }; }
-});
-ipcMain.handle('builds:save', (_e, d) => builds.save(d));
-// What the guide's authors say about a build – breakpoints, rotation, why it works (lib/guideinfo.js):
-// its own guide by its link, else the guides of its main skill
-ipcMain.handle('builds:sheet', (_e, q) => {
-  const o = q || {};
-  const own = o.url ? guideinfo.sheetFor(String(o.url)) : null;
-  if (own) return Object.assign(own, { own: true });
-  const other = guideinfo.sheetsForSkill(String(o.cls || ''), String(o.skill || ''))[0];
-  return other ? Object.assign(other, { own: false }) : null;
-});
-// Skill tree and paragon boards for the build views – d2core's database, fetched on first use
-ipcMain.handle('builds:tree', async (_e, cls) => {
-  try { return d2db.treeFor(await d2db.load(net, dlog), String(cls || '')); } catch (e) { return { error: e.message }; }
-});
-ipcMain.handle('builds:paragon', async (_e, keys) => {
-  try { return d2db.paragonFor(await d2db.load(net, dlog), Array.isArray(keys) ? keys.map(String).slice(0, 14) : []); }
-  catch (e) { return { error: e.message }; }
-});
-// The build's page on its site, in the default browser – only the build sites
-ipcMain.handle('builds:open-source', (_e, url) => {
-  const u = String(url || '');
-  if (!/^https:\/\/(www\.)?(maxroll\.gg|d4builds\.gg|infinitybuilds\.gg|d2core\.com)\//i.test(u)) return false;
-  shell.openExternal(u);
-  return true;
-});
-ipcMain.handle('builds:code', (_e, b) => { const c = builds.toCode(b); clipboard.writeText(c); return c; });
-// Text (a build code or JSON) -> builds added to the saved ones
-function importBuilds(text) {
-  const got = builds.parseImport(text);
-  return { added: got.length, data: got.length ? builds.save(builds.merge(builds.load(), got)) : builds.load() };
-}
-ipcMain.handle('builds:import-text', (_e, text) => importBuilds(text));
-
-// ---------- builder: pick a class and a skill, get a build – lib/builder.js, lib/builderipc.js ----------
-const builderApi = builderipc.create({ net, log: (...a) => dlog(...a), catalog: () => farm.catalog(loot, craft), importBuilds });
-ipcMain.handle('builder:catalog', () => builderApi.catalog());
-ipcMain.handle('builder:plan', (_e, cls, key, opts) => builderApi.plan(String(cls || ''), String(key || ''), opts || {}));
-ipcMain.handle('builder:proven', (_e, cls, key) => builderApi.proven(String(cls || ''), String(key || '')));
-ipcMain.handle('builder:save', (_e, cls, key, picks) => builderApi.save(String(cls || ''), String(key || ''), picks || {}));
-ipcMain.handle('builder:preview', (_e, cls, key, picks) => builderApi.preview(String(cls || ''), String(key || ''), picks || {}));
-ipcMain.handle('builds:export', async () => {
-  const r = await withDialog(() => dialog.showSaveDialog(overlay, {
-    defaultPath: path.join(app.getPath('documents'), 'd4-builds.json'),
-    filters: [{ name: 'Builds', extensions: ['json'] }],
-  }));
-  if (r.canceled || !r.filePath) return null;
-  fs.writeFileSync(r.filePath, JSON.stringify(builds.load(), null, 1));
-  return r.filePath;
-});
-ipcMain.handle('builds:import-file', async () => {
-  const r = await withDialog(() => dialog.showOpenDialog(overlay, { properties: ['openFile'], filters: [{ name: 'Builds', extensions: ['json', 'txt'] }] }));
-  if (r.canceled || !r.filePaths[0]) return null;
-  let text = '';
-  try { text = fs.readFileSync(r.filePaths[0], 'utf8'); } catch (_) { /* unreadable: nothing added */ }
-  return importBuilds(text);
+// ---------- farm list, builds, builder – lib/buildsipc.js ----------
+buildsipc.register(ipcMain, {
+  net, log: (...a) => dlog(...a), catalog: () => farm.catalog(loot, craft), clipboard, shell,
+  saveDialog: (o) => withDialog(() => dialog.showSaveDialog(overlay, o)),
+  openDialog: (o) => withDialog(() => dialog.showOpenDialog(overlay, o)),
+  documents: () => app.getPath('documents'),
 });
 
 ipcMain.on('overlay:resize', (_e, barW, h, open, hold) => applySize(barW, h, !!open, !!hold));
+// which way the strip will grow sliding out to this width (CSS px) – asked before, so the page can
+// set itself to the window's right side first and hide the move (renderer/app.js peek)
+ipcMain.handle('overlay:slide-plan', (_e, cssW) => {
+  if (!overlay || overlay.isDestroyed()) return { toLeft: false };
+  const wa = screen.getDisplayMatching({ x: placedAt.x, y: placedAt.y, width: curW, height: curH }).workArea;
+  const x = slidX(stripWidth(Number(cssW) || 0, curZoom || 1, wa), wa);
+  return { toLeft: x < (peekHome ? peekHome.x : placedAt.x) };
+});
 ipcMain.on('overlay:idle', (_e, on) => setIdleState(!!on));
 ipcMain.on('overlay:panel-size', (_e, size) => {
   if (!size || !size.w) { settings.panelSize = null; }

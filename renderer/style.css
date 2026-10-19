@@ -167,10 +167,19 @@ input.clock.bad{border-color:var(--red);color:var(--red-fg)}
 #app{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:flex-start}
 /* slid out at the right edge of the screen: the window grew to the left – the strip keeps its right end */
 #app.toleft:not(.open){justify-content:flex-end}
+/* … and while the window moves for it, the strip is faded (renderer/app.js peek) */
+#app:not(.open) #rail{transition:opacity .18s ease-out}
+#app.shift:not(.open) #rail{opacity:0;transition:opacity .09s ease-in}
 #shell{display:flex;align-items:stretch;max-width:100%;max-height:100%}
 #app.open #shell{width:100%;height:100%;background:var(--bg);border:1px solid var(--edge);border-radius:var(--r);overflow:hidden;
   box-shadow:inset 0 0 0 1px #000,inset 0 1px 0 rgba(255,255,255,.03)}
 #app.open.grow #shell{animation:grow .3s cubic-bezier(.2,.8,.2,1)}
+/* closing: it folds back into that corner – then the page hides while the window becomes the strip,
+   which fades in at its place (renderer/app.js closeAll) */
+#app.open.fold #shell{animation:fold .2s cubic-bezier(.5,0,.75,0) forwards}
+@keyframes fold{from{clip-path:inset(0 0 0 0 round .267rem);opacity:1}to{clip-path:inset(0 72% 90% 0 round .4rem);opacity:0}}
+#app{transition:opacity .2s ease-out}
+#app.swap{opacity:0;transition:none}
 @keyframes grow{from{clip-path:inset(0 72% 90% 0 round .4rem);opacity:.35}to{clip-path:inset(0 0 0 0 round .267rem);opacity:1}}
 #app.open #shell::before{content:'';position:absolute;inset:.267rem;border:1px solid rgba(217,180,106,.08);pointer-events:none;border-radius:2px;z-index:0}
 

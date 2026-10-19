@@ -1,71 +1,43 @@
-// Where the bar lands when it shrinks to the pill and grows back.
-// The bug this guards against: every idle -> awake -> idle round moved the pill half the
-// width difference to the left, until it sat at the screen edge.
+// Where the window goes (lib/place.js). The bugs this guards against: the strip walking across the
+// screen – every round of a wider strip (the sections sliding, the bar right after the panel closed)
+// at the right edge pushed it left for good – and sliding out at the right edge not keeping its
+// right end.
 const assert = require('assert');
 const place = require('../lib/place');
 
 const wa = { x: 0, y: 0, width: 2560, height: 1392 };
-const RAIL = 62;        // 48 css px at the usual zoom
-const PILL = 308;       // 239 css px – timer, magnifier, diablo.trade, quit
+const STRIP = 392, WIDE = 547, H = 46;
 
-// Replays what the main process does: switching state sets the place from the settings
-// (fixed), then the overlay reports its real size once or twice.
-function round(start, opts) {
-  let x = start, prev = opts.fromWidth;
-  // 1. state switch: place comes from the settings, size not reported yet
-  x = place.barLeft({ barX: x, bw: prev, prevBw: prev, wa, idle: opts.idle, centre: opts.centre, fixed: true });
-  // 2. + 3. the two size reports of the renderer
-  for (const w of [opts.toWidth, opts.toWidth]) {
-    x = place.barLeft({ barX: x, bw: w, prevBw: prev, wa, idle: opts.idle, centre: opts.centre, fixed: true });
-    prev = w;
-  }
-  // 4. later reports (window size setting, labels …) are not frozen any more
-  x = place.barLeft({ barX: x, bw: prev, prevBw: prev, wa, idle: opts.idle, centre: opts.centre, fixed: false });
-  return x;
-}
-
-// --- a pill that was dragged to 900 stays at 900, round after round
-let idleX = 900;
+// --- the place is never moved by what is shown: a strip at the right edge, wider for a moment
+// after the panel closed, then back to its width – round after round
+const home = { x: 2137, y: 341 };
 const seen = [];
 for (let i = 0; i < 5; i++) {
-  idleX = round(idleX, { idle: true, centre: false, fromWidth: RAIL, toWidth: PILL });
-  seen.push(idleX);
-  // awake again: the open bar has its own place, the pill's is kept
-  round(24, { idle: false, centre: false, fromWidth: PILL, toWidth: RAIL });
+  const wide = place.shown(home, WIDE, H, wa);
+  assert.strictEqual(wide.x, 2560 - WIDE, 'wider for a moment: shown on the screen');
+  seen.push(place.shown(home, STRIP, H, wa).x);
 }
-assert.deepStrictEqual(seen, [900, 900, 900, 900, 900], 'the dragged pill never moves: ' + seen.join(', '));
-// the core of the old bug: a width change alone must not move the pill, frozen or not
-assert.strictEqual(place.barLeft({ barX: 900, bw: PILL, prevBw: RAIL, wa, idle: true, centre: false, fixed: false }),
-  900, 'growing from rail to pill does not shift the pill');
-console.log('ok  dragged pill stays put over 5 rounds (' + seen.join(', ') + ')');
+assert.deepStrictEqual(seen, [2137, 2137, 2137, 2137, 2137], 'back where it was put, every time: ' + seen.join(', '));
+console.log('ok  the strip stays where it was put (' + seen.join(', ') + ')');
 
-// --- a pill that was never dragged stays centred, whatever width it has
-const centred = round(0, { idle: true, centre: true, fromWidth: RAIL, toWidth: PILL });
-assert.strictEqual(centred, Math.round((2560 - PILL) / 2), 'centred on the work area');
-assert.strictEqual(round(centred, { idle: true, centre: true, fromWidth: PILL, toWidth: PILL + 40 }),
-  Math.round((2560 - PILL - 40) / 2), 'stays centred when the timer gets longer');
-console.log('ok  undragged pill stays centred');
+// --- shown on the screen, on every side
+assert.deepStrictEqual(place.shown({ x: 2500, y: 20 }, STRIP, H, wa), { x: 2560 - STRIP, y: 20 }, 'right edge');
+assert.deepStrictEqual(place.shown({ x: -80, y: 20 }, STRIP, H, wa), { x: 0, y: 20 }, 'left edge');
+assert.deepStrictEqual(place.shown({ x: 100, y: 1380 }, STRIP, H, wa), { x: 100, y: 1392 - H }, 'bottom');
+assert.deepStrictEqual(place.shown({ x: 100, y: -30 }, STRIP, H, wa), { x: 100, y: 0 }, 'top');
+console.log('ok  shown on the work area');
 
-// --- the open horizontal bar still grows around its centre
-const grown = place.barLeft({ barX: 1000, bw: 600, prevBw: 400, wa, idle: false, centre: false, fixed: false });
-assert.strictEqual(grown, 900, 'half of the growth to the left');
-const shrunk = place.barLeft({ barX: 900, bw: 400, prevBw: 600, wa, idle: false, centre: false, fixed: false });
-assert.strictEqual(shrunk, 1000, 'and back on the way down');
-console.log('ok  open bar still grows around its centre');
-
-// --- nothing ever leaves the screen
-assert.strictEqual(place.barLeft({ barX: 2500, bw: PILL, prevBw: PILL, wa, idle: true, centre: false, fixed: false }),
-  2560 - PILL, 'clamped at the right edge');
-assert.strictEqual(place.barLeft({ barX: -80, bw: PILL, prevBw: PILL, wa, idle: true, centre: false, fixed: false }),
-  0, 'clamped at the left edge');
-console.log('ok  clamped to the work area');
+// --- a strip never put anywhere: centred, whatever width it has
+assert.strictEqual(place.centred(STRIP, wa), Math.round((2560 - STRIP) / 2));
+assert.strictEqual(place.centred(STRIP + 40, wa), Math.round((2560 - STRIP - 40) / 2), 'stays centred when the timer gets longer');
+console.log('ok  an undragged strip stays centred');
 
 // --- sliding out under the mouse: to the right – at the right edge to the left, its right end kept
 assert.strictEqual(place.slideOut({ x: 1000, w: 300 }, 700, wa), 1000, 'room on the right: it grows to the right');
 assert.strictEqual(place.slideOut({ x: 2200, w: 300 }, 700, wa), 1800, 'at the right edge: to the left, right end at 2500 as before');
 assert.strictEqual(place.slideOut({ x: 2260, w: 300 }, 700, wa), 1860, 'touching the edge: the same');
 assert.strictEqual(place.slideOut({ x: 0, w: 300 }, 700, wa), 0, 'at the left edge: to the right');
-assert.strictEqual(place.slideOut({ x: 100, w: 300 }, 3000, wa), 0, 'wider than the screen: clamped');
+assert.strictEqual(place.slideOut({ x: 100, w: 300 }, 3000, wa), 0, 'wider than the screen: on it');
 console.log('ok  sliding out keeps the right end at the right edge');
 
 // --- a place on a second screen counts as valid, a leftover from a removed one does not

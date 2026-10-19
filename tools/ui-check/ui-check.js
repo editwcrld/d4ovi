@@ -18,6 +18,7 @@ const FIND = `open('farm'); clickText('.kick button', 'Find a build')`;
 const PLAN = `${FIND}; clickHas('.bd-cls', 'Rogue'); clickHas('.bd-sk', 'Rain of Arrows')`;
 const SCREENS = [
   ['strip', 'closed'],
+  ['strip-left', 'closed-left'],                 // slid out at the right screen edge: grown to the left
   ['search-empty', `open('search')`],
   ['search-item', `open('search'); typeQ('harlequin')`],
   ['search-boss', `open('search'); typeQ('butcher')`],
@@ -77,12 +78,31 @@ app.whenReady().then(async () => {
       await win.loadFile(path.join(ROOT, 'renderer', 'index.html')).catch((e) => errs.push('load: ' + e.message));
       await wait(700);
       await js(HELPERS);
-      if (steps === 'closed') {
+      if (steps === 'closed' || steps === 'closed-left') {
         // the closed strip, slid out: the app gives its window the strip's own width (main.js applySize)
-        await js(`document.getElementById('app').classList.add('idle', 'peek')`);
+        // the strip's width at rest must be the same however far the sections have slid (app.js restWidth)
+        await js(`document.getElementById('app').classList.add('idle')`);
         await wait(400);
+        const rest = await js(`Math.round(document.getElementById('rail').getBoundingClientRect().width)`);
+        await js(`document.getElementById('app').classList.add('peek')`);
+        for (const t of [60, 120]) {
+          await wait(t);
+          const mid = await js(`Math.round(restWidth())`);
+          if (Math.abs(mid - rest) > 1) errs.push('rest width mid-slide ' + mid + ' ≠ ' + rest);
+        }
+        await wait(400);
+        const full = await js(`Math.round(restWidth())`);
+        if (Math.abs(full - rest) > 1) errs.push('rest width slid out ' + full + ' ≠ ' + rest);
         const sw = await js(`Math.ceil(document.getElementById('rail').scrollWidth)`);
         if (sw > w) win.setContentSize(sw, h);
+        if (steps === 'closed-left') {
+          // the window wider than the strip (main.js slideOut): the strip must keep to its right side
+          win.setContentSize(Math.max(sw, w) + 200, h);
+          await js("document.getElementById('app').classList.add('toleft')");
+          await wait(300);
+          const gap = await js("Math.round(innerWidth - document.getElementById('rail').getBoundingClientRect().right)");
+          if (gap !== 0) errs.push('strip not at the right side: ' + gap + ' px left over');
+        }
       } else {
         if (id !== 'builder') await js(`document.getElementById('coachOk') && document.getElementById('coachOk').click()`);
         for (const step of steps.replace(/open\(/g, 'open_(').split(';').map((x) => x.trim()).filter(Boolean)) {

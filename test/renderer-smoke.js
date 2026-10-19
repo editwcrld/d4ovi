@@ -94,7 +94,9 @@ let settings = {
 };
 
 const calls = [];
-let hoverWatchOn = false;                              // the main process watching the cursor (overlay:hover-watch)
+let hoverWatchOn = false;
+let slideLeft = false;                                 // main.js overlay:slide-plan: the strip grows to the left
+const resizes = [];                              // the main process watching the cursor (overlay:hover-watch)
 let backupMade = 0, copied = null;
 const handlers = {};
 const on = (n) => (cb) => { handlers[n] = cb; };
@@ -104,6 +106,8 @@ w.d4api = new Proxy({}, { get: (_, k) => {
   return (...a) => {
     calls.push(k);
     if (k === 'hoverWatch') hoverWatchOn = !!a[0];
+    if (k === 'slidePlan') return Promise.resolve({ toLeft: slideLeft });
+    if (k === 'resize') resizes.push(a);
     if (k === 'getSettings') return Promise.resolve(settings);
     if (k === 'getFeatures') return Promise.resolve({ macros: true, clickSpam: true, lock: true });
     if (k === 'getLoot') return Promise.resolve(loot);
@@ -189,6 +193,8 @@ for (const f of SCRIPTS) {
 assert.deepStrictEqual(errors, [], 'the page loads without errors');
 const $ = (id) => w.document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// closing takes a moment: the panel folds away, then the window becomes the strip (app.js closeAll)
+const closed = () => sleep(320);
 const rail = (name) => w.document.querySelector('#rail .ri[data-section=' + name + ']');
 const anchors = () => [...w.document.querySelectorAll('#chips .anchors .chip')];
 const grp = (id) => w.document.querySelector('.setgroup[data-group="' + id + '"]');
@@ -675,12 +681,12 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(!$('coach').hidden, 'the hint about closing and pinning shows once');
   $('coachOk').click(); await sleep(20);
   assert.ok($('coach').hidden && settings.coachSeen === true, 'and is gone for good');
-  handlers.onClickOutside(); await sleep(20);
+  handlers.onClickOutside(); await closed();
   assert.ok($('panel').hidden, 'click into the game closes it');
   rail('search').click(); await sleep(30);
   $('btnPin').click();
   assert.ok($('btnPin').classList.contains('on'), 'pinned');
-  handlers.onClickOutside(); await sleep(20);
+  handlers.onClickOutside(); await closed();
   assert.ok(!$('panel').hidden && $('app').classList.contains('ghost'), 'pinned: stays, steps back');
   $('panel').dispatchEvent(new w.PointerEvent('pointerenter', { bubbles: true })); await sleep(10);
   assert.ok($('app').classList.contains('ghost'), 'the mouse over it only lifts the fade for the moment (CSS), it stays pinned-faded');
@@ -691,13 +697,13 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(!$('app').classList.contains('near') && $('app').classList.contains('ghost'), 'cursor gone (even a quick exit into the game): faded again');
   $('main').dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true })); await sleep(20);
   assert.ok(!$('app').classList.contains('ghost'), 'a click on it brings it forward');
-  $('panelClose').click(); await sleep(20);
+  $('panelClose').click(); await closed();
   rail('farm').click(); await sleep(30);
   assert.ok(!$('btnPin').classList.contains('on'), 'builds do not pin themselves – pinning is your own click');
   $('btnPin').click();
-  handlers.onClickOutside(); await sleep(20);
+  handlers.onClickOutside(); await closed();
   assert.ok(!$('panel').hidden && !$('app').classList.contains('ghost'), 'builds stay fully visible while you play (no fade out)');
-  $('panelClose').click(); await sleep(20);
+  $('panelClose').click(); await closed();
   console.log('ok  close on a click into the game, pin');
 
   // the keyboard stays with the game: asked for only while something is typed into
@@ -711,13 +717,13 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   w.document.querySelector('.hk').dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true })); await sleep(20);
   assert.strictEqual(kb(), k0 + 1, 'a key field asks for it');
   anchors()[0].click(); await sleep(30);
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   k0 = kb();
   rail('search').click(); await sleep(30);
   assert.ok(kb() > k0, 'the search takes it, to type into');
   // focused only once the search bar shows – a hidden field cannot take the focus (from settings,
   // builds or the closed pill the bar is hidden until render() shows it)
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   rail('settings').click(); await sleep(30);
   const realFocus = $('q').focus;
   let shownWhenFocused = null;
@@ -727,7 +733,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.strictEqual(shownWhenFocused, true, 'the search field is focused when it can be: shown');
   $('q').blur(); w.dispatchEvent(new w.Event('focus')); await sleep(10);
   assert.strictEqual(w.document.activeElement, $('q'), 'once the window has the focus the search field gets it again – one click is enough');
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   console.log('ok  keyboard only while typing');
 
   // a guide opened from the results: spinner while it loads, Back, typing goes back to the results
@@ -742,7 +748,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(back, 'a way back');
   $('q').value = ''; $('q').dispatchEvent(new w.Event('input')); await sleep(150);
   assert.ok(rail('search').classList.contains('on') && $('viewSlot').hidden, 'clearing the search closes the page');
-  $('panelClose').click(); await sleep(20);
+  $('panelClose').click(); await closed();
   console.log('ok  pages: spinner, back, closed by the search');
 
   // resize handle sets a fixed size and the panel then fills it
@@ -990,7 +996,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
 
   // one bar: closed the strip, open the panel's spine
   assert.ok($('app').classList.contains('open') && !$('panel').hidden, 'open: the bar is the spine of the panel');
-  $('panelClose').click(); await sleep(30);
+  $('panelClose').click(); await closed();
   assert.ok(!$('app').classList.contains('open') && $('panel').hidden, 'closed: the bar is the strip');
   rail('settings').click(); await sleep(30);
   console.log('ok  the bar: strip when closed, spine when open');
@@ -1013,7 +1019,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   // --- Esc closes everything and clears the search
   rail('search').click(); await sleep(20);
   $('q').value = 'test';
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   assert.ok($('panel').hidden, 'Esc closes the panel');
   assert.strictEqual($('q').value, '', 'Esc clears the search field');
   console.log('ok  Esc closes and clears');
@@ -1026,7 +1032,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   // --- idle: shrinks and fades when nothing is open, wakes on any sign of life
   handlers.onChatUnread(0); await sleep(10);
   calls.length = 0;
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   assert.ok($('panel').hidden, 'nothing open');
   assert.ok($('app').classList.contains('idle'), 'closed: straight to the pill, no waiting');
   assert.ok(calls.includes('setIdle'), 'the main process is told about it');
@@ -1145,7 +1151,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   win().value = 'x'; win().dispatchEvent(new w.Event('change')); await sleep(30);
   assert.ok(settings.wbWarnSec === 1800 && win().value === '30:00', 'no time: the old one back');
   win().value = '5:00'; win().dispatchEvent(new w.Event('change')); await sleep(30);
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   // what the pill shows: each thing switched on or off
   assert.ok(rail('maptool').classList.contains('pillhide') && !rail('search').classList.contains('pillhide'), 'by default all but the map tool');
   const togglePill = async (k) => {
@@ -1154,7 +1160,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
     assert.strictEqual(grp('appearance').querySelector('.plate').dataset.card, 'Closed bar', 'Appearance starts with the closed bar');
     assert.strictEqual($('pillPick').querySelectorAll('button').length, 11, 'search, builds, map tool, diablo.trade, the four timers, the counter, settings, quit');
     $('pillPick').querySelector('[data-pill="' + k + '"]').click(); await sleep(30);
-    w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+    w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   };
   await togglePill('listings');
   await togglePill('wb');
@@ -1185,12 +1191,28 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok($('app').classList.contains('toleft') && css.includes('#app.toleft:not(.open){justify-content:flex-end}'), 'slid out to the left: the strip sits at the right');
   handlers.onLayout({ manual: false, toLeft: false }); await sleep(10);
   assert.ok(!$('app').classList.contains('toleft'), 'back in place');
+  // growing to the left: faded first, set to the right side, then the window moves – no flash
+  slideLeft = true; resizes.length = 0;
+  $('rail').dispatchEvent(new w.PointerEvent('pointerenter', { bubbles: true })); await sleep(20);
+  assert.ok($('app').classList.contains('shift') && !resizes.length, 'it fades before the window moves');
+  await sleep(120);
+  assert.ok($('app').classList.contains('toleft') && $('app').classList.contains('peek') && resizes.some((x) => x[3] === true), 'then it moves, set to the right side');
+  handlers.onLayout({ manual: false, toLeft: true }); await sleep(60);
+  assert.ok(!$('app').classList.contains('shift'), 'moved and drawn: it fades in while the sections slide out');
+  resizes.length = 0;
+  handlers.onCursorInside(false); await sleep(400);
+  assert.ok($('app').classList.contains('shift') && !resizes.length, 'folding in: the sections first, then faded before the window moves back');
+  await sleep(120);
+  assert.ok(resizes.length && !resizes[0][3], 'then it goes back to its place');
+  handlers.onLayout({ manual: false, toLeft: false }); await sleep(60);
+  assert.ok(!$('app').classList.contains('shift') && !$('app').classList.contains('toleft'), 'and fades in there');
+  slideLeft = false;
   rail('search').click(); await sleep(40);
   assert.ok(!$('app').classList.contains('idle'), 'a click on the magnifier wakes it up');
   assert.ok($('app').classList.contains('grow') && !$('app').classList.contains('peek'), 'the panel grows out of the bar');
   assert.ok(!$('panel').hidden, 'and opens the search');
   // the timer in the pill opens the search as well
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   assert.ok($('app').classList.contains('idle'), 'idle again');
   // blinking, the first click only stops the blinking – the timer stays red and keeps growing
   assert.ok($('wb').classList.contains('blink') && Number($('wb').style.getPropertyValue('--wbk')) > 1, 'blinking, and bigger near 0');
@@ -1198,12 +1220,35 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(!$('wb').classList.contains('blink') && $('wb').classList.contains('soon') && $('panel').hidden, 'a click on the blinking timer stops the blinking');
   $('wb').click(); await sleep(40);
   assert.ok(!$('app').classList.contains('idle') && !$('panel').hidden && rail('search').classList.contains('on'), 'a click on the timer opens the search');
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   rail('farm').click(); await sleep(40);
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   $('wb').click(); await sleep(40);
   assert.ok(rail('farm').classList.contains('on'), 'the timer opens what was open last');
   console.log('ok  the strip fades, hover peeks, click wakes, timer opens the search');
+
+  // --- closing: the panel folds away, the page hides, only then the window becomes the strip
+  const idleCalls = () => calls.filter((c) => c === 'setIdle').length;
+  let idleBefore = idleCalls();
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(20);
+  assert.ok($('app').classList.contains('fold') && !$('panel').hidden && idleCalls() === idleBefore, 'it folds away first – the window stays');
+  assert.ok(css.includes('#app.open.fold #shell{animation:fold'), 'folding is an animation');
+  await closed();
+  assert.ok($('panel').hidden && $('app').classList.contains('swap') && idleCalls() > idleBefore, 'then hidden, and the window becomes the strip');
+  handlers.onLayout({ manual: false, toLeft: false }); await sleep(60);
+  assert.ok(!$('app').classList.contains('swap') && !$('app').classList.contains('fold'), 'moved and drawn: the strip fades in');
+  // opened again while it folds: it stays open
+  rail('search').click(); await sleep(40);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(20);
+  rail('farm').click(); await closed();
+  assert.ok(!$('panel').hidden && rail('farm').classList.contains('on') && !$('app').classList.contains('swap') && !$('app').classList.contains('fold'), 'opened while folding: open, nothing hidden');
+  idleBefore = idleCalls();
+  rail('farm').click(); await sleep(20);
+  assert.ok($('app').classList.contains('fold') && idleCalls() === idleBefore, 'its icon again closes it the same way');
+  await closed();
+  assert.ok($('panel').hidden, 'closed');
+  await sleep(500);
+  console.log('ok  closing folds the panel away, then the window becomes the strip');
 
   // an alert blinks on its own element only
   handlers.onChatUnread(2); await sleep(10);
@@ -1215,7 +1260,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   console.log('ok  alerts blink on their element only');
 
   // --- the own timer's hotkey: starts it over, the panel stays shut
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   handlers.onTimerRestart(); await sleep(20);
   assert.ok($('ct').classList.contains('run') && $('panel').hidden, 'the hotkey starts the own timer, nothing opens');
   $('ct').dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true })); await sleep(20);
@@ -1235,7 +1280,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   console.log('ok  own timer: hotkey');
 
   // --- the counter: a click adds one, a right click starts it at 0, its hotkey adds one too
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   const rc = $('rc');
   assert.ok(!rc.hidden && $('rcN').textContent === '0' && rc.classList.contains('idle') && rc.querySelector('b').textContent === 'Runs', 'in the bar: Runs 0');
   rc.click(); await sleep(20); rc.click(); await sleep(20);
@@ -1268,7 +1313,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(!$('miss').hidden && $('missN').textContent.includes(String(sum.missing)), 'the count is in the bar');
   $('miss').click(); await sleep(60);
   assert.ok(rail('farm').classList.contains('on'), 'a click opens the build');
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   rail('settings').click(); await sleep(30);
   anchors()[0].click(); await sleep(30);
   [...w.document.querySelectorAll('.opt')].find((o) => o.textContent.includes('What your build still needs')).querySelector('.sw').click();
@@ -1291,7 +1336,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   console.log('ok  update check: dot and download');
 
   // what the app reports by itself: the footer only, the panel stays shut
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   handlers.onNotice({ text: 'Boss loot updated (18 sections)', kind: 'ok' }); await sleep(30);
   assert.ok($('panel').hidden, 'a notice does not open the panel');
   assert.ok(!$('stNote').hidden && $('stNote').textContent === 'Boss loot updated (18 sections)' && $('stNote').classList.contains('ok'), 'it is in the footer');
@@ -1314,18 +1359,18 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   console.log('ok  backup');
 
   // --- hotkeys straight to the build's skills / paragon; again closes it
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   handlers.onOpenBuildView('skills'); await sleep(80);
   assert.ok(rail('farm').classList.contains('on') && w.FarmView.view() === 'skills', 'the build opens on its skills');
   handlers.onOpenBuildView('paragon'); await sleep(60);
   assert.ok(rail('farm').classList.contains('on') && w.FarmView.view() === 'paragon', 'switches to paragon, stays open');
-  handlers.onOpenBuildView('paragon'); await sleep(60);
+  handlers.onOpenBuildView('paragon'); await closed();
   assert.ok($('panel').hidden, 'the same again closes it');
   w.FarmView.setView('gear');
   console.log('ok  hotkeys to skills / paragon');
 
   // the codex: an aspect ticked in one build is done in every build that uses it
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   w.FarmView.adopt({ active: 'cx1', codex: [], builds: [
     { id: 'cx1', name: 'Sorc A', cls: 'Sorcerer', slots: { Amulet: { aspects: ['Aspect of Armageddon'] } }, done: [] },
     { id: 'cx2', name: 'Sorc B', cls: 'Sorcerer', slots: { Gloves: { aspects: ['Aspect of Armageddon'] } }, done: [] },
@@ -1339,7 +1384,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   w.FarmView._state().data.active = 'cx2';
   const other = await w.FarmView.summary(w.d4api);
   assert.ok(other.name === 'Sorc B' && other.missing === 0, 'the other build has it too');
-  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   console.log('ok  codex: an aspect counts in every build');
 
   // --- builder: class → skill → proven build explained → consensus → own build, search, swap, boosts, mods, paragon, save
@@ -1417,7 +1462,7 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
     click('.bd-head .btn', 'Save as build'); await sleep(80);
     assert.ok(builderSaved && builderSaved.pieces && builderSaved.pieces.Helm && builderSaved.mods, 'saved with the picks and modifiers');
     assert.ok(rail('farm').classList.contains('on') && w.FarmView._state().data.active === 'bd1', 'lands in the farm list as the active build');
-    w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await sleep(30);
+    w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
     console.log('ok  builder: proven builds explained, consensus, own build (search, swap, boosts, goal, modifiers), paragon, save');
   }
 

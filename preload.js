@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('d4api', {
 
   // window / views
   resize: (w, h, open, hold) => ipcRenderer.send('overlay:resize', w, h, !!open, !!hold),
+  slidePlan: (w) => ipcRenderer.invoke('overlay:slide-plan', w),
   quit: () => ipcRenderer.send('app:quit'),
   hotkeyCapture: (v) => ipcRenderer.send('hotkey:capture', !!v),
   checkUpdates: () => ipcRenderer.invoke('updates:check'),
