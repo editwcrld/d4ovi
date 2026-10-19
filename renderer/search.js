@@ -1,7 +1,7 @@
 // The search logic alone (runs in the overlay and in the Node tests)
 (function (root) {
-  const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[’']/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  // names compared as everywhere: lib/text.js in Node, its copy UI.norm in the page
+  const norm = typeof module === 'object' && module.exports ? require('../lib/text').norm : root.UI.norm;
 
   function lev(a, b) {
     const m = a.length, n = b.length;

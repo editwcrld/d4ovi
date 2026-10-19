@@ -24,6 +24,7 @@ const TESTS = [
   ['infinitybuilds import', 'infinitybuilds-test.js'],
   ['builder engine', 'builder-test.js'],
   ['pictures by name', 'icons-test.js'],
+  ['stylesheet', 'css-test.js'],
   ['overlay UI', 'renderer-smoke.js'],
 ];
 

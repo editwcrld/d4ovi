@@ -1,0 +1,324 @@
+
+/* ---------------------------------------------------------------- the window */
+#app{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:flex-start}
+/* slid out at the right edge of the screen: the window grew to the left – the strip keeps its right end */
+#app.toleft:not(.open){justify-content:flex-end}
+#shell{display:flex;align-items:stretch;max-width:100%;max-height:100%}
+#app.open #shell{width:100%;height:100%;background:var(--bg);border:1px solid var(--edge);border-radius:var(--r);overflow:hidden;
+  box-shadow:inset 0 0 0 1px #000,inset 0 1px 0 rgba(255,255,255,.03)}
+#app.open.grow #shell{animation:grow .3s cubic-bezier(.2,.8,.2,1)}
+@keyframes grow{from{clip-path:inset(0 72% 90% 0 round 6px);opacity:.35}to{clip-path:inset(0 0 0 0 round 4px);opacity:1}}
+#app.open #shell::before{content:'';position:absolute;inset:4px;border:1px solid rgba(217,180,106,.08);pointer-events:none;border-radius:2px;z-index:0}
+
+/* ---------------------------------------------------------------- the bar
+   Closed it is a strip: the drag handle, the timers, the lock, the sections – all in one line,
+   its size fixed (the screen's zoom grows it). Open it is the spine of the panel. */
+#rail{display:flex;align-items:center;flex:0 0 auto;position:relative;z-index:2;-webkit-app-region:drag}
+#rail button,#rail .tmr{-webkit-app-region:no-drag}
+#grip{display:flex;align-items:center;justify-content:center;color:var(--faint);cursor:grab;flex:0 0 auto}
+#grip svg{width:8px;height:13px;fill:currentColor}
+#grip:hover{color:var(--dim)}
+.ri{position:relative;display:flex;align-items:center;justify-content:center;flex:0 0 auto;padding:0;border:0;background:none;color:var(--faint);
+  transition:color .12s,background .12s}
+.ri svg{width:19px;height:19px;flex:0 0 auto;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.ri:hover{color:var(--fg)}
+.ri.on{color:var(--fg)}
+.ri.on svg{color:var(--red2)}
+#btnQuit:hover{color:var(--red-fg)}
+#chatBadge{position:absolute;top:2px;right:4px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--red);color:#fff;
+  font:700 10px/16px var(--ui);text-align:center;font-style:normal;box-shadow:0 0 0 2px var(--spine)}
+#updDot{position:absolute;top:4px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 2px var(--spine)}
+.ri.alert{color:var(--red-fg)}
+.ri.alert.blink{animation:msgblink 1s ease-in-out infinite}
+@keyframes msgblink{50%{color:#fff;background:var(--red-soft)}}
+#stD4{display:none;width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok);flex:0 0 auto}
+#stD4.off{background:var(--faint);box-shadow:none}
+.tmr{flex:0 0 auto;cursor:pointer;min-width:0;transition:background .2s}
+.tmr b{display:block;font:700 9.5px/1.2 var(--sc);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+.tmr span{display:block;font:600 15px/1.25 var(--head);color:var(--gold);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/*@px  the strip: sizes fixed, the screen's zoom grows it */
+#app:not(.open) #rail{height:46px;padding:0 4px 0 2px;background:rgba(15,12,11,.94);border:1px solid var(--edge);border-radius:3px;
+  box-shadow:0 0 0 1px #000,0 10px 30px rgba(0,0,0,.6)}
+#app:not(.open) #grip{width:18px;height:40px}
+#app:not(.open) #grip{order:0}
+#app:not(.open) #timers{order:1;display:flex;align-items:stretch;height:100%}
+#app:not(.open) #lockTag{order:2}
+#app:not(.open) #secs{order:3}
+#app:not(.open) #sys{order:4}
+#app:not(.open) .tmr{display:flex;flex-direction:column;justify-content:center;padding:0 12px;border-right:1px solid #251e1a}
+#app:not(.open) .tmr:first-child{border-left:1px solid #251e1a}
+#app:not(.open) .tmr:hover{background:var(--hover)}
+/* the sections hide in the strip – the mouse over it slides them out (as in mockup A) */
+#app:not(.open) #secs,#app:not(.open) #sys{display:flex;align-items:center;gap:0;padding-left:0;max-width:0;opacity:0;overflow:hidden;
+  transition:max-width .32s cubic-bezier(.2,.8,.2,1),opacity .22s ease,padding .32s cubic-bezier(.2,.8,.2,1)}
+#app.peek:not(.open) #secs,#app.peek:not(.open) #sys{max-width:var(--w,260px);opacity:1;padding-left:4px}
+#app.peek:not(.open) #sys{border-left:1px solid #251e1a;margin-left:4px}
+#app:not(.open) #lockTag{display:flex;flex-direction:column;justify-content:center;padding:0 12px;border-right:1px solid #251e1a}
+
+#app:not(.open) .ri{width:34px;height:36px}
+#app:not(.open) .ri span{display:none}
+#app:not(.open) #rail>.sp{display:none}
+#app:not(.open) #chatBadge{top:1px;right:0}
+#app:not(.open) #updDot{top:6px;right:5px}
+/* the world boss grows towards its spawn (--wbk), more in the strip than in the spine */
+#app:not(.open) #wb span{font-size:calc(15px * var(--wbk,1))}
+/*@rem*/
+
+/* what is switched off for the closed bar (settings.pillHide) – the handle and the lock always stay */
+#app:not(.open) #rail .pillhide{display:none!important}
+/* closed and not touched: the strip fades (the mouse over it brings it back); the timers keep
+   their strength when asked to, an alert always punches through */
+#rail>*{transition:opacity .25s}
+#app.idle:not(.open) #rail{background:rgba(15,12,11,.55);border-color:rgba(51,41,31,.6);box-shadow:none}
+#app.idle:not(.open) #rail>*{opacity:var(--fade,.35)}
+#app.idle.peek:not(.open) #rail{background:rgba(15,12,11,.94);border-color:var(--edge)}
+#app.idle.peek:not(.open) #rail>*{opacity:1}
+#app.idle.wbbright:not(.open) #rail>#timers,#app.idle:not(.open) #rail>#lockTag{opacity:1}
+#app.idle:not(.open) #rail>#timers:has(.soon){opacity:1}
+#app.idle:not(.open) #rail>#secs:has(.alert){opacity:1}
+#rail.morph>*{opacity:0!important;transition:none}
+
+/* the spine: the sections with their names, the timers, settings and quit */
+#app.open #rail{flex-direction:column;align-items:stretch;width:68px;padding:8px 0 10px;
+  background:linear-gradient(90deg,#0b0908,#120f0d);border-right:1px solid var(--edge)}
+#app.open #grip{height:18px;margin-bottom:4px}
+#app.open #grip svg{transform:rotate(90deg)}
+#app.open #secs,#app.open #sys{display:flex;flex-direction:column;align-items:center;gap:2px}
+#app.open .ri{flex-direction:column;gap:4px;width:58px;padding:8px 0 6px;border-radius:2px}
+#app.open .ri span{font:700 10px/1 var(--sc);letter-spacing:.06em;white-space:nowrap}
+#app.open .ri:hover{background:var(--hover)}
+#app.open .ri.on::before{content:'';position:absolute;left:-5px;top:9px;bottom:9px;width:3px;background:var(--red);box-shadow:0 0 10px var(--red)}
+#app.open #sys .ri span{display:none}
+#app.open #sys{flex-direction:row;justify-content:center;gap:0;padding-top:4px;border-top:1px solid #241d18}
+#app.open #sys .ri{width:30px;padding:7px 0}
+#app.open #timers{display:flex;flex-direction:column;align-items:stretch}
+#app.open .tmr{text-align:center;padding:6px 2px;border-top:1px solid #241d18}
+#app.open #lockTag{order:0}
+
+#app.open .tmr:hover{background:var(--hover)}
+#app.open .tmr b{font-size:8.5px}
+#app.open .tmr span{font-size:13px}
+#app.open #wb span{font-size:calc(13px * var(--wbk,1))}
+#app.open #stD4{display:block;align-self:center;margin-top:8px}
+
+/* timers: world boss gold (red and growing in its warning time, blinking until clicked),
+   Helltide ember while it runs (red for its last minutes), your own: red and blinking for its last
+   30 seconds, green at 0 */
+#ht span{color:var(--dim)}
+#ht.on span{color:#ff9e5e}
+#ht.ending b{color:var(--red-fg)} #ht.ending span{color:var(--red2)}
+#ct.idle span{color:var(--dim)}
+#ct.run span{color:var(--gold2)}
+#ct.ready{background:var(--ok-soft)} #ct.ready b{color:var(--ok)} #ct.ready span{color:#b9e39d}
+#rc span{color:var(--gold2);font-variant-numeric:tabular-nums} #rc.idle span{color:var(--dim)}
+#miss span{color:var(--gold)}
+#miss.done b{color:var(--ok)} #miss.done span{color:#b9e39d}
+.tmr.soon b{color:var(--red-fg)}
+.tmr.soon span{color:var(--red2)}
+.tmr.soon.blink{animation:tblink 1s steps(1,end) infinite}
+@keyframes tblink{50%{background:rgba(200,50,43,.34);box-shadow:inset 0 0 14px rgba(224,71,63,.5)}}
+/* lock: four red diamonds while it runs – they blink with the re-press – gold while it waits */
+.tmr.lock{cursor:default}
+#lockTag b{color:var(--red-fg)}
+#lockTag.paused b{color:var(--gold)}
+/* lock's keys as they are pressed ("1234"): red while it runs, gold while it waits – nothing moves */
+#lockTag .lkeys{display:block;font:700 15px/1.25 var(--sc);letter-spacing:.12em;color:var(--red2);white-space:nowrap}
+#lockTag.paused .lkeys{color:var(--gold)}
+#app.open #lockTag .lkeys{font-size:13px;letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------------------------------------------------------------- the page */
+#panel{position:relative;z-index:1;flex:1 1 auto;min-width:0;min-height:0;display:flex;flex-direction:column;transition:opacity .25s}
+/* pinned and the game has the focus: the panel steps back, the mouse brings it forward */
+#app.ghost #shell{opacity:.4;transition:opacity .25s}
+#app.ghost.near #shell{opacity:1}
+
+/* the head: what you look at – or the search field – and pin / close on the right */
+#head{display:flex;align-items:center;gap:12px;min-width:0;padding:12px 14px 6px 20px;flex:0 0 auto;-webkit-app-region:drag}
+#head button,#head input,#head select,#head a,#head .qbox,#head .bmenu{-webkit-app-region:no-drag}
+#ptools{display:flex;gap:6px;flex:0 0 auto;margin-left:auto;align-self:flex-start}
+#btnPin.on{border-color:var(--red);background:var(--red-soft);color:var(--fg)}
+#btnPin.on svg{fill:currentColor}
+#title{flex:1 1 auto;min-width:0;display:flex;align-items:flex-end;gap:12px}
+#title:empty{display:none}
+.kick{display:flex;align-items:center;gap:8px;min-width:0;font:700 11px/1.2 var(--sc);letter-spacing:.14em;text-transform:uppercase;color:var(--red-fg);white-space:nowrap}
+.kick>span{overflow:hidden;text-overflow:ellipsis}
+.kick button{border:0;background:none;padding:0;font:inherit;letter-spacing:inherit;text-transform:inherit;color:var(--faint)}
+.kick button:hover{color:var(--fg)}
+.kick button.on{color:var(--red-fg)}
+.kick .sep{color:var(--edge3)}
+.ttl{display:block;min-width:0;margin:4px 0 0;font:600 25px/1.12 var(--head);letter-spacing:.01em;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tblock{flex:1 1 auto;min-width:0}
+.tright{display:flex;align-items:center;gap:8px;flex:0 1 auto;min-width:0;flex-wrap:wrap;justify-content:flex-end}
+
+/* the search field */
+.qbox{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:10px;height:42px;padding:0 6px 0 14px;
+  border:1px solid var(--edge2);background:#0d0a09;box-shadow:inset 0 2px 6px #000;border-radius:var(--r2)}
+.qbox:focus-within{border-color:var(--red-line)}
+.qbox>svg{width:18px;height:18px;flex:0 0 auto;stroke:var(--faint);fill:none;stroke-width:2}
+.qbox input{flex:1;min-width:0;height:100%;border:0;background:none;outline:0;color:var(--fg);font:500 17px var(--ui);padding:0;user-select:text}
+.qbox input::placeholder{color:var(--faint)}
+
+/* the tabs under the head */
+#chips{display:flex;align-items:flex-end;gap:12px;min-width:0;padding:0 20px;border-bottom:1px solid var(--edge);flex:0 0 auto}
+#chips:empty{padding-bottom:0}
+#chips>.sp{flex:1}
+#chips>.btn,#chips>.seg{margin-bottom:6px}
+
+/* the body: (the result list,) the page itself – or a web page laid over it */
+#cols{position:relative;display:flex;flex:1 1 auto;min-height:0;min-width:0}
+#side{width:300px;flex:0 0 auto;min-height:0;overflow-y:auto;padding:10px 8px 14px 14px;border-right:1px solid var(--edge)}
+#main{position:relative;flex:1 1 auto;min-width:0;min-height:0;overflow-y:auto;padding:16px 20px 20px}
+#viewSlot{position:relative;flex:1 1 auto;min-width:0;background:#0c0a09}
+.vload{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--dim);font:500 14px var(--ui)}
+#viewSlot.loading .vload{display:flex}
+.vload i{width:28px;height:28px;border-radius:50%;border:3px solid var(--edge2);border-top-color:var(--red2);animation:spin .8s linear infinite}
+
+/* the one-time hint, and the line for what the app reports by itself */
+#coach{display:flex;align-items:center;gap:12px;flex:0 0 auto;margin:0 16px 10px;padding:8px 12px;border:1px solid var(--edge2);
+  border-left:3px solid var(--gold);background:var(--plate);font-size:13.5px}
+#coach span{flex:1;min-width:0}
+#coach b{color:var(--gold)}
+#status{display:flex;align-items:center;gap:14px;flex:0 0 auto;min-width:0;padding:5px 34px 6px 20px;border-top:1px solid var(--edge);
+  color:var(--faint);font-size:12.5px;white-space:nowrap}
+#status>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+#stData{flex:1}
+#stNote{flex:0 1 auto;color:var(--dim)}
+#stNote.ok{color:var(--ok)} #stNote.error{color:var(--red-fg)}
+
+/* the resize corner */
+#grip-resize{position:absolute;right:0;bottom:0;width:20px;height:20px;cursor:nwse-resize;z-index:8;-webkit-app-region:no-drag;
+  background:linear-gradient(135deg,transparent 52%,var(--edge3) 52%,var(--edge3) 60%,transparent 60%,transparent 72%,var(--edge3) 72%,var(--edge3) 80%,transparent 80%)}
+#grip-resize:hover{background:linear-gradient(135deg,transparent 52%,var(--red2) 52%,var(--red2) 60%,transparent 60%,transparent 72%,var(--red2) 72%,var(--red2) 80%,transparent 80%)}
+body.resizing{cursor:nwse-resize}
+body.resizing *{pointer-events:none}
+
+/* the floating toolbar, as in the mockup: how the page shows what it shows – over the bottom of the
+   body, which keeps room for it so the last line scrolls clear of it */
+.tool{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:4px;padding:4px;
+  max-width:calc(100% - 24px);background:rgba(22,18,16,.97);border:1px solid var(--edge2);border-radius:24px;box-shadow:0 10px 30px rgba(0,0,0,.65)}
+.tool button{height:30px;padding:0 14px;border:0;border-radius:16px;background:none;color:var(--dim);
+  font:700 12.5px/1 var(--sc);letter-spacing:.07em;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.tool button:hover{color:var(--fg)}
+.tool button.on{background:var(--red);color:#fff;box-shadow:0 0 12px rgba(200,50,43,.5)}
+.tool button svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2}
+.tool .sep{width:1px;height:20px;background:var(--edge);flex:0 0 auto}
+
+/* ---------------------------------------------------------------- THE plate */
+.plate{background:var(--plate);border:1px solid var(--edge);border-radius:var(--r2);margin:0 0 12px;min-width:0;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+.plate:last-child{margin-bottom:0}
+.plate>.pt{display:flex;align-items:center;gap:10px;min-width:0;padding:8px 12px;background:linear-gradient(#211b17,#191512);border-bottom:1px solid var(--edge)}
+.plate>.pt>svg.i{color:var(--gold);width:16px;height:16px}
+.ptx{flex:1 1 auto;min-width:0;display:flex;align-items:baseline;gap:10px}
+.ptx h3{margin:0;flex:0 0 auto;max-width:72%;min-width:0;font:600 14px/1.25 var(--head);letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ptx span{flex:1 1 auto;min-width:0;color:var(--dim);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pend{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.pend kbd{font:700 11px var(--sc);color:var(--dim);padding:2px 7px;border:1px solid var(--edge2);background:var(--sunk)}
+.plate>.pc{padding:4px 12px 8px;min-width:0}
+.plate.flat>.pc{padding:0}
+.plate.dim{opacity:.72}
+.plate.dim:hover{opacity:1}
+.plate.done>.pt>svg.i{color:var(--ok)}
+.plate.on{border-color:var(--ok-line)}
+.plate.on>.pt>svg.i{color:var(--ok)}
+.plate.accent{border-color:var(--gold-line)}
+
+/* ---------------------------------------------------------------- THE line */
+.line{display:flex;align-items:center;gap:11px;width:100%;min-width:0;padding:7px 2px;border:0;border-bottom:1px solid #251e1a;
+  background:none;text-align:left;color:inherit;font:inherit}
+.line:last-child{border-bottom:0}
+button.line,.line.click{cursor:pointer}
+button.line:hover .ln,.line.click:hover .ln{text-decoration:underline;text-decoration-color:var(--edge3);text-underline-offset:3px}
+.line.on{background:var(--red-soft);box-shadow:inset 3px 0 0 var(--red)}
+.pic{width:36px;height:36px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--edge2);
+  background:radial-gradient(#2a221d,#14100e);color:var(--faint);padding:2px}
+.pic img{display:block;width:100%;height:100%;min-width:0;min-height:0;object-fit:contain}
+.pic.none svg{width:55%;height:55%;stroke:currentColor;fill:none;stroke-width:1.6}
+.l-tx{flex:1 1 auto;min-width:0;display:flex;flex-direction:column}
+.ln{display:block;font:700 15px/1.25 var(--ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lm{display:block;color:var(--dim);font-size:12.5px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.l-end{flex:0 0 auto;display:flex;align-items:center;gap:8px;max-width:45%;color:var(--faint);font:700 12px var(--sc);letter-spacing:.04em;white-space:nowrap}
+.l-end>*{min-width:0}
+.line.got .ln{color:var(--faint)!important;text-decoration:line-through}
+.line.got .pic{opacity:.45}
+.line.sm{padding:5px 2px}
+.line.sm .pic{width:28px;height:28px}
+.line.sm .ln{font-size:14px}
+
+/* rarities: the name and the picture's frame, nothing else */
+.r-mythic{color:var(--mythic)} .r-unique{color:var(--unique)} .r-legendary{color:var(--legendary)} .r-set{color:var(--set)}
+.r-rune{color:var(--rune)} .r-magic{color:var(--magic)} .r-gem{color:var(--magic)}
+.line:has(.ln.r-mythic) .pic,.pic.r-mythic{border-color:#6e5592;background:radial-gradient(#2d2338,#120f0d)}
+.line:has(.ln.r-unique) .pic,.pic.r-unique{border-color:#7a6236}
+.line:has(.ln.r-legendary) .pic,.pic.r-legendary{border-color:#7a4a22}
+.line:has(.ln.r-set) .pic,.pic.r-set{border-color:#3f7a4f}
+.line:has(.ln.r-rune) .pic,.pic.r-rune{border-color:#2f6f66}
+
+/* ---------------------------------------------------------------- THE hover card */
+#tip{position:fixed;z-index:90;pointer-events:none;max-width:400px;font-size:13px;line-height:1.45;color:var(--dim)}
+#tip:not(.game):not(.card){padding:8px 11px;background:#0d0a09;border:1px solid var(--edge2);box-shadow:0 12px 30px rgba(0,0,0,.75)}
+#tip .tt{display:block;font:700 15px/1.25 var(--ui);color:var(--fg)}
+#tip .ts{display:block;font-style:normal;color:var(--gold);font-size:12px;margin-bottom:3px}
+#tip p{margin:3px 0 0}
+#tip.game{filter:drop-shadow(0 12px 28px rgba(0,0,0,.75))}
+#tip.card{filter:drop-shadow(0 12px 28px rgba(0,0,0,.75))}
+/* a card built here (a slot, a charm, a guide line, a builder piece) */
+.ctt{background:#0d0a09;border:1px solid var(--edge2);padding:10px 13px 11px;max-width:400px;font:12.5px/1.45 var(--ui);color:var(--dim)}
+.ctt .nm{font:700 16px/1.25 var(--ui);color:var(--fg)}
+.ctt .ty{font-size:11.5px;color:var(--faint);margin-bottom:2px}
+.ctt .sec{border-top:1px solid var(--edge);margin-top:7px;padding-top:6px}
+.ctt .st{color:var(--fg)}
+.ctt .st.ga{color:var(--gold);font-weight:700} .ctt .st.tmp{color:var(--magic)}
+.ctt .ds{color:var(--dim)}
+.ctt .wh{display:block;font:700 10.5px var(--sc);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:2px}
+.ctt .sock{color:var(--rune)}
+.ctt .hint{color:var(--faint);font-size:11.5px}
+.ctt .set b{display:block;font:700 12.5px var(--ui);margin-bottom:3px}
+.ctt .bon{display:flex;gap:6px;color:var(--faint);padding:1px 0}
+.ctt .bon .n{flex:0 0 auto;font-weight:700}
+.ctt .bon.on{color:var(--fg)} .ctt .bon.on .n{color:var(--set)}
+/* this build's rolls under the in-game tooltip */
+.ftt-roll{background:#0d0a09;border:1px solid var(--edge2);border-top:0;padding:7px 12px 9px;font:12.5px/1.45 var(--ui);color:var(--dim)}
+.ftt-roll b{display:block;font:700 10px var(--sc);letter-spacing:.09em;text-transform:uppercase;color:var(--gold);margin-bottom:3px}
+.ftt-roll .ga{color:var(--fg)} .ftt-roll .tmp{color:var(--magic)} .ftt-roll .sock{color:var(--rune);margin-top:2px}
+
+/* ---------------------------------------------------------------- dialogs */
+.ishade{position:absolute;inset:0;z-index:30;background:rgba(8,6,5,.66);display:flex;justify-content:center;align-items:flex-start;padding:40px 16px 16px;overflow:auto}
+.imodal{width:min(620px,100%);background:var(--plate);border:1px solid var(--edge3);box-shadow:0 0 0 1px #000,0 30px 80px rgba(0,0,0,.7);display:flex;flex-direction:column;min-width:0}
+.imodal.drop{border-color:var(--red2);box-shadow:0 0 0 3px var(--red-soft),0 30px 80px rgba(0,0,0,.7)}
+.ihead{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;background:linear-gradient(#211b17,#191512);border-bottom:1px solid var(--edge)}
+.ihead h3{flex:1;min-width:0;margin:0;font:600 18px var(--head)}
+.ibody{padding:14px 16px 16px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.ilab{font-size:14px;color:var(--dim)}
+.ifield{min-height:46px;display:flex;align-items:center;gap:10px;padding:0 8px 0 12px;background:#0d0a09;border:1px solid var(--edge2);box-shadow:inset 0 2px 6px #000;min-width:0}
+.ifield.ok{border-color:var(--gold-line)}
+.ifield.bad{border-color:var(--red2)}
+.ifield svg{width:18px;height:18px;stroke:var(--faint);fill:none;stroke-width:1.9;flex:0 0 auto}
+.ifield textarea{flex:1;min-width:0;height:auto;max-height:66px;margin:11px 0;border:0;background:transparent;box-shadow:none;outline:0;
+  font:500 15.5px/22px var(--ui);color:var(--fg);padding:0;resize:none;overflow:hidden auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.ifield textarea::placeholder{color:var(--faint)}
+.ibadge{height:22px;padding:0 9px;display:inline-flex;align-items:center;font:700 11.5px var(--sc);letter-spacing:.05em;white-space:nowrap;border:1px solid;flex:0 0 auto}
+.ibadge.b-m{color:var(--gold);border-color:var(--gold-line)}
+.ibadge.b-d{color:var(--magic);border-color:rgba(124,195,238,.45)}
+.ibadge.b-c{color:var(--mythic);border-color:rgba(199,156,255,.45)}
+.ibadge.b-i{color:var(--rune);border-color:rgba(94,207,189,.45)}
+.ibadge.b-k{color:var(--ok);border-color:var(--ok-line)}
+.ispin{width:18px;height:18px;border-radius:50%;border:2.5px solid var(--edge2);border-top-color:var(--red2);animation:spin .8s linear infinite;flex:0 0 auto}
+.ihint{font-size:12.5px;color:var(--faint)}
+.ierr{font-size:13.5px;color:var(--red-fg)}
+.ititle{display:flex;align-items:baseline;gap:10px;margin-top:6px;flex-wrap:wrap;min-width:0}
+.ititle b{font:600 17px var(--head);min-width:0;overflow-wrap:anywhere}
+.ititle span{font-size:13px;color:var(--faint)}
+.ivar{display:flex;align-items:center;gap:11px;padding:8px 12px;border:1px solid var(--edge);background:var(--sunk);cursor:pointer;min-width:0}
+.ivar:hover{border-color:var(--edge2)}
+.ivar.main{border-color:var(--edge3)}
+.ivar input{width:18px;height:18px;accent-color:var(--red2);margin:0;flex:0 0 auto}
+.ivar b{font-weight:700;font-size:14.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ivar span{margin-left:auto;font-size:12.5px;color:var(--faint);text-align:right;min-width:0}
+.ifoot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;border-top:1px solid var(--edge)}
+.ifoot .sp{flex:1}
+.ishade.risk{z-index:40;padding-top:80px}
+.ishade.risk .imodal{width:min(460px,100%);border-color:var(--red-line)}
+.ishade.risk .ihead h3{color:var(--red-fg)}
+.ishade.risk .ibody p{margin:0;font-size:14px;line-height:1.5;color:var(--dim)}

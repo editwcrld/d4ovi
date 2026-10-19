@@ -1,0 +1,100 @@
+
+/* ---------------------------------------------------------------- every size
+   The window is the panel, so the panel's width is the viewport's. Made for 820 × 600 (the room
+   left of the game's inventory); it stays whole from a phone's 393 wide to a large monitor:
+     ≥ 900   the search shows its result list beside the picked one
+     < 900   the results become chips over it, the paragon list goes under the boards
+     < 760   one column wherever two stood side by side
+     < 600   phone-like: the spine becomes a tab bar at the bottom, the timers above it
+   and short windows tighten the head. */
+@media (max-width:899px){
+  .pmain{flex-direction:column}
+  .pmain .canvas{min-height:300px}
+  .pside{width:auto;flex-direction:row;flex-wrap:wrap;align-items:flex-start;overflow:visible}
+  .pside>.plate{flex:1 1 220px}
+  .pside>.plook,.pside>.meta{width:100%}
+  .fparagon{overflow-y:auto}
+}
+@media (max-width:759px){
+  .entry{grid-template-columns:84px minmax(0,1fr);gap:14px}
+  .entry .art{width:84px;height:84px}
+  .entry h2{font-size:21px}
+  .aff{columns:1}
+  .gd{grid-template-columns:minmax(0,1fr)}
+  .doll{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .dmid{grid-column:1/-1;order:3}
+  .dmark{display:none}
+  .dside{order:4}
+  .cmp-tiles{grid-template-columns:minmax(0,1fr)}
+  .cmp-r{grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr)}
+  .cmp-r.cmp-th{display:none}
+  .cmp-r .slot{grid-column:1/-1;margin-bottom:-4px}
+  .cmp-r .slot:empty{display:none}
+  .cmp-r .cmp-src{grid-column:1/-1}
+  .cmp-sock{padding-left:12px}
+  .cmp-need{grid-template-columns:minmax(0,1fr);gap:4px}
+  .prog .bar{width:64px}
+}
+@media (max-width:599px){
+  /* the spine becomes a tab bar at the bottom; the timers sit in a row above it */
+  #app.open #shell{flex-direction:column-reverse}
+  #app.open #rail{width:100%;flex-direction:row;flex-wrap:wrap;align-items:stretch;padding:0;border-right:0;border-top:1px solid var(--edge);
+    background:linear-gradient(#120f0d,#0b0908)}
+  #app.open #grip,#app.open #rail>.sp,#app.open #stD4{display:none}
+  #app.open #timers{order:1;width:100%;flex-direction:row}
+  #app.open .tmr{flex:1 1 0;min-width:0;padding:5px 2px;border-top:0;border-right:1px solid #241d18}
+  #app.open .tmr:last-child{border-right:0}
+  #app.open .tmr b,#app.open .tmr span{overflow:hidden;text-overflow:ellipsis}
+  #app.open #secs{order:2;flex:1 1 auto;flex-direction:row;align-items:stretch;gap:0;border-top:1px solid #241d18}
+  #app.open #secs .ri{flex:1 1 0;width:auto;min-width:0}
+  #app.open .ri.on::before{left:25%;right:25%;top:0;bottom:auto;width:auto;height:3px}
+  #app.open #sys{order:3;flex-direction:row;align-items:center;padding:0 4px;border-top:1px solid #241d18;border-left:1px solid #241d18}
+  #app.open #sys .ri{width:34px}
+  #head{padding:10px 10px 6px 14px;gap:8px}
+  .ttl{font-size:20px}
+  .kick{font-size:10px;letter-spacing:.1em}
+  #title{flex-wrap:wrap;align-items:flex-start;row-gap:6px}
+  .tright{width:100%;justify-content:flex-start}
+  #chips{padding:0 14px}
+  .ptabs{flex-wrap:wrap;column-gap:14px;row-gap:0}
+  #main,#main.settings{padding:12px 14px 16px}
+  .fgear{padding:12px 14px 70px}
+  .gd,.cmp-page,.cmp-head,.fskills.scroll,.pfilm{padding-left:14px;padding-right:14px}
+  .pmain{padding:12px 14px}
+  .sk3{grid-template-columns:minmax(0,1fr)}
+  .doll{grid-template-columns:minmax(0,1fr)}
+  .dcol.right .dslot{flex-direction:row;text-align:left}
+  .dcol.right .dslot .gn{align-items:flex-start}
+  .entry{grid-template-columns:64px minmax(0,1fr);gap:12px}
+  .entry .art{width:64px;height:64px}
+  .entry h2{font-size:19px}
+  .hero{flex-wrap:wrap;padding:10px 12px}
+  .hero .pic{width:56px;height:56px}
+  .hero .hend{flex-direction:row;align-items:center;width:100%;justify-content:space-between}
+  .tiles{grid-template-columns:repeat(auto-fill,minmax(92px,1fr));padding:10px}
+  .tile .pic{width:46px;height:46px}
+  .bcards{grid-template-columns:minmax(0,1fr)}
+  .opt{flex-wrap:wrap;gap:8px}
+  .opt .ctl{justify-content:flex-start;width:100%}
+  .lockrow .ksec{flex:1;min-width:80px}
+  .fpick{left:6px;right:6px}
+  .bmenu{left:10px;width:calc(100% - 20px)}
+  .tool button{padding:0 11px}
+  #coach{margin:0 10px 8px;flex-wrap:wrap}
+  #status{padding-left:14px}
+  .l-end{max-width:38%}
+  .path::before{left:15px}
+  .wp{gap:10px}
+  .wp .node{width:32px;height:32px}
+  .gn .nm,.xn{font-size:14px}
+  .plate>.pt{padding:7px 10px}
+  .plate>.pc{padding:4px 10px 8px}
+  .ptx{flex-direction:column;align-items:flex-start;gap:0}
+  .ptx span{white-space:normal}
+}
+@media (max-height:520px){
+  #head{padding-top:8px}
+  .kick{display:none}
+  .ttl{font-size:19px;margin-top:0}
+  .sbar{padding-top:8px;padding-bottom:8px}
+}

@@ -33,3 +33,11 @@ assert.strictEqual(icons.find(map, 'Berú of Uncanny Insight'), MX + '14.webp', 
 assert.strictEqual(icons.find(map, 'No picture'), '', 'nothing made up');
 assert.strictEqual(icons.find(map, 'Some New Aspect', 'aspect'), MX + icons.ASPECT.Offensive + '.webp', 'an unknown aspect still gets an aspect');
 console.log('ok  pictures by name: catalog, game data, d2core, aspects, trophies, sets');
+
+// the page looks pictures up with its own copy of the name key (renderer/ui.js) – it must be lib/text.js's
+require('../renderer/ui.js');
+const { norm } = require('../lib/text');
+for (const s of ["Tiraj's Uncanny Insight", 'Berú of Uncanny Insight', 'Ahavarion, Spear of Lycander', '  Shard  of  Verathiel ', 'Doombringer’s Edge', '', null]) {
+  assert.strictEqual(global.UI.norm(s), norm(s), 'the same key: ' + s);
+}
+console.log('ok  the page keys names as lib/text.js does');

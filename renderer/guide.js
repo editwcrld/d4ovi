@@ -4,7 +4,7 @@
 // from the build's own data (b.setup). Hover a line for the author's own words.
 (function () {
 'use strict';
-const mk = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; };
+const mk = UI.el;
 const SITE = { maxroll: 'maxroll', d4builds: 'd4builds', infinitybuilds: 'infinitybuilds', d2core: 'd2core' };
 const sheets = new Map();          // key -> sheet | null (none) | 'wait'
 

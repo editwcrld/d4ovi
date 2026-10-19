@@ -1,0 +1,115 @@
+
+/* ---------------------------------------------------------------- search
+   The results as chips over the picked one, as in the mockup – two rows at most, the rest
+   scrolls; the picked one in full below them. */
+#cols.withside{flex-direction:column}
+#side.hits{width:auto;max-height:78px;flex:0 0 auto;display:flex;flex-wrap:wrap;align-content:flex-start;gap:5px;padding:10px 20px 8px;
+  border-right:0;border-bottom:1px solid var(--edge);overflow-y:auto}
+#side.hits .hit{width:auto;max-width:100%;flex:0 1 auto;height:30px;gap:7px;padding:0 10px 0 3px;border:1px solid var(--edge);background:var(--plate)}
+#side.hits .hit.on{border-color:var(--red);background:var(--red-soft);box-shadow:none}
+#side.hits .hit .pic{width:24px;height:24px;border:0;background:none}
+#side.hits .hit .lm,#side.hits .hit .l-end{display:none}
+#side.hits .hit .ln{font-size:13.5px;font-weight:500}
+#side.hits .hit.trade{margin-top:0}
+/* with nothing typed: the favourites and recent searches, each under its own small head */
+#side.hits h5{display:flex;align-items:center;gap:7px;width:100%;margin:2px 2px 0;font:700 11px/1 var(--sc);letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+#side.hits h5 .clr{margin-left:auto;border:0;background:0;color:var(--faint);font:inherit;padding:1px 4px}
+#side.hits h5 .clr:hover{color:var(--red-fg)}
+#side.hits .empty{padding:4px 2px}
+#side.hits:has(h5){max-height:none}
+
+/* the picked item: its picture, what it does, then who drops it */
+.entry{display:grid;grid-template-columns:118px minmax(0,1fr);gap:18px;min-width:0;margin-bottom:14px}
+.entry .art{width:118px;height:118px;border:1px solid var(--edge2);background:radial-gradient(#2a221d,#110e0c)}
+.entry .art.r-mythic{border-color:#6e5592;background:radial-gradient(#2d2338,#110e0c)}
+.entry .art.r-unique{border-color:#7a6236}
+.entry .etx{min-width:0}
+.entry h2{margin:0;font:600 24px/1.12 var(--head);overflow-wrap:anywhere}
+.entry .sub{color:var(--dim);margin:4px 0 10px;font-size:14px}
+.power{border-left:3px solid var(--mythic);padding:7px 12px;background:linear-gradient(90deg,rgba(199,156,255,.10),transparent);font-size:15px;line-height:1.45;white-space:pre-line}
+.power.u{border-left-color:var(--unique);background:linear-gradient(90deg,rgba(216,176,98,.10),transparent)}
+.aff{margin:10px 0 0;padding:0;list-style:none;color:var(--magic);columns:2;column-gap:18px;font-size:14px}
+.aff li{break-inside:avoid;padding:1px 0}
+.aff li::before{content:'◆ ';color:var(--faint);font-size:9px;vertical-align:2px}
+.acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.desc{color:var(--dim);font-size:13.5px;white-space:pre-line;margin-top:10px}
+.get{margin:12px 0 0;padding:8px 12px;border:1px solid var(--edge2);border-left:3px solid var(--gold);background:var(--plate)}
+.get b{display:block;font:700 11px var(--sc);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-bottom:3px}
+.get span{display:block;font-size:14px}
+.get span.sub{margin-top:4px;color:var(--dim);font-size:13px}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;margin-top:12px}
+.cell{background:var(--sunk);border:1px solid var(--edge);padding:6px 10px;min-width:0}
+.cell b{display:block;font:700 10.5px var(--sc);letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.cell span{font-size:14px;overflow-wrap:anywhere}
+
+/* who drops it: one card per boss (or loot pool) */
+.bcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;padding:8px 0 4px}
+.bcard{display:flex;gap:12px;min-width:0;padding:10px;border:1px solid var(--edge);background:var(--plate2)}
+.bcard .pic{width:56px;height:56px}
+.bcard .pic img{object-fit:cover}
+.bcard .btx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.bcard b{font:600 15px/1.2 var(--head);overflow-wrap:anywhere}
+.bcard .lm{white-space:normal}
+.bcard .links{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px}
+.lnk{border:0;background:none;padding:0;color:var(--gold);font:500 13px var(--ui);cursor:pointer;text-align:left}
+.lnk:hover{color:var(--gold2);text-decoration:underline;text-underline-offset:3px}
+.lnk.dim{color:var(--faint)}
+.lnk.dim:hover{color:var(--fg)}
+.shot{margin-top:8px;border:1px solid var(--edge);overflow:hidden;background:var(--sunk)}
+.shot img{display:block;width:100%;height:auto;max-height:260px;object-fit:contain}
+
+/* a boss: the banner – portrait, where, what you need – then what it drops, as tiles */
+.clsrow{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:0 0 12px}
+.clsrow button{height:34px;min-width:34px;padding:0 8px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--edge);background:var(--plate);
+  color:var(--dim);font:700 11px var(--sc);letter-spacing:.06em}
+.clsrow button img{width:22px;height:22px;object-fit:contain;filter:grayscale(1) brightness(.8)}
+.clsrow button:hover{border-color:var(--edge2);color:var(--fg)}
+.clsrow button.on{border-color:var(--red);background:var(--red-soft);color:var(--fg)}
+.clsrow button.on img{filter:none}
+.clsrow .meta{margin-left:6px}
+.bsec{margin:0 0 16px;border:1px solid var(--edge);background:var(--plate);min-width:0}
+.bsec:last-child{margin-bottom:0}
+.hero{position:relative;display:flex;gap:14px;align-items:center;min-width:0;padding:12px 14px;
+  background:linear-gradient(90deg,rgba(74,26,20,.85),rgba(23,19,17,.96) 60%);border-bottom:1px solid var(--edge)}
+.bsec.pool .hero{background:linear-gradient(#211b17,#191512)}
+.hero .pic{width:72px;height:72px;border:2px solid var(--red);box-shadow:0 0 16px rgba(200,50,43,.35)}
+.hero .pic img{object-fit:cover}
+.bsec.pool .hero .pic{border:1px solid var(--edge2);box-shadow:none;width:52px;height:52px}
+.hero .htx{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.hero h3{margin:0;font:600 20px/1.15 var(--head);overflow-wrap:anywhere}
+.hero .where{font-size:13.5px;color:var(--dim);line-height:1.35}
+.hero .where b{font-weight:500;color:var(--fg)}
+.hero .hend{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px;text-align:right}
+.hero .cnt{font:600 20px/1 var(--head);color:var(--gold)}
+.hero .cnt small{display:block;font:500 12px var(--ui);color:var(--faint);margin-top:2px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;padding:12px}
+.tile{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;padding:9px 6px 8px;border:1px solid var(--edge);background:var(--sunk);
+  text-align:center;cursor:pointer;color:inherit;font:inherit}
+.tile:hover{border-color:var(--edge3)}
+.tile.r-mythic:hover{border-color:#6e5592}
+.tile .pic{width:56px;height:56px;border:0;background:radial-gradient(rgba(216,176,98,.18),transparent 70%)}
+.tile.r-mythic .pic{background:radial-gradient(rgba(199,156,255,.24),transparent 70%)}
+.tile b{display:block;max-width:100%;font:700 12.5px/1.2 var(--ui);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile small{display:block;max-width:100%;color:var(--faint);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tiles>.meta{grid-column:1/-1}
+.bsec>.lairs{padding:0 12px 12px}
+
+/* crafting, runewords, activities */
+.recipe{display:flex;flex-wrap:wrap;gap:6px 22px;padding:7px 0;border-bottom:1px solid #251e1a;min-width:0}
+.recipe:last-child{border:0}
+.recipe .f{display:flex;flex-direction:column;min-width:120px;flex:1 1 120px}
+.recipe .f b{font:700 10.5px var(--sc);letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.recipe .f span{font-size:13.5px;overflow-wrap:anywhere}
+.recipe .f:last-child span{color:var(--gold);font-weight:700}
+.steps,.jumps{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.step{display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--edge);background:var(--sunk);cursor:pointer;font-size:14.5px;min-width:0}
+.step:hover{border-color:var(--edge2)}
+.step span{flex:1;min-width:0}
+.step.done span{color:var(--faint);text-decoration:line-through}
+.jump{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:7px 10px;border:1px solid var(--edge);background:var(--sunk);color:var(--fg);font:500 14.5px var(--ui);min-width:0}
+.jump span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jump:hover{border-color:var(--edge3)}
+.jump svg{width:15px;height:15px;stroke:var(--faint);fill:none;stroke-width:2;flex:0 0 auto}
+.k2{font:700 10.5px var(--sc);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:12px 0 2px}
+/* portraits fill their frame */
+.bcard .pic,.hero .pic,.wp .node{padding:0}

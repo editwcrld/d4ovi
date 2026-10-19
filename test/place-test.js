@@ -60,6 +60,14 @@ assert.strictEqual(place.barLeft({ barX: -80, bw: PILL, prevBw: PILL, wa, idle: 
   0, 'clamped at the left edge');
 console.log('ok  clamped to the work area');
 
+// --- sliding out under the mouse: to the right – at the right edge to the left, its right end kept
+assert.strictEqual(place.slideOut({ x: 1000, w: 300 }, 700, wa), 1000, 'room on the right: it grows to the right');
+assert.strictEqual(place.slideOut({ x: 2200, w: 300 }, 700, wa), 1800, 'at the right edge: to the left, right end at 2500 as before');
+assert.strictEqual(place.slideOut({ x: 2260, w: 300 }, 700, wa), 1860, 'touching the edge: the same');
+assert.strictEqual(place.slideOut({ x: 0, w: 300 }, 700, wa), 0, 'at the left edge: to the right');
+assert.strictEqual(place.slideOut({ x: 100, w: 300 }, 3000, wa), 0, 'wider than the screen: clamped');
+console.log('ok  sliding out keeps the right end at the right edge');
+
 // --- a place on a second screen counts as valid, a leftover from a removed one does not
 const displays = [{ bounds: { x: 0, y: 0, width: 2560, height: 1440 } }, { bounds: { x: 2560, y: 0, width: 1920, height: 1080 } }];
 assert.ok(place.onScreen({ x: 3000, y: 100 }, displays), 'second screen');

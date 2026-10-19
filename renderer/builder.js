@@ -48,7 +48,7 @@ const untip = () => UI.tip.hide();
 const hover = (node, title, text) => UI.tip.bind(node, () => ({ title, lines: [text || ''] }), '', 60);
 /** A card on hover – built when the mouse comes, in the farm list's card style (.ctt). */
 const hoverCard = (node, build) => UI.tip.bind(node, build, 'card', 60);
-const mk = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; };
+const mk = UI.el;
 /**
  * A piece's card: name, kind and slot, its power, the stats to look for – ✦ on the one a Greater
  * Affix is worth most on, ⚒ the tempers – and what goes into its sockets.

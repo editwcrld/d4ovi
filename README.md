@@ -13,7 +13,7 @@ can leave them out entirely (`lib/features.js`, see *Building*).
 
 The overlay reads like a page of the game's own journal ("Codex"): ash black, parchment text,
 blood red for what you act on, gold for numbers, Cinzel for titles. Every page is built from the
-same few parts (renderer/ui.js, renderer/style.css):
+same few parts (renderer/ui.js, and the stylesheet – written in `styles/`, built into renderer/style.css):
 
 - **the bar** – closed a slim strip (timers, lock, the sections); open the **spine** on the left of
   the panel: the sections with their names, the timers, settings and quit
@@ -688,6 +688,9 @@ npm install
 npm start          # run from source
 npm run dist       # build dist\D4-Overlay-<version>-portable.exe
 npm test           # all offline tests
+npm run css        # build renderer/style.css from styles/ (never edit style.css itself)
+npm run ui-check   # every page at every size: screenshots + overlap check (tools/ui-check/out)
+npm run web-check  # the same for the website
 node test/builder-live.js   # the builder against the real sites (needs the internet)
 ```
 
@@ -707,7 +710,16 @@ in German, to find it quickly.
 
 ## Tests
 
-`npm test` runs twenty files and prints one summary:
+The overlay's page is split by area – `renderer/app.js` (state, the bar, opening and closing,
+start-up), `timers.js`, `searchview.js`, `settingspage.js` – classic scripts sharing one scope,
+loaded before `app.js`, which starts the page. Names are compared everywhere with `lib/text.js`.
+
+**Layout check** (`npm run ui-check [size] [page]`): the real renderer in an offscreen window at
+every panel size down to a phone (393 × 850), every page, with the data from the app's own data
+folder (`D4DATA` for another one). Text spilling out of its box, out of the window or lying on
+other text is reported; the screenshots are in `tools/ui-check/out/`.
+
+`npm test` runs twenty-two files and prints one summary:
 
 | File | Covers |
 |---|---|
@@ -722,7 +734,7 @@ in German, to find it quickly.
 | `mapstore-test.js` | map progress: save, restore, never overwrite newer |
 | `d4guides-test.js` | database list parsing (name, icon, link, columns) |
 | `mythics-test.js` | iconic mythics: the list, the acquisition text, bad pages |
-| `place-test.js` | where the bar lands: the strip never drifts, places stay on screen |
+| `place-test.js` | where the bar lands: the strip never drifts, places stay on screen, sliding out at the right edge grows to the left |
 | `clicker-test.js` | macros: bindings, speed limits, key lists, off by default, what the helper is told |
 | `maxbuild-test.js` | maxroll import: links, guide page, planner variant → build, dual wield |
 | `infinitybuilds-test.js` | infinitybuilds import: links and variants, English names, stat values like the site's tooltips, command skills, paragon, charms |
@@ -731,7 +743,8 @@ in German, to find it quickly.
 | `farm-test.js` | farm list: slots, sources, aspect tooltips, merged variants; builds: save, ticks, code, import |
 | `compare-test.js` | comparing two builds: partner variant, gear, skills, charms, paragon, what is left to farm |
 | `renderer-smoke.js` | the whole UI in jsdom: every section (incl. farm list, builds, compare, builder), settings and macros, the plates and lines in each view, strip and spine, panel sizes, hotkeys, Esc, idle fade |
-| `icons-test.js` | a picture for every thing by name: catalog, game data, d2core, aspects by category, trophies, sets |
+| `icons-test.js` | a picture for every thing by name: catalog, game data, d2core, aspects by category, trophies, sets; the page keys names as `lib/text.js` does |
+| `css-test.js` | renderer/style.css is what `styles/` makes (`npm run css`) |
 
 If something misbehaves at runtime, `overlay-log.txt` in the data folder records cookie changes,
 view navigation, zoom and data loading.

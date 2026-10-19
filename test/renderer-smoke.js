@@ -6,8 +6,11 @@ const assert = require('assert');
 const { JSDOM } = require(process.env.JSDOM_PATH || 'jsdom');
 
 const dir = path.join(__dirname, '..', 'renderer');
-const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8').replace(/<script src="[^"]+"><\/script>/g, '');
-const dom = new JSDOM(html, { runScripts: 'outside-only', pretendToBeVisual: true });
+const page = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
+// the page's scripts in its order – run below as the browser does (classic scripts, one shared scope)
+const SCRIPTS = [...page.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]);
+const html = page.replace(/<script src="[^"]+"><\/script>/g, '');
+const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true });
 const w = dom.window;
 const errors = [];
 w.addEventListener('error', (e) => errors.push(e.message));
@@ -178,7 +181,12 @@ w.d4api = new Proxy({}, { get: (_, k) => {
   };
 } });
 
-for (const f of ['ui.js', 'cards.js', 'search.js', 'guide.js', 'farm.js', 'buildviews.js', 'compare.js', '../lib/dmgmodel.js', '../lib/optimizer.js', 'builder.js', 'app.js']) w.eval(fs.readFileSync(path.join(dir, f), 'utf8'));
+for (const f of SCRIPTS) {
+  const sc = w.document.createElement('script');
+  sc.textContent = fs.readFileSync(path.join(dir, f), 'utf8') + '\n//# sourceURL=' + f;
+  w.document.body.appendChild(sc);
+}
+assert.deepStrictEqual(errors, [], 'the page loads without errors');
 const $ = (id) => w.document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rail = (name) => w.document.querySelector('#rail .ri[data-section=' + name + ']');
@@ -1172,6 +1180,11 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   handlers.onCursorInside(false); await sleep(20);
   assert.ok(!$('app').classList.contains('peek'), 'leaving it (the main process says so) fades it again');
   assert.ok(!hoverWatchOn, 'and the watch ends with it');
+  // at the right edge of the screen the window grew to the left (main.js): the strip keeps its right end
+  handlers.onLayout({ manual: false, toLeft: true }); await sleep(10);
+  assert.ok($('app').classList.contains('toleft') && css.includes('#app.toleft:not(.open){justify-content:flex-end}'), 'slid out to the left: the strip sits at the right');
+  handlers.onLayout({ manual: false, toLeft: false }); await sleep(10);
+  assert.ok(!$('app').classList.contains('toleft'), 'back in place');
   rail('search').click(); await sleep(40);
   assert.ok(!$('app').classList.contains('idle'), 'a click on the magnifier wakes it up');
   assert.ok($('app').classList.contains('grow') && !$('app').classList.contains('peek'), 'the panel grows out of the bar');

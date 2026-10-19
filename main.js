@@ -99,6 +99,9 @@ let barX = 0, barY = 0, curH = BAR_HEIGHT, curW = BAR_WIDTH;
 let strip = { w: BAR_WIDTH, h: BAR_HEIGHT };   // the closed bar's last reported size (CSS pixels)
 let capturing = false;                   // a hotkey is being recorded in the settings
 let isIdle = false;                      // the overlay reported "nothing open" – the bar is a strip
+// the strip's place before its sections slid out (hold): sliding out at a screen edge pushes the
+// window back onto the screen – folding in, it goes back exactly here
+let peekHome = null;
 let centreIdle = true;                   // no place dragged for the pill yet -> keep it centred
 let hiddenByHand = false;               // hidden from the tray – stays hidden until shown there again
 let placeLock = 0;                       // size reports that must not move the bar (just placed)
@@ -209,7 +212,7 @@ function placeFor(idle) {
   return onScreen(p) ? { x: p.x, y: p.y } : defaultPlace(idle);
 }
 function rememberPlace() {
-  const p = { x: barX, y: barY };
+  const p = peekHome ? { x: peekHome.x, y: peekHome.y } : { x: barX, y: barY };   // slid out: its own place
   if (isIdle) settings.posIdle = p; else settings.posOpen = p;
 }
 
@@ -244,6 +247,10 @@ function applySize(barW, barH, open, hold) {
   const wa = screen.getDisplayMatching({ x: barX, y: barY, width: curW, height: curH }).workArea;
   const z = applyZoom();
   let w, h, manual = false;
+  if (peekHome && !hold) {
+    barX = peekHome.x; barY = peekHome.y; curW = peekHome.w;
+    peekHome = null;
+  }
   if (open) {
     const p = panelBox(z, wa);
     w = p.w; h = p.h; manual = p.manual;
@@ -251,7 +258,9 @@ function applySize(barW, barH, open, hold) {
     strip = { w: barW, h: barH };
     w = Math.max(44, Math.min(Math.round(barW * z), wa.width));
     h = Math.max(36, Math.min(Math.round(barH * z), wa.height));
-    if (!hold) barX = place.barLeft({ barX, bw: w, prevBw: curW, wa, idle: true, centre: centreIdle, fixed: placeLock > 0 });
+    if (hold && !peekHome) peekHome = { x: barX, y: barY, w: curW };
+    if (hold) barX = place.slideOut(peekHome, w, wa);
+    else barX = place.barLeft({ barX, bw: w, prevBw: curW, wa, idle: true, centre: centreIdle, fixed: placeLock > 0 });
   }
   barX = Math.max(wa.x, Math.min(barX, wa.x + wa.width - w));
   barY = Math.max(wa.y, Math.min(barY, wa.y + wa.height - h));
@@ -259,7 +268,8 @@ function applySize(barW, barH, open, hold) {
   overlay.setBounds({ x: barX, y: barY, width: w, height: h });
   curW = w; curH = h;
   rememberPlace();
-  send('layout', { manual });
+  // grown to the left (slid out at the right edge): the strip sits at the window's right side
+  send('layout', { manual, toLeft: !!peekHome && barX < peekHome.x });
 }
 
 function createOverlay() {
@@ -277,6 +287,7 @@ function createOverlay() {
   overlay.on('moved', () => {
     const [x, y] = overlay.getPosition();
     barX = x; barY = y;
+    peekHome = null;                      // moved while slid out: this is its place now
     rememberPlace();
     if (isIdle) centreIdle = false;       // dragged by hand -> keep exactly this spot
     saveSettingsFile();

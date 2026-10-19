@@ -42,8 +42,8 @@ document.addEventListener('click', () => { if (menuOpen) { menuOpen = false; if 
 let saveTimer = null, loading = null;
 let imp = { open: false, value: '', busy: false, result: null, error: '', off: new Set() };   // the import dialog
 
-const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-  .replace(/[’']/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const norm = UI.norm;                // names compared as everywhere (lib/text.js)
+const mk = UI.el;                    // a plain element – the views get theirs from ctx.el
 const build = () => (data && data.builds.find((b) => b.id === data.active)) || null;
 /** The aspects in your codex: once you have one, it counts as done in every build. */
 const codex = () => (data && Array.isArray(data.codex) ? data.codex : []);
@@ -636,11 +636,10 @@ function tick(el, b, info) {
 function slotPic(info, cls) {
   if (info.s && info.s.item) return UI.pic(info.s.item, { url: info.it && info.it.icon, kind: info.kind === 'Mythic' ? 'mythic' : info.kind === 'Runeword' ? 'rune' : 'unique', cls });
   if (info.s && info.s.aspects && info.s.aspects[0]) return UI.pic(info.s.aspects[0], { kind: 'aspect', cls });
-  const box = el0('span', (cls || 'pic') + ' none');
+  const box = mk('span', (cls || 'pic') + ' none');
   box.appendChild(UI.icon('plus'));
   return box;
 }
-const el0 = (tag, cls, text) => UI.el(tag, cls, text);
 function clearBtn(el, b, key) {
   const x = el('button', 'xclr');
   x.appendChild(UI.icon('close'));
@@ -909,7 +908,6 @@ function slotsView(el, b) {
 }
 /** This build's item as a card: name, what it is, where it drops, its rolls and sockets. */
 function slotCard(b, key, info) {
-  const mk = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; };
   const d = mk('div', 'ctt');
   const names = info.s.item ? [info.s.item].concat(info.s.tf ? ['◈ ' + (aspectBy(info.s.tf) ? aspectBy(info.s.tf).name : info.s.tf)] : []) : (info.s.aspects || []).map((n) => (aspectBy(n) ? aspectBy(n).name : n));
   names.forEach((n) => d.appendChild(mk('div', 'nm ' + (KCLS[info.kind] || ''), n)));
@@ -951,7 +949,6 @@ const QCLS = { Mythic: 'r-mythic', Unique: 'r-unique', Set: 'r-set', Legendary: 
 const wireCard = (node, build) => UI.tip.bind(node, build, 'card', 60);
 /** Seal or charm: name, stats, its text and – for a set piece – the set bonuses, the active ones lit. */
 function charmCard(c, seal, set) {
-  const mk = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; };
   const d = mk('div', 'ctt');
   d.appendChild(mk('div', 'nm ' + (QCLS[c.q] || ''), c.name));
   d.appendChild(mk('div', 'ty', [c.q, seal ? 'Seal' : 'Charm'].filter(Boolean).join(' ') + (c.set ? ' · ' + c.set : '')));

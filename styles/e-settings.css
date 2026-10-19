@@ -1,0 +1,63 @@
+
+/* ---------------------------------------------------------------- settings
+   The tabs on top, every section a plate, one row per option: name and a line of help on the
+   left, its control on the right (under it when narrow). */
+#main.settings{padding:14px 20px 24px}
+.setbody{max-width:760px;margin:0 auto}
+.opt{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:10px 0;border-bottom:1px solid #251e1a;min-height:44px;min-width:0}
+.opt:last-child{border-bottom:0}
+.opt .txt{flex:1 1 240px;min-width:0;display:flex;flex-direction:column;gap:2px}
+.opt .txt b{font:700 14.5px var(--ui);color:var(--fg)}
+.opt .txt span{font-size:13px;color:var(--faint);line-height:1.35}
+.opt .txt span.good{color:var(--ok)}
+.opt .ctl{flex:0 1 auto;min-width:0;max-width:100%;margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.opt.off{opacity:.4}
+.cookiebox{display:flex;flex-direction:column;align-items:flex-end;gap:8px;padding:4px 0 12px}
+/* a macro shows its state at a glance */
+.plate.macro.on{border-color:var(--ok-line)}
+.plate.macro .badge{font:700 11px var(--sc);letter-spacing:.1em;padding:3px 8px;border:1px solid var(--edge2);color:var(--faint)}
+.plate.macro.on .badge{color:var(--ok);border-color:var(--ok-line);background:var(--ok-soft)}
+.plate[data-card="character"] .badge{color:var(--gold)}
+.mwarn{display:flex;flex-direction:column;gap:3px;margin:0 0 10px;padding:10px 14px;border:1px solid var(--red-line);border-left:3px solid var(--red2);background:var(--red-soft)}
+.mwarn b{font:700 14px var(--ui);color:var(--red-fg)}
+.mwarn span{font-size:13px;color:var(--dim);line-height:1.45}
+#macroCharName{width:200px}
+/* key tiles: [1][Q][+] */
+.seg.chips{display:flex;flex-wrap:wrap;gap:4px;border:0;background:none;overflow:visible}
+.seg.chips button{position:relative;min-width:34px;height:30px;border:1px solid var(--edge2);background:var(--plate2);color:var(--fg)}
+.seg.chips button+button{border-left:1px solid var(--edge2)}
+.seg.chips button.on{background:var(--red-soft);border-color:var(--red);color:var(--fg)}
+.seg.chips button .x{display:none;position:absolute;top:-7px;right:-7px;width:16px;height:16px;border-radius:50%;
+  background:var(--plate);border:1px solid var(--edge2);color:var(--dim);font:700 11px/14px var(--ui);text-align:center}
+.seg.chips button:hover .x{display:block}
+.seg.chips button .x:hover{color:var(--red-fg);border-color:var(--red-line)}
+.seg.chips button.add{color:var(--dim);border-style:dashed;font-size:16px}
+.seg.chips button.add:hover{color:var(--fg)}
+.seg.chips button.add.rec{color:var(--gold);border-color:var(--gold-line);font-size:12.5px;padding:0 10px}
+/* lock: a row per key – grip, on/off, key, what it does, lock switch, its time */
+.lockrows{display:flex;flex-direction:column;gap:4px;padding:4px 0 10px}
+.lockrow{display:flex;align-items:center;gap:10px;padding:5px 10px 5px 4px;background:var(--sunk);border:1px solid var(--edge);min-width:0;flex-wrap:wrap}
+.lockrow.drag{opacity:.4}
+.lockrow.over{border-color:var(--red2)}
+.lockrow .grip{width:20px;height:24px;display:grid;place-items:center;cursor:grab;color:var(--faint)}
+.lockrow .grip:hover{color:var(--fg)}
+.lockrow .grip svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round}
+.lockrow .kon{height:26px;padding:0 8px 0 6px;border:1px solid var(--edge2);background:var(--plate2);color:var(--faint);display:flex;align-items:center;gap:4px;cursor:pointer;
+  font:700 11px var(--sc);letter-spacing:.06em;min-width:52px}
+.lockrow .kon svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round}
+.lockrow .kon.on{color:var(--ok);border-color:var(--ok-line);background:var(--ok-soft)}
+.lockrow.off>:not(.grip):not(.kon){opacity:.35}
+.lockrow.off .kname{text-decoration:line-through}
+.lockrow .kname{min-width:30px;font:600 15px var(--head);color:var(--fg)}
+.lockrow .kwhat{flex:1 1 60px;min-width:0;font-size:12.5px;color:var(--faint)}
+.lockrow .klock{display:flex;align-items:center;gap:6px;font:700 12px var(--sc);letter-spacing:.05em;color:var(--dim)}
+.lockrow .ksec{width:96px}
+.lockrow .ksec:disabled{opacity:.35;cursor:not-allowed}
+.lockrows .ghint{margin:4px 2px 0}
+/* one page, as in the mockup: the chips on top jump to a group, every group under its own head */
+.anchors{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 10px;min-width:0}
+.anchors .chip{height:28px}
+.setgroup{margin:0 0 26px}
+.setgroup:last-of-type{margin-bottom:8px}
+.sgh{display:flex;align-items:center;gap:10px;margin:0 0 10px;font:700 12px/1 var(--sc);letter-spacing:.14em;text-transform:uppercase;color:var(--red-fg)}
+.sgh::after{content:'';flex:1;height:1px;background:var(--edge)}
