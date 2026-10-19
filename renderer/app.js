@@ -396,7 +396,8 @@ async function init() {
     openFromTimer();
   };
   $('ht').onclick = openFromTimer;
-  $('miss').onclick = () => openSection('farm');
+  // what the build still needs: the route, the first stop still open at the top
+  $('miss').onclick = () => { if (window.FarmView) window.FarmView.showOpen(); if (section === 'farm') render(); else openSection('farm'); };
   // your own timer: a click starts it (over), a right click clears it – the panel stays shut
   $('ct').onclick = (e) => { e.stopPropagation(); clickCt(); };
   $('ct').oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); clearCt(); };

@@ -1313,6 +1313,13 @@ const type = async (q) => { $('q').value = q; $('q').dispatchEvent(new w.Event('
   assert.ok(!$('miss').hidden && $('missN').textContent.includes(String(sum.missing)), 'the count is in the bar');
   $('miss').click(); await sleep(60);
   assert.ok(rail('farm').classList.contains('on'), 'a click opens the build');
+  // on its route, at the first stop still open – as if that stop had been clicked
+  const curStop = w.document.querySelector('.path.route .wp.cur');
+  assert.ok(w.FarmView._state().view === 'gear' && curStop, 'the gear on its route');
+  const firstOpen = [...w.document.querySelectorAll('.path.route .wp')].find((x) => !x.classList.contains('done') && !x.classList.contains('blank'));
+  assert.strictEqual(curStop, firstOpen, 'the first one still open');
+  $('miss').click(); await sleep(60);
+  assert.ok(!$('panel').hidden && rail('farm').classList.contains('on'), 'clicked again while open: it stays open');
   w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); await closed();
   rail('settings').click(); await sleep(30);
   anchors()[0].click(); await sleep(30);

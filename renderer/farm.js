@@ -34,6 +34,7 @@ let layout = 'route';              // route (where to go, what you get) | list (
 try { const l = localStorage.getItem('farm.layout'); if (l === 'list' || l === 'slots') layout = l; } catch (_) { /* private storage */ }
 let routeAt = null;                // the stop picked in the route
 let routeJump = null;              // … just clicked: it goes to the top of the list once drawn
+let jumpOpen = false;              // the first stop still open goes to the top ("to farm" in the bar)
 let onlyMissing = false;           // hide what is farmed already
 let menuOpen = false;              // the build menu
 let gearAt = { key: '', top: 0 };  // where the gear list was scrolled to (kept across redraws)
@@ -778,6 +779,7 @@ function routeView(el, b) {
   const wrap = el('div', 'path route');
   if (!stops.length) { wrap.appendChild(el('div', 'empty', 'Nothing to farm yet — pick items in the slots.')); return wrap; }
   const cur = stops.find((s) => s.key === routeAt) || stops.find((s) => !s.blank && s.things.some((t) => !thingGot(t))) || stops[0];
+  if (jumpOpen) { routeJump = cur.key; jumpOpen = false; }
   let n = 0;
   stops.forEach((s) => {
     const got = s.things.filter(thingGot).length;
@@ -1139,6 +1141,8 @@ window.FarmView = {
   render,
   reload: () => { if (!api) return Promise.resolve(); tipCache.clear(); return load().then(() => { if (ctx) ctx.rerender(); if (window.FarmView.onChange) window.FarmView.onChange(); }); },
   hideTip,
+  /** "To farm" clicked: the route, the first stop still open at the top – as if it had been clicked. */
+  showOpen: () => { view = 'gear'; layout = 'route'; routeAt = null; pickOpen = false; jumpOpen = true; },
   adopt: (d) => { if (d && d.builds) { data = d; if (window.FarmView.onChange) window.FarmView.onChange(); } },   // builds imported from the settings
   _state: () => ({ cat, data, open, tab, view, pickOpen }),
   /** The active build and what it still needs: { name, total, missing } – null without a build. */
