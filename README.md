@@ -11,9 +11,38 @@ It does not read or change the game's memory or files — it reads public web pa
 them next to the game. Download the portable `.exe` above and start it; nothing to install.
 
 **A hobby project**, made with [Claude](https://claude.ai). It is free and only meant to help
-people play — everything it shows comes from the sites listed under *Credits* at the end, and
+people play — everything it shows comes from the sites listed under *Credits* below, and
 without them and the work they put in it would not be possible. All credit goes to them.
 If it helps you, a [coffee](https://ko-fi.com/itsun) is welcome — it stays free either way.
+
+<p align="center"><img src="docs/screenshots/tour.webp" alt="A tour of the overlay" width="100%"></p>
+
+<table>
+<tr>
+<td align="center" width="25%"><a href="docs/screenshots/gear-route.jpg"><img src="docs/screenshots/gear-route-thumb.jpg" alt="Your build's route: where to go, what drops there"></a><br><sub>Your build's route: where to go, what drops there</sub></td>
+<td align="center" width="25%"><a href="docs/screenshots/paragon.jpg"><img src="docs/screenshots/paragon-thumb.jpg" alt="Paragon boards next to the game's"></a><br><sub>Paragon boards next to the game's</sub></td>
+<td align="center" width="25%"><a href="docs/screenshots/boss-loot.jpg"><img src="docs/screenshots/boss-loot-thumb.jpg" alt="Boss loot, by your class"></a><br><sub>Boss loot, by your class</sub></td>
+<td align="center" width="25%"><a href="docs/screenshots/find-a-build.jpg"><img src="docs/screenshots/find-a-build-thumb.jpg" alt="Find a build: proven builds explained"></a><br><sub>Find a build: proven builds explained</sub></td>
+</tr>
+<tr>
+<td align="center" width="25%"><a href="docs/screenshots/classes.jpg"><img src="docs/screenshots/classes-thumb.jpg" alt="Pick a class, then a skill"></a><br><sub>Pick a class, then a skill</sub></td>
+<td align="center" width="25%"><a href="docs/screenshots/cheat-sheet.jpg"><img src="docs/screenshots/cheat-sheet-thumb.jpg" alt="The cheat sheet of a build"></a><br><sub>The cheat sheet of a build</sub></td>
+<td align="center" width="25%"><a href="docs/screenshots/settings.jpg"><img src="docs/screenshots/settings-thumb.jpg" alt="Settings on one page"></a><br><sub>Settings on one page</sub></td>
+<td align="center" width="25%"><a href="docs/screenshots/closed-bar.jpg"><img src="docs/screenshots/closed-bar-thumb.jpg" alt="Closed: timers and what is left to farm"></a><br><sub>Closed: timers and what is left to farm</sub></td>
+</tr>
+</table>
+
+## Credits
+
+Without these cool websites this overlay would not be possible <3:
+
+- [maxroll.gg](https://maxroll.gg) – game data, boss loot, crafting, activities, the iconic mythics, build guides and the tier list
+- [d4guides.gg](https://d4guides.gg) – item database, icons, in-game tooltips, the farm list's items and aspects
+- [d4builds.gg](https://d4builds.gg) – build guides
+- [d2core.com](https://www.d2core.com) – skill trees, paragon boards, stat texts, build planner and proven builds
+- [infinitybuilds.gg](https://infinitybuilds.gg) – builds and their guides
+- [diablo.trade](https://diablo.trade) – trading, chat and the world boss timer
+- [sunderarmor.com](https://sunderarmor.com) – pictures of the uniques, bosses and classes
 
 ## The look
 
@@ -610,9 +639,6 @@ them **only the .exe**.
 | diablo.trade (signed out page) | world boss timer | every 15 s |
 | diablo.trade `api/chat/conversations` | unread messages | every 15 s |
 
-Ads and trackers are blocked inside the embedded pages (`lib/adblock.js`), and the leftover
-placeholders are collapsed so no gaps remain.
-
 The timer and the unread count come from two different places on purpose: diablo.trade only
 shows the event bar to signed out visitors, so the hidden window that reads the countdown uses
 its own session without the login, while the unread count is fetched from the site's own API
@@ -673,15 +699,3 @@ download the code and build it yourself with `npm run dist --m` — at your own 
   map, the chat, the town portal and your own left click pause it. Key lists per character.
 
 Both only send input while Diablo IV is the window in front, and let go of everything when it is not.
-
-## Credits
-
-Without these cool websites this overlay would not be possible <3:
-
-- [maxroll.gg](https://maxroll.gg) – game data, boss loot, crafting, activities, the iconic mythics, build guides and the tier list
-- [d4guides.gg](https://d4guides.gg) – item database, icons, in-game tooltips, the farm list's items and aspects
-- [d4builds.gg](https://d4builds.gg) – build guides
-- [d2core.com](https://www.d2core.com) – skill trees, paragon boards, stat texts, build planner and proven builds
-- [infinitybuilds.gg](https://infinitybuilds.gg) – builds and their guides
-- [diablo.trade](https://diablo.trade) – trading, chat and the world boss timer
-- [sunderarmor.com](https://sunderarmor.com) – pictures of the uniques, bosses and classes
